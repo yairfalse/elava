@@ -1,3 +1,4 @@
+
 ```markdown
 # Ovi
 
@@ -12,44 +13,41 @@ Think of it as a friendly guardian for your AWS/GCP resources - it notices when 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                         User Config                         │
-│                      (infrastructure.yaml)                  │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      Ovi Reconciler                         │
-│                                                              │
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │   Watcher   │  │   Decider    │  │   Executor   │      │
-│  │             │  │              │  │              │      │
-│  │ Polls every │→ │  Compares    │→ │   Creates/   │      │
-│  │ 30 seconds  │  │ desired vs   │  │   Updates/   │      │
-│  │             │  │   actual     │  │   Notifies   │      │
-│  └─────────────┘  └──────────────┘  └──────────────┘      │
-│         ▲                                    │              │
-│         │                                    ▼              │
-│  ┌──────┴──────┐                    ┌──────────────┐      │
-│  │   Registry  │                    │   Notifier   │      │
-│  │             │                    │              │      │
-│  │  Tracks IDs │                    │ Slack/Email  │      │
-│  │  (not state)│                    │   Webhooks   │      │
-│  └─────────────┘                    └──────────────┘      │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-        ┌──────────────────┴──────────────────┐
-        │                                      │
-        ▼                                      ▼
-┌──────────────┐                      ┌──────────────┐
-│              │                      │              │
-│   AWS API    │                      │   GCP API    │
-│              │                      │              │
-│  The actual  │                      │  The actual  │
-│    truth     │                      │    truth     │
-│              │                      │              │
-└──────────────┘                      └──────────────┘
+    infrastructure.yaml
+            │
+            ▼
+    ┌───────────────┐
+    │      Ovi      │
+    │               │
+    │   Reconciler  │ ──── Every 30s ────┐
+    │               │                     │
+    └───────────────┘                     │
+            │                             │
+            ▼                             ▼
+    ┌───────────────┐             ┌──────────────┐
+    │   Decisions   │             │  AWS/GCP API │
+    │               │             │              │
+    │ - Create      │             │  (Reality)   │
+    │ - Update tags │ ◀───────────│              │
+    │ - Notify      │             └──────────────┘
+    │ - Wait        │
+    └───────────────┘
+            │
+            ▼
+    ┌───────────────┐
+    │ Notifications │
+    │               │
+    │ Slack/Discord│
+    └───────────────┘
+```
+
+Or even simpler:
+
+```
+Config (YAML) → Ovi → Cloud APIs (AWS/GCP)
+                ↑            ↓
+                └────────────┘
+              (Reconciliation Loop)
 ```
 
 ## How it works
@@ -123,7 +121,7 @@ resources:
     tags:
       team: platform
       env: production
-
+  
   database:
     type: rds
     engine: postgres
@@ -174,3 +172,5 @@ MIT
 
 Part of [False Systems](https://github.com/falsesystems) - Infrastructure tools that make sense.
 ```
+
+Better? I went with simpler ASCII art that focuses on the flow rather than boxes everywhere!
