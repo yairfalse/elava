@@ -61,6 +61,9 @@ golangci-lint run
 # Push and PR when feature is complete
 git push origin feat/orphan-detection
 ```
+NO Stubs
+No TODOs
+
 
 ## 📦 Package Structure
 
