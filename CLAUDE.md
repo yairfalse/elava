@@ -319,6 +319,30 @@ return fmt.Errorf("failed")
 // ✅ GOOD
 return fmt.Errorf("failed to list EC2 instances in %s: %w", region, err)
 ```
+Direct OTEL Only - NO WRAPPERS
+go// ❌ BANNED - Custom telemetry wrappers
+import "github.com/yairfalse/tapio/pkg/integrations/telemetry"
+
+// ✅ REQUIRED - Direct OpenTelemetry
+import (
+    "go.opentelemetry.io/otel"
+    "go.opentelemetry.io/otel/metric"
+    "go.opentelemetry.io/otel/trace"
+)
+
+type Observer struct {
+    // Required OTEL fields
+    tracer          trace.Tracer
+    eventsProcessed metric.Int64Counter
+    errorsTotal     metric.Int64Counter
+    processingTime  metric.Float64Histogram
+}
+
+// Metric naming standards
+eventsCounter := "observer_events_processed_total"      // _total suffix
+durationHist := "observer_processing_duration_ms"       // unit in name
+activeGauge := "observer_active_connections"           // current state
+
 
 ## 📋 Verification Checklist
 

@@ -182,11 +182,9 @@ func TestAWSProvider_ListResources_WithFilter(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Test filter by tags
+	// Test filter by owner
 	filter := types.ResourceFilter{
-		Tags: map[string]string{
-			"ovi:owner": "team-web",
-		},
+		Owner: "team-web",
 	}
 
 	resources, err := provider.ListResources(ctx, filter)
@@ -215,9 +213,9 @@ func TestAWSProvider_CreateResource(t *testing.T) {
 	spec := types.ResourceSpec{
 		Type: "ec2",
 		Size: "t3.micro",
-		Tags: map[string]string{
-			"ovi:owner": "team-web",
-			"env":       "test",
+		Tags: types.Tags{
+			OviOwner:    "team-web",
+			Environment: "test",
 		},
 	}
 

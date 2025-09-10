@@ -66,7 +66,7 @@ func (p *AWSProvider) ListResources(ctx context.Context, filter types.ResourceFi
 func (p *AWSProvider) CreateResource(ctx context.Context, spec types.ResourceSpec) (*types.Resource, error) {
 	instanceSpec := InstanceSpec{
 		InstanceType: p.getInstanceType(spec.Size),
-		Tags:         spec.Tags,
+		Tags:         spec.Tags.ToMap(),
 	}
 
 	instance, err := p.client.RunInstances(ctx, instanceSpec)
@@ -103,9 +103,9 @@ func (p *AWSProvider) convertToInstanceFilter(filter types.ResourceFilter) Insta
 		Tags:   make(map[string]string),
 	}
 
-	// Copy tag filters
-	for k, v := range filter.Tags {
-		awsFilter.Tags[k] = v
+	// Add owner tag filter if specified
+	if filter.Owner != "" {
+		awsFilter.Tags["ovi:owner"] = filter.Owner
 	}
 
 	return awsFilter
@@ -120,7 +120,7 @@ func (p *AWSProvider) convertToResource(instance EC2Instance) types.Resource {
 		Region:    p.region,
 		Name:      instance.Tags["Name"],
 		Status:    instance.State,
-		Tags:      instance.Tags,
+		Tags:      types.TagsFromMap(instance.Tags),
 		CreatedAt: instance.LaunchTime,
 		UpdatedAt: time.Now(),
 	}

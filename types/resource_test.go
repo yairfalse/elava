@@ -14,27 +14,27 @@ func TestResource_IsManaged(t *testing.T) {
 		{
 			name: "managed with owner tag",
 			resource: Resource{
-				Tags: map[string]string{"ovi:owner": "team-web"},
+				Tags: Tags{OviOwner: "team-web"},
 			},
 			want: true,
 		},
 		{
 			name: "managed with managed tag",
 			resource: Resource{
-				Tags: map[string]string{"ovi:managed": "true"},
+				Tags: Tags{OviManaged: true},
 			},
 			want: true,
 		},
 		{
 			name: "not managed - no ovi tags",
 			resource: Resource{
-				Tags: map[string]string{"Name": "test"},
+				Tags: Tags{Name: "test"},
 			},
 			want: false,
 		},
 		{
-			name:     "not managed - nil tags",
-			resource: Resource{Tags: nil},
+			name:     "not managed - empty tags",
+			resource: Resource{Tags: Tags{}},
 			want:     false,
 		},
 	}
@@ -57,27 +57,27 @@ func TestResource_IsBlessed(t *testing.T) {
 		{
 			name: "blessed resource",
 			resource: Resource{
-				Tags: map[string]string{"ovi:blessed": "true"},
+				Tags: Tags{OviBlessed: true},
 			},
 			want: true,
 		},
 		{
 			name: "not blessed - false value",
 			resource: Resource{
-				Tags: map[string]string{"ovi:blessed": "false"},
+				Tags: Tags{OviBlessed: false},
 			},
 			want: false,
 		},
 		{
 			name: "not blessed - no tag",
 			resource: Resource{
-				Tags: map[string]string{"Name": "test"},
+				Tags: Tags{Name: "test"},
 			},
 			want: false,
 		},
 		{
-			name:     "not blessed - nil tags",
-			resource: Resource{Tags: nil},
+			name:     "not blessed - empty tags",
+			resource: Resource{Tags: Tags{}},
 			want:     false,
 		},
 	}
@@ -97,9 +97,9 @@ func TestResource_Matches(t *testing.T) {
 		Type:     "ec2",
 		Provider: "aws",
 		Region:   "us-east-1",
-		Tags: map[string]string{
-			"env":  "prod",
-			"team": "platform",
+		Tags: Tags{
+			Environment: "prod",
+			Team:        "platform",
 		},
 	}
 
@@ -139,18 +139,18 @@ func TestResource_Matches(t *testing.T) {
 			want:   false,
 		},
 		{
-			name:   "matches tags",
-			filter: ResourceFilter{Tags: map[string]string{"env": "prod"}},
+			name:   "matches owner",
+			filter: ResourceFilter{Owner: "platform"},
 			want:   true,
 		},
 		{
-			name:   "no match - wrong tag value",
-			filter: ResourceFilter{Tags: map[string]string{"env": "dev"}},
+			name:   "no match - wrong owner",
+			filter: ResourceFilter{Owner: "web"},
 			want:   false,
 		},
 		{
 			name:   "matches multiple criteria",
-			filter: ResourceFilter{Type: "ec2", Region: "us-east-1", Tags: map[string]string{"team": "platform"}},
+			filter: ResourceFilter{Type: "ec2", Region: "us-east-1", Owner: "platform"},
 			want:   true,
 		},
 		{
@@ -179,9 +179,9 @@ func TestResourceCreation(t *testing.T) {
 		Status:    "running",
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
-		Tags: map[string]string{
-			"ovi:owner": "team-web",
-			"env":       "prod",
+		Tags: Tags{
+			OviOwner:    "team-web",
+			Environment: "prod",
 		},
 	}
 
