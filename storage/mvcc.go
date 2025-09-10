@@ -71,7 +71,7 @@ func NewMVCCStorage(dir string) (*MVCCStorage, error) {
 		return nil
 	})
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 
@@ -369,7 +369,7 @@ func (s *MVCCStorage) updateIndex(resource types.Resource, rev int64, exists boo
 }
 
 func (s *MVCCStorage) loadRevision() {
-	s.db.View(func(tx *bbolt.Tx) error {
+	_ = s.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(bucketMeta)
 		if bucket == nil {
 			return nil
@@ -396,7 +396,7 @@ func parseObservationKey(key []byte) (int64, string) {
 	// Simple parsing - in production would be more robust
 	var rev int64
 	var id string
-	fmt.Sscanf(string(key), "%016d:%s", &rev, &id)
+	_, _ = fmt.Sscanf(string(key), "%016d:%s", &rev, &id)
 	return rev, id
 }
 
@@ -406,6 +406,6 @@ func int64ToBytes(n int64) []byte {
 
 func bytesToInt64(b []byte) int64 {
 	var n int64
-	fmt.Sscanf(string(b), "%d", &n)
+	_, _ = fmt.Sscanf(string(b), "%d", &n)
 	return n
 }

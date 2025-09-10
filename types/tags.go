@@ -45,6 +45,8 @@ func (t Tags) GetOwner() string {
 }
 
 // ToMap converts structured tags to map for AWS API compatibility
+//
+//nolint:gocyclo // Simple field mapping, complexity is acceptable
 func (t Tags) ToMap() map[string]string {
 	tags := make(map[string]string)
 
@@ -97,7 +99,9 @@ func (t Tags) ToMap() map[string]string {
 	return tags
 }
 
-// FromMap creates structured tags from a map (for AWS API compatibility)
+// TagsFromMap creates structured tags from a map (for AWS API compatibility)
+//
+//nolint:gocyclo // Simple field mapping, complexity is acceptable
 func TagsFromMap(tagMap map[string]string) Tags {
 	tags := Tags{}
 

@@ -15,12 +15,12 @@ import (
 type EntryType string
 
 const (
-	EntryObserved EntryType = "observed"
-	EntryDecided  EntryType = "decided"
+	EntryObserved  EntryType = "observed"
+	EntryDecided   EntryType = "decided"
 	EntryExecuting EntryType = "executing"
-	EntryExecuted EntryType = "executed"
-	EntryFailed   EntryType = "failed"
-	EntrySkipped  EntryType = "skipped"
+	EntryExecuted  EntryType = "executed"
+	EntryFailed    EntryType = "failed"
+	EntrySkipped   EntryType = "skipped"
 )
 
 // Entry represents a single WAL entry
@@ -44,7 +44,7 @@ type WAL struct {
 
 // Open creates or opens a WAL in the specified directory
 func Open(dir string) (*WAL, error) {
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, fmt.Errorf("failed to create WAL directory: %w", err)
 	}
 
@@ -52,7 +52,7 @@ func Open(dir string) (*WAL, error) {
 	filename := fmt.Sprintf("ovi-%s.wal", time.Now().Format("20060102-150405"))
 	path := filepath.Join(dir, filename)
 
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600) // #nosec G304 - path is constructed from trusted dir
 	if err != nil {
 		return nil, fmt.Errorf("failed to open WAL file: %w", err)
 	}
@@ -165,7 +165,7 @@ type Reader struct {
 
 // NewReader creates a WAL reader for the specified file
 func NewReader(path string) (*Reader, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 - path is constructed from trusted dir
 	if err != nil {
 		return nil, fmt.Errorf("failed to open WAL file: %w", err)
 	}
@@ -210,7 +210,9 @@ func Replay(dir string, since time.Time, handler func(*Entry) error) error {
 		if err != nil {
 			return err
 		}
-		defer reader.Close()
+		defer func() {
+			_ = reader.Close()
+		}()
 
 		for {
 			entry, err := reader.Next()

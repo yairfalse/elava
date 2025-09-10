@@ -14,7 +14,7 @@ func TestMVCCStorage_RecordObservation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer storage.Close()
+	defer func() { _ = storage.Close() }()
 
 	// Create test resource
 	resource := types.Resource{
@@ -60,7 +60,7 @@ func TestMVCCStorage_MultipleObservations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer storage.Close()
+	defer func() { _ = storage.Close() }()
 
 	// Observe multiple resources
 	resources := []types.Resource{
@@ -93,7 +93,7 @@ func TestMVCCStorage_ResourceDisappears(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer storage.Close()
+	defer func() { _ = storage.Close() }()
 
 	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-web"}}
 
@@ -123,7 +123,7 @@ func TestMVCCStorage_GetStateAtRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer storage.Close()
+	defer func() { _ = storage.Close() }()
 
 	// Simulate resource lifecycle
 	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-web"}}
@@ -161,7 +161,7 @@ func TestMVCCStorage_QueryByOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer storage.Close()
+	defer func() { _ = storage.Close() }()
 
 	// Mix of resources from different owners
 	resources := []types.Resource{
@@ -171,7 +171,7 @@ func TestMVCCStorage_QueryByOwner(t *testing.T) {
 		{ID: "i-004", Type: "rds", Tags: types.Tags{OviOwner: "team-web"}},
 	}
 
-	storage.RecordObservationBatch(resources)
+	_, _ = storage.RecordObservationBatch(resources)
 
 	// Query team-web resources
 	webResources, err := storage.GetResourcesByOwner("team-web")
@@ -196,13 +196,13 @@ func TestMVCCStorage_Compaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer storage.Close()
+	defer func() { _ = storage.Close() }()
 
 	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-web"}}
 
 	// Create many revisions
 	for i := 0; i < 100; i++ {
-		storage.RecordObservation(resource)
+		_, _ = storage.RecordObservation(resource)
 	}
 
 	// Get current revision
@@ -239,7 +239,7 @@ func TestMVCCStorage_ConcurrentAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer storage.Close()
+	defer func() { _ = storage.Close() }()
 
 	// Simulate multiple Ovi instances writing concurrently
 	done := make(chan bool, 3)
@@ -248,7 +248,7 @@ func TestMVCCStorage_ConcurrentAccess(t *testing.T) {
 	go func() {
 		for i := 0; i < 10; i++ {
 			r := types.Resource{ID: "web-" + string(rune(i)), Tags: types.Tags{OviOwner: "team-web"}}
-			storage.RecordObservation(r)
+			_, _ = storage.RecordObservation(r)
 			time.Sleep(10 * time.Millisecond)
 		}
 		done <- true
@@ -258,7 +258,7 @@ func TestMVCCStorage_ConcurrentAccess(t *testing.T) {
 	go func() {
 		for i := 0; i < 10; i++ {
 			r := types.Resource{ID: "api-" + string(rune(i)), Tags: types.Tags{OviOwner: "team-api"}}
-			storage.RecordObservation(r)
+			_, _ = storage.RecordObservation(r)
 			time.Sleep(10 * time.Millisecond)
 		}
 		done <- true
@@ -267,7 +267,7 @@ func TestMVCCStorage_ConcurrentAccess(t *testing.T) {
 	// Reader
 	go func() {
 		for i := 0; i < 20; i++ {
-			storage.GetResourcesByOwner("team-web")
+			_, _ = storage.GetResourcesByOwner("team-web")
 			time.Sleep(5 * time.Millisecond)
 		}
 		done <- true
