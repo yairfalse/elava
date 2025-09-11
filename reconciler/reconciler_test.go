@@ -104,13 +104,13 @@ func TestEngine_Reconcile(t *testing.T) {
 	defer func() { _ = walInstance.Close() }()
 
 	tests := []struct {
-		name               string
-		observer           Observer
-		comparator         Comparator
-		decisionMaker      DecisionMaker
-		config             Config
-		expectedDecisions  int
-		shouldError        bool
+		name              string
+		observer          Observer
+		comparator        Comparator
+		decisionMaker     DecisionMaker
+		config            Config
+		expectedDecisions int
+		shouldError       bool
 	}{
 		{
 			name: "successful reconciliation",
@@ -326,6 +326,7 @@ func TestNewEngine(t *testing.T) {
 
 	if engine == nil {
 		t.Error("NewEngine() returned nil")
+		return
 	}
 
 	if engine.instanceID != "test-instance" {

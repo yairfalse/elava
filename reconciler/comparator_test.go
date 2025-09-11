@@ -6,6 +6,7 @@ import (
 	"github.com/yairfalse/ovi/types"
 )
 
+//nolint:gocognit // Test complexity is acceptable for thorough coverage
 func TestSimpleComparator_Compare(t *testing.T) {
 	comparator := NewSimpleComparator()
 

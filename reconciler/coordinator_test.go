@@ -126,6 +126,7 @@ func TestNewSimpleCoordinator(t *testing.T) {
 
 	if coordinator == nil {
 		t.Error("NewSimpleCoordinator() returned nil")
+		return
 	}
 
 	if coordinator.instanceID != "test-instance" {

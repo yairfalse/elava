@@ -13,9 +13,8 @@ func TestDecision_Validate(t *testing.T) {
 		{
 			name: "valid create decision",
 			decision: Decision{
-				Action:     ActionCreate,
-				ResourceID: "new-resource",
-				Reason:     "Resource doesn't exist",
+				Action: ActionCreate,
+				Reason: "Resource doesn't exist",
 			},
 			wantErr: false,
 		},
@@ -46,12 +45,20 @@ func TestDecision_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid - empty resource ID",
+			name: "valid - create with empty resource ID",
 			decision: Decision{
 				Action: ActionCreate,
-				Reason: "Some reason",
+				Reason: "New resource will be created",
 			},
-			wantErr: true,
+			wantErr: false, // Create actions don't require ResourceID
+		},
+		{
+			name: "invalid - delete with empty resource ID",
+			decision: Decision{
+				Action: ActionDelete,
+				Reason: "Delete something",
+			},
+			wantErr: true, // Non-create actions require ResourceID
 		},
 		{
 			name: "invalid - empty reason",

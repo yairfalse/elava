@@ -32,7 +32,8 @@ func (d *Decision) Validate() error {
 	if d.Action == "" {
 		return fmt.Errorf("decision action cannot be empty")
 	}
-	if d.ResourceID == "" {
+	// For create actions, ResourceID is not required (will be generated)
+	if d.Action != ActionCreate && d.ResourceID == "" {
 		return fmt.Errorf("decision resource ID cannot be empty")
 	}
 	if d.Reason == "" {

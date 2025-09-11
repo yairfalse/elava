@@ -80,7 +80,7 @@ func (c *SimpleCoordinator) ReleaseResources(ctx context.Context, resourceIDs []
 func (c *SimpleCoordinator) IsResourceClaimed(ctx context.Context, resourceID string) (bool, error) {
 	// Simplified implementation
 	// Real implementation would check claims storage with TTL
-	
+
 	state, err := c.storage.GetResourceState(resourceID)
 	if err != nil {
 		// Resource not found means not claimed

@@ -36,9 +36,9 @@ type Coordinator interface {
 
 // Config defines what infrastructure should exist
 type Config struct {
-	Version   string              `yaml:"version"`
-	Provider  string              `yaml:"provider"`
-	Region    string              `yaml:"region"`
+	Version   string               `yaml:"version"`
+	Provider  string               `yaml:"provider"`
+	Region    string               `yaml:"region"`
 	Resources []types.ResourceSpec `yaml:"resources"`
 }
 
@@ -55,10 +55,10 @@ type Diff struct {
 type DiffType string
 
 const (
-	DiffMissing    DiffType = "missing"    // Resource should exist but doesn't
-	DiffUnwanted   DiffType = "unwanted"   // Resource exists but shouldn't
-	DiffDrifted    DiffType = "drifted"    // Resource exists but has wrong configuration
-	DiffUnmanaged  DiffType = "unmanaged"  // Resource exists but isn't managed by Ovi
+	DiffMissing   DiffType = "missing"   // Resource should exist but doesn't
+	DiffUnwanted  DiffType = "unwanted"  // Resource exists but shouldn't
+	DiffDrifted   DiffType = "drifted"   // Resource exists but has wrong configuration
+	DiffUnmanaged DiffType = "unmanaged" // Resource exists but isn't managed by Ovi
 )
 
 // Claim represents a resource claim for coordination
@@ -71,13 +71,13 @@ type Claim struct {
 
 // ReconcileResult contains the outcome of a reconciliation cycle
 type ReconcileResult struct {
-	Timestamp       time.Time         `json:"timestamp"`
-	ResourcesFound  int               `json:"resources_found"`
-	DiffsDetected   int               `json:"diffs_detected"`
-	DecisionsMade   int               `json:"decisions_made"`
-	ExecutionErrors []string          `json:"execution_errors,omitempty"`
-	Duration        time.Duration     `json:"duration"`
-	Decisions       []types.Decision  `json:"decisions"`
+	Timestamp       time.Time        `json:"timestamp"`
+	ResourcesFound  int              `json:"resources_found"`
+	DiffsDetected   int              `json:"diffs_detected"`
+	DecisionsMade   int              `json:"decisions_made"`
+	ExecutionErrors []string         `json:"execution_errors,omitempty"`
+	Duration        time.Duration    `json:"duration"`
+	Decisions       []types.Decision `json:"decisions"`
 }
 
 // ReconcilerOptions configure reconciler behavior

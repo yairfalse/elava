@@ -12,14 +12,14 @@ import (
 
 // Engine implements the main reconciliation logic
 type Engine struct {
-	observer     Observer
-	comparator   Comparator
+	observer      Observer
+	comparator    Comparator
 	decisionMaker DecisionMaker
-	coordinator  Coordinator
-	storage      *storage.MVCCStorage
-	wal          *wal.WAL
-	instanceID   string
-	options      ReconcilerOptions
+	coordinator   Coordinator
+	storage       *storage.MVCCStorage
+	wal           *wal.WAL
+	instanceID    string
+	options       ReconcilerOptions
 }
 
 // NewEngine creates a new reconciler engine
@@ -48,7 +48,7 @@ func NewEngine(
 // Reconcile performs a full reconciliation cycle
 func (e *Engine) Reconcile(ctx context.Context, config Config) ([]types.Decision, error) {
 	startTime := time.Now()
-	
+
 	// Step 1: Observe current state
 	if err := e.wal.Append(wal.EntryObserved, "", "reconcile_start"); err != nil {
 		return nil, fmt.Errorf("failed to log reconcile start: %w", err)
