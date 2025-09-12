@@ -250,6 +250,34 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
 ```
+## 📝 GIT WORKFLOW ENFORCEMENT
+
+### Branch Naming
+```bash
+feat/feature-name     # New feature
+fix/bug-description   # Bug fix
+perf/optimization     # Performance improvement
+docs/what-changed     # Documentation only
+test/what-testing     # Test additions
+refactor/what-changed # Code refactoring
+```
+
+### Commit Message Format
+```bash
+type(scope): description
+
+- Detailed point 1
+- Detailed point 2
+
+Closes #123
+```
+
+### PR Rules
+- **Max 200 lines** (split larger changes)
+- **Must pass CI** (all checks green)
+- **Must include verification output**
+- **Design doc linked**
+- **Tests included**
 
 ## 🧪 Testing Requirements
 
