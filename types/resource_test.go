@@ -171,14 +171,14 @@ func TestResource_Matches(t *testing.T) {
 
 func TestResourceCreation(t *testing.T) {
 	r := Resource{
-		ID:        "i-123456",
-		Type:      "ec2",
-		Provider:  "aws",
-		Region:    "us-east-1",
-		Name:      "web-server-1",
-		Status:    "running",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:         "i-123456",
+		Type:       "ec2",
+		Provider:   "aws",
+		Region:     "us-east-1",
+		Name:       "web-server-1",
+		Status:     "running",
+		CreatedAt:  time.Now(),
+		LastSeenAt: time.Now(),
 		Tags: Tags{
 			OviOwner:    "team-web",
 			Environment: "prod",
