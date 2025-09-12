@@ -11,8 +11,10 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/yairfalse/ovi/providers"
 	"github.com/yairfalse/ovi/types"
@@ -30,11 +32,13 @@ func init() {
 
 // RealAWSProvider implements CloudProvider using AWS SDK v2
 type RealAWSProvider struct {
-	ec2Client   *ec2.Client
-	rdsClient   *rds.Client
-	elbv2Client *elasticloadbalancingv2.Client
-	region      string
-	accountID   string
+	ec2Client    *ec2.Client
+	rdsClient    *rds.Client
+	elbv2Client  *elasticloadbalancingv2.Client
+	s3Client     *s3.Client
+	lambdaClient *lambda.Client
+	region       string
+	accountID    string
 }
 
 // NewRealAWSProvider creates a new real AWS provider
@@ -61,11 +65,13 @@ func NewRealAWSProvider(ctx context.Context, region string) (*RealAWSProvider, e
 	}
 
 	return &RealAWSProvider{
-		ec2Client:   ec2Client,
-		rdsClient:   rds.NewFromConfig(cfg),
-		elbv2Client: elasticloadbalancingv2.NewFromConfig(cfg),
-		region:      region,
-		accountID:   accountID,
+		ec2Client:    ec2Client,
+		rdsClient:    rds.NewFromConfig(cfg),
+		elbv2Client:  elasticloadbalancingv2.NewFromConfig(cfg),
+		s3Client:     s3.NewFromConfig(cfg),
+		lambdaClient: lambda.NewFromConfig(cfg),
+		region:       region,
+		accountID:    accountID,
 	}, nil
 }
 
@@ -103,6 +109,47 @@ func (p *RealAWSProvider) ListResources(ctx context.Context, filter types.Resour
 		return nil, fmt.Errorf("failed to list load balancers: %w", err)
 	}
 	resources = append(resources, elbResources...)
+
+	// List S3 Buckets
+	s3Resources, err := p.listS3Buckets(ctx, filter)
+	if err != nil {
+		// Log but don't fail - S3 is global and might have permission issues
+		fmt.Printf("Warning: failed to list S3 buckets: %v\n", err)
+	} else {
+		resources = append(resources, s3Resources...)
+	}
+
+	// List Lambda Functions
+	lambdaResources, err := p.listLambdaFunctions(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list Lambda functions: %v\n", err)
+	} else {
+		resources = append(resources, lambdaResources...)
+	}
+
+	// List EBS Volumes
+	ebsResources, err := p.listEBSVolumes(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list EBS volumes: %v\n", err)
+	} else {
+		resources = append(resources, ebsResources...)
+	}
+
+	// List Elastic IPs
+	eipResources, err := p.listElasticIPs(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list Elastic IPs: %v\n", err)
+	} else {
+		resources = append(resources, eipResources...)
+	}
+
+	// List NAT Gateways - expensive resources!
+	natResources, err := p.listNATGateways(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list NAT Gateways: %v\n", err)
+	} else {
+		resources = append(resources, natResources...)
+	}
 
 	// Apply filters
 	return p.applyFilters(resources, filter), nil

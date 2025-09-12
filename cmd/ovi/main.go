@@ -43,7 +43,7 @@ func runScanCommand() error {
 	scanFlags := flag.NewFlagSet("scan", flag.ExitOnError)
 	region := scanFlags.String("region", "us-east-1", "AWS region to scan")
 	output := scanFlags.String("output", "table", "Output format: table, json, csv")
-	filter := scanFlags.String("filter", "", "Filter by resource type (ec2, rds, elb)")
+	filter := scanFlags.String("filter", "", "Filter by resource type (ec2, rds, elb, s3, lambda, ebs, elastic_ip, nat_gateway)")
 	riskOnly := scanFlags.Bool("risk-only", false, "Show only high-risk untracked resources")
 
 	// Parse remaining args
@@ -79,5 +79,7 @@ func printUsage() {
 	fmt.Println("  ovi scan                    # Scan current region")
 	fmt.Println("  ovi scan --region us-west-2 # Scan specific region")
 	fmt.Println("  ovi scan --filter ec2       # Only scan EC2 instances")
+	fmt.Println("  ovi scan --filter s3        # Only scan S3 buckets")
+	fmt.Println("  ovi scan --filter ebs       # Only scan unattached EBS volumes")
 	fmt.Println("  ovi scan --risk-only        # Only high-risk resources")
 }
