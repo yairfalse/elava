@@ -101,12 +101,12 @@ func (t *Tracker) assessRisk(resource *types.Resource) string {
 	if resource.Type == "rds" || resource.Status == "stopped" {
 		return "high"
 	}
-	
+
 	// Medium risk: compute resources without clear ownership
 	if resource.Type == "ec2" && resource.Tags.OviOwner == "" {
 		return "medium"
 	}
-	
+
 	return "low"
 }
 
@@ -115,15 +115,15 @@ func (t *Tracker) recommendAction(resource *types.Resource) string {
 	if resource.Status == "stopped" || resource.Status == "terminated" {
 		return "cleanup"
 	}
-	
+
 	if resource.Tags.OviOwner == "" && resource.Tags.Team == "" {
 		return "tag_owner"
 	}
-	
+
 	if !hasIaCTags(resource) {
 		return "verify_management"
 	}
-	
+
 	return "investigate"
 }
 
@@ -131,8 +131,8 @@ func (t *Tracker) recommendAction(resource *types.Resource) string {
 type UntrackedResource struct {
 	Resource types.Resource `json:"resource"`
 	Issues   []string       `json:"issues"`
-	Risk     string         `json:"risk"`     // "low", "medium", "high"
-	Action   string         `json:"action"`   // "investigate", "tag_owner", "cleanup", "verify_management"
+	Risk     string         `json:"risk"`   // "low", "medium", "high"
+	Action   string         `json:"action"` // "investigate", "tag_owner", "cleanup", "verify_management"
 }
 
 // Tracking rule implementations
@@ -150,13 +150,13 @@ func checkNoIaCManagement(resource *types.Resource) bool {
 	if resource.Tags.OviManaged {
 		return false
 	}
-	
+
 	return !hasIaCTags(resource)
 }
 
 func checkDeadResource(resource *types.Resource) bool {
 	deadStates := []string{"stopped", "terminated", "shutting-down"}
-	
+
 	for _, state := range deadStates {
 		if resource.Status == state {
 			// If stopped for more than 7 days, likely untracked
@@ -165,7 +165,7 @@ func checkDeadResource(resource *types.Resource) bool {
 			}
 		}
 	}
-	
+
 	return false
 }
 
@@ -182,21 +182,21 @@ func hasIaCTags(resource *types.Resource) bool {
 		"created-by",
 		"stack-name",
 	}
-	
+
 	// Look in all tag fields
 	allTagText := strings.ToLower(
 		resource.Tags.Name + " " +
-		resource.Tags.Project + " " +
-		resource.Tags.Environment + " " +
-		resource.Tags.OviOwner,
+			resource.Tags.Project + " " +
+			resource.Tags.Environment + " " +
+			resource.Tags.OviOwner,
 	)
-	
+
 	for _, indicator := range iacIndicators {
 		if strings.Contains(allTagText, indicator) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 

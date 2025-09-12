@@ -30,11 +30,11 @@ func init() {
 
 // RealAWSProvider implements CloudProvider using AWS SDK v2
 type RealAWSProvider struct {
-	ec2Client    *ec2.Client
-	rdsClient    *rds.Client
-	elbv2Client  *elasticloadbalancingv2.Client
-	region       string
-	accountID    string
+	ec2Client   *ec2.Client
+	rdsClient   *rds.Client
+	elbv2Client *elasticloadbalancingv2.Client
+	region      string
+	accountID   string
 }
 
 // NewRealAWSProvider creates a new real AWS provider
@@ -45,7 +45,7 @@ func NewRealAWSProvider(ctx context.Context, region string) (*RealAWSProvider, e
 	}
 
 	ec2Client := ec2.NewFromConfig(cfg)
-	
+
 	// Get account ID from EC2 describe-account-attributes
 	accountOutput, err := ec2Client.DescribeAccountAttributes(ctx, &ec2.DescribeAccountAttributesInput{})
 	if err != nil {
@@ -113,14 +113,14 @@ func (p *RealAWSProvider) listEC2Instances(ctx context.Context, filter types.Res
 	var resources []types.Resource
 
 	input := &ec2.DescribeInstancesInput{}
-	
+
 	// Add filters if specified
 	if len(filter.IDs) > 0 {
 		input.InstanceIds = filter.IDs
 	}
 
 	paginator := ec2.NewDescribeInstancesPaginator(p.ec2Client, input)
-	
+
 	for paginator.HasMorePages() {
 		output, err := paginator.NextPage(ctx)
 		if err != nil {
@@ -143,9 +143,9 @@ func (p *RealAWSProvider) listRDSInstances(ctx context.Context, filter types.Res
 	var resources []types.Resource
 
 	input := &rds.DescribeDBInstancesInput{}
-	
+
 	paginator := rds.NewDescribeDBInstancesPaginator(p.rdsClient, input)
-	
+
 	for paginator.HasMorePages() {
 		output, err := paginator.NextPage(ctx)
 		if err != nil {
@@ -166,9 +166,9 @@ func (p *RealAWSProvider) listLoadBalancers(ctx context.Context, filter types.Re
 	var resources []types.Resource
 
 	input := &elasticloadbalancingv2.DescribeLoadBalancersInput{}
-	
+
 	paginator := elasticloadbalancingv2.NewDescribeLoadBalancersPaginator(p.elbv2Client, input)
-	
+
 	for paginator.HasMorePages() {
 		output, err := paginator.NextPage(ctx)
 		if err != nil {
@@ -187,10 +187,10 @@ func (p *RealAWSProvider) listLoadBalancers(ctx context.Context, filter types.Re
 // convertEC2Instance converts AWS EC2 instance to Ovi resource
 func (p *RealAWSProvider) convertEC2Instance(instance ec2types.Instance) types.Resource {
 	tags := p.convertEC2Tags(instance.Tags)
-	
+
 	// Determine if orphaned (no Ovi owner or common tags)
 	isOrphaned := p.isResourceOrphaned(tags)
-	
+
 	return types.Resource{
 		ID:         aws.ToString(instance.InstanceId),
 		Type:       "ec2",
@@ -202,12 +202,12 @@ func (p *RealAWSProvider) convertEC2Instance(instance ec2types.Instance) types.R
 		CreatedAt:  p.safeTimeValue(instance.LaunchTime),
 		IsOrphaned: isOrphaned,
 		Metadata: map[string]interface{}{
-			"instance_type":    string(instance.InstanceType),
+			"instance_type":     string(instance.InstanceType),
 			"availability_zone": aws.ToString(instance.Placement.AvailabilityZone),
-			"private_ip":       aws.ToString(instance.PrivateIpAddress),
-			"public_ip":        aws.ToString(instance.PublicIpAddress),
-			"vpc_id":          aws.ToString(instance.VpcId),
-			"subnet_id":       aws.ToString(instance.SubnetId),
+			"private_ip":        aws.ToString(instance.PrivateIpAddress),
+			"public_ip":         aws.ToString(instance.PublicIpAddress),
+			"vpc_id":            aws.ToString(instance.VpcId),
+			"subnet_id":         aws.ToString(instance.SubnetId),
 		},
 	}
 }
@@ -216,7 +216,7 @@ func (p *RealAWSProvider) convertEC2Instance(instance ec2types.Instance) types.R
 func (p *RealAWSProvider) convertRDSInstance(instance rdstypes.DBInstance) types.Resource {
 	tags := p.convertRDSTags(instance.TagList)
 	isOrphaned := p.isResourceOrphaned(tags)
-	
+
 	return types.Resource{
 		ID:         aws.ToString(instance.DBInstanceIdentifier),
 		Type:       "rds",
@@ -228,13 +228,13 @@ func (p *RealAWSProvider) convertRDSInstance(instance rdstypes.DBInstance) types
 		CreatedAt:  p.safeTimeValue(instance.InstanceCreateTime),
 		IsOrphaned: isOrphaned,
 		Metadata: map[string]interface{}{
-			"engine":         aws.ToString(instance.Engine),
-			"engine_version": aws.ToString(instance.EngineVersion),
-			"instance_class": aws.ToString(instance.DBInstanceClass),
+			"engine":            aws.ToString(instance.Engine),
+			"engine_version":    aws.ToString(instance.EngineVersion),
+			"instance_class":    aws.ToString(instance.DBInstanceClass),
 			"allocated_storage": aws.ToInt32(instance.AllocatedStorage),
-			"db_name":        aws.ToString(instance.DBName),
-			"endpoint":       aws.ToString(instance.Endpoint.Address),
-			"port":          aws.ToInt32(instance.Endpoint.Port),
+			"db_name":           aws.ToString(instance.DBName),
+			"endpoint":          aws.ToString(instance.Endpoint.Address),
+			"port":              aws.ToInt32(instance.Endpoint.Port),
 		},
 	}
 }
@@ -243,7 +243,7 @@ func (p *RealAWSProvider) convertRDSInstance(instance rdstypes.DBInstance) types
 func (p *RealAWSProvider) convertLoadBalancer(lb elbv2types.LoadBalancer) types.Resource {
 	tags := types.Tags{} // ELB tags require separate API call
 	isOrphaned := p.isResourceOrphaned(tags)
-	
+
 	return types.Resource{
 		ID:         aws.ToString(lb.LoadBalancerArn),
 		Type:       "elb",
@@ -255,10 +255,10 @@ func (p *RealAWSProvider) convertLoadBalancer(lb elbv2types.LoadBalancer) types.
 		CreatedAt:  p.safeTimeValue(lb.CreatedTime),
 		IsOrphaned: isOrphaned,
 		Metadata: map[string]interface{}{
-			"type":      string(lb.Type),
-			"scheme":    string(lb.Scheme),
-			"vpc_id":    aws.ToString(lb.VpcId),
-			"dns_name":  aws.ToString(lb.DNSName),
+			"type":     string(lb.Type),
+			"scheme":   string(lb.Scheme),
+			"vpc_id":   aws.ToString(lb.VpcId),
+			"dns_name": aws.ToString(lb.DNSName),
 		},
 	}
 }
@@ -266,11 +266,11 @@ func (p *RealAWSProvider) convertLoadBalancer(lb elbv2types.LoadBalancer) types.
 // convertEC2Tags converts EC2 tags to Ovi tags
 func (p *RealAWSProvider) convertEC2Tags(ec2Tags []ec2types.Tag) types.Tags {
 	tags := types.Tags{}
-	
+
 	for _, tag := range ec2Tags {
 		key := aws.ToString(tag.Key)
 		value := aws.ToString(tag.Value)
-		
+
 		switch key {
 		case "ovi:owner", "Owner", "owner":
 			tags.OviOwner = value
@@ -290,18 +290,18 @@ func (p *RealAWSProvider) convertEC2Tags(ec2Tags []ec2types.Tag) types.Tags {
 			tags.CostCenter = value
 		}
 	}
-	
+
 	return tags
 }
 
-// convertRDSTags converts RDS tags to Ovi tags  
+// convertRDSTags converts RDS tags to Ovi tags
 func (p *RealAWSProvider) convertRDSTags(rdsTags []rdstypes.Tag) types.Tags {
 	tags := types.Tags{}
-	
+
 	for _, tag := range rdsTags {
 		key := aws.ToString(tag.Key)
 		value := aws.ToString(tag.Value)
-		
+
 		switch key {
 		case "ovi:owner", "Owner", "owner":
 			tags.OviOwner = value
@@ -321,7 +321,7 @@ func (p *RealAWSProvider) convertRDSTags(rdsTags []rdstypes.Tag) types.Tags {
 			tags.CostCenter = value
 		}
 	}
-	
+
 	return tags
 }
 
@@ -331,12 +331,12 @@ func (p *RealAWSProvider) isResourceOrphaned(tags types.Tags) bool {
 	hasOwner := tags.OviOwner != "" || tags.Team != ""
 	hasProject := tags.Project != "" || tags.Name != ""
 	hasManagement := tags.OviManaged
-	
+
 	// If it's explicitly managed by Ovi, it's not orphaned
 	if hasManagement {
 		return false
 	}
-	
+
 	// If it has neither owner nor project identification, it's likely orphaned
 	return !hasOwner && !hasProject
 }
@@ -346,37 +346,50 @@ func (p *RealAWSProvider) applyFilters(resources []types.Resource, filter types.
 	if filter.Owner == "" && filter.Type == "" && len(filter.IDs) == 0 {
 		return resources
 	}
-	
+
 	var filtered []types.Resource
 	for _, resource := range resources {
-		// Filter by owner
-		if filter.Owner != "" && resource.Tags.OviOwner != filter.Owner && resource.Tags.Team != filter.Owner {
-			continue
+		if p.shouldIncludeResource(resource, filter) {
+			filtered = append(filtered, resource)
 		}
-		
-		// Filter by type
-		if filter.Type != "" && resource.Type != filter.Type {
-			continue
-		}
-		
-		// Filter by IDs
-		if len(filter.IDs) > 0 {
-			found := false
-			for _, id := range filter.IDs {
-				if resource.ID == id {
-					found = true
-					break
-				}
-			}
-			if !found {
-				continue
-			}
-		}
-		
-		filtered = append(filtered, resource)
 	}
-	
+
 	return filtered
+}
+
+// shouldIncludeResource checks if a resource matches the filter criteria
+func (p *RealAWSProvider) shouldIncludeResource(resource types.Resource, filter types.ResourceFilter) bool {
+	// Filter by owner
+	if filter.Owner != "" && !p.matchesOwner(resource, filter.Owner) {
+		return false
+	}
+
+	// Filter by type
+	if filter.Type != "" && resource.Type != filter.Type {
+		return false
+	}
+
+	// Filter by IDs
+	if len(filter.IDs) > 0 && !p.matchesID(resource, filter.IDs) {
+		return false
+	}
+
+	return true
+}
+
+// matchesOwner checks if resource matches owner filter
+func (p *RealAWSProvider) matchesOwner(resource types.Resource, owner string) bool {
+	return resource.Tags.OviOwner == owner || resource.Tags.Team == owner
+}
+
+// matchesID checks if resource ID matches any in the filter list
+func (p *RealAWSProvider) matchesID(resource types.Resource, ids []string) bool {
+	for _, id := range ids {
+		if resource.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // safeTimeValue safely converts *time.Time to time.Time
@@ -401,7 +414,7 @@ func (p *RealAWSProvider) DeleteResource(ctx context.Context, resourceID string)
 func (p *RealAWSProvider) TagResource(ctx context.Context, resourceID string, tags map[string]string) error {
 	// For Day 2 ops, we might tag resources for cleanup or ownership
 	// This is one of the few write operations we support
-	
+
 	// Determine resource type from ID pattern
 	if len(resourceID) > 2 && resourceID[:2] == "i-" {
 		// EC2 instance
@@ -410,7 +423,7 @@ func (p *RealAWSProvider) TagResource(ctx context.Context, resourceID string, ta
 		// ARN-based resource (like ELB)
 		return p.tagARNResource(ctx, resourceID, tags)
 	}
-	
+
 	// For RDS and other resources, we'd implement similar logic
 	return fmt.Errorf("unsupported resource type for tagging: %s", resourceID)
 }
@@ -424,12 +437,12 @@ func (p *RealAWSProvider) tagEC2Instance(ctx context.Context, instanceID string,
 			Value: aws.String(value),
 		})
 	}
-	
+
 	_, err := p.ec2Client.CreateTags(ctx, &ec2.CreateTagsInput{
 		Resources: []string{instanceID},
 		Tags:      ec2Tags,
 	})
-	
+
 	return err
 }
 
@@ -443,12 +456,12 @@ func (p *RealAWSProvider) tagARNResource(ctx context.Context, arn string, tags m
 			Value: aws.String(value),
 		})
 	}
-	
+
 	_, err := p.elbv2Client.AddTags(ctx, &elasticloadbalancingv2.AddTagsInput{
 		ResourceArns: []string{arn},
-		Tags:        elbTags,
+		Tags:         elbTags,
 	})
-	
+
 	return err
 }
 

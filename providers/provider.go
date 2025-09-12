@@ -22,11 +22,11 @@ type CloudProvider interface {
 
 // ProviderConfig holds provider configuration
 type ProviderConfig struct {
-	Type            string                 `json:"type"`   // "aws", "gcp", "azure", etc.
-	Region          string                 `json:"region"`
-	AccessKeyID     string                 
-	SecretAccessKey string                 
-	SessionToken    string                 
+	Type            string `json:"type"` // "aws", "gcp", "azure", etc.
+	Region          string `json:"region"`
+	AccessKeyID     string
+	SecretAccessKey string
+	SessionToken    string
 	ProjectID       string                 // For GCP
 	Config          map[string]interface{} `json:"config"` // Provider-specific config
 }

@@ -114,14 +114,14 @@ func (p *AWSProvider) convertToInstanceFilter(filter types.ResourceFilter) Insta
 // convertToResource converts EC2Instance to Resource
 func (p *AWSProvider) convertToResource(instance EC2Instance) types.Resource {
 	return types.Resource{
-		ID:        instance.InstanceID,
-		Type:      "ec2",
-		Provider:  "aws",
-		Region:    p.region,
-		Name:      instance.Tags["Name"],
-		Status:    instance.State,
-		Tags:      types.TagsFromMap(instance.Tags),
-		CreatedAt: instance.LaunchTime,
+		ID:         instance.InstanceID,
+		Type:       "ec2",
+		Provider:   "aws",
+		Region:     p.region,
+		Name:       instance.Tags["Name"],
+		Status:     instance.State,
+		Tags:       types.TagsFromMap(instance.Tags),
+		CreatedAt:  instance.LaunchTime,
 		LastSeenAt: time.Now(),
 	}
 }

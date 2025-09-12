@@ -1,9 +1,9 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
-	"flag"
 )
 
 const version = "0.1.0"
@@ -45,10 +45,10 @@ func runScanCommand() error {
 	output := scanFlags.String("output", "table", "Output format: table, json, csv")
 	filter := scanFlags.String("filter", "", "Filter by resource type (ec2, rds, elb)")
 	riskOnly := scanFlags.Bool("risk-only", false, "Show only high-risk untracked resources")
-	
+
 	// Parse remaining args
-	scanFlags.Parse(os.Args[2:])
-	
+	_ = scanFlags.Parse(os.Args[2:])
+
 	// Create and run scan command
 	scanCmd := &ScanCommand{
 		Region:   *region,
@@ -56,7 +56,7 @@ func runScanCommand() error {
 		Filter:   *filter,
 		RiskOnly: *riskOnly,
 	}
-	
+
 	return scanCmd.Run()
 }
 

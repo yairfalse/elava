@@ -13,16 +13,16 @@ import (
 type Calculator interface {
 	// CalculateCost calculates cost for a resource
 	CalculateCost(ctx context.Context, resource *types.Resource) (*types.CostInfo, error)
-	
+
 	// CalculateBatch calculates cost for multiple resources efficiently
 	CalculateBatch(ctx context.Context, resources []*types.Resource) error
-	
+
 	// EstimateWaste estimates waste for orphaned resources
 	EstimateWaste(ctx context.Context, resource *types.Resource) (float64, error)
-	
+
 	// GetPricing gets pricing information for resource type
 	GetPricing(ctx context.Context, provider, region, resourceType string) (*PricingInfo, error)
-	
+
 	// SupportsProvider returns true if this calculator supports the provider
 	SupportsProvider(provider string) bool
 }
@@ -72,11 +72,11 @@ func (r *CalculatorRegistry) Create(config CalculatorConfig) (Calculator, error)
 	r.mu.RLock()
 	factory, exists := r.calculators[config.Provider]
 	r.mu.RUnlock()
-	
+
 	if !exists {
 		return nil, fmt.Errorf("no cost calculator for provider: %s", config.Provider)
 	}
-	
+
 	return factory(config)
 }
 
@@ -107,11 +107,11 @@ func (m *MultiProviderCalculator) CalculateCost(ctx context.Context, resource *t
 	m.mu.RLock()
 	calculator, exists := m.calculators[resource.Provider]
 	m.mu.RUnlock()
-	
+
 	if !exists {
 		return nil, fmt.Errorf("no cost calculator for provider: %s", resource.Provider)
 	}
-	
+
 	return calculator.CalculateCost(ctx, resource)
 }
 
@@ -122,51 +122,51 @@ func (m *MultiProviderCalculator) CalculateBatch(ctx context.Context, resources 
 	for _, resource := range resources {
 		providerGroups[resource.Provider] = append(providerGroups[resource.Provider], resource)
 	}
-	
+
 	// Calculate costs for each provider group
 	for provider, providerResources := range providerGroups {
 		m.mu.RLock()
 		calculator, exists := m.calculators[provider]
 		m.mu.RUnlock()
-		
+
 		if !exists {
 			// Skip resources for unsupported providers
 			continue
 		}
-		
+
 		if err := calculator.CalculateBatch(ctx, providerResources); err != nil {
 			return fmt.Errorf("cost calculation failed for %s provider: %w", provider, err)
 		}
 	}
-	
+
 	return nil
 }
 
 // EstimateWaste estimates waste across all resources
 func (m *MultiProviderCalculator) EstimateWaste(ctx context.Context, resources []*types.Resource) (float64, error) {
 	var totalWaste float64
-	
+
 	for _, resource := range resources {
 		if !resource.IsOrphaned {
 			continue
 		}
-		
+
 		m.mu.RLock()
 		calculator, exists := m.calculators[resource.Provider]
 		m.mu.RUnlock()
-		
+
 		if !exists {
 			continue
 		}
-		
+
 		waste, err := calculator.EstimateWaste(ctx, resource)
 		if err != nil {
 			continue // Skip errors, best effort
 		}
-		
+
 		totalWaste += waste
 	}
-	
+
 	return totalWaste, nil
 }
 

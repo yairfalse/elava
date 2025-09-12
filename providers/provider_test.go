@@ -84,7 +84,7 @@ func TestProviderInterface(t *testing.T) {
 
 func TestProviderRegistry(t *testing.T) {
 	// Register a mock provider
-	RegisterProvider("test", func(config ProviderConfig) (CloudProvider, error) {
+	RegisterProvider("test", func(ctx context.Context, config ProviderConfig) (CloudProvider, error) {
 		return &MockProvider{
 			name:   "test",
 			region: config.Region,
@@ -92,7 +92,8 @@ func TestProviderRegistry(t *testing.T) {
 	})
 
 	// Get the provider
-	provider, err := GetProvider("test", ProviderConfig{Region: "us-test-1"})
+	ctx := context.Background()
+	provider, err := GetProvider(ctx, "test", ProviderConfig{Region: "us-test-1"})
 	if err != nil {
 		t.Fatalf("GetProvider() error = %v", err)
 	}
@@ -101,7 +102,7 @@ func TestProviderRegistry(t *testing.T) {
 	}
 
 	// Try to get non-existent provider
-	_, err = GetProvider("nonexistent", ProviderConfig{})
+	_, err = GetProvider(ctx, "nonexistent", ProviderConfig{})
 	if err == nil {
 		t.Error("GetProvider() should error for non-existent provider")
 	}
