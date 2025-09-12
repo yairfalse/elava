@@ -22,15 +22,17 @@ type CloudProvider interface {
 
 // ProviderConfig holds provider configuration
 type ProviderConfig struct {
-	Region          string
-	AccessKeyID     string
-	SecretAccessKey string
-	SessionToken    string
-	ProjectID       string // For GCP
+	Type            string                 `json:"type"`   // "aws", "gcp", "azure", etc.
+	Region          string                 `json:"region"`
+	AccessKeyID     string                 
+	SecretAccessKey string                 
+	SessionToken    string                 
+	ProjectID       string                 // For GCP
+	Config          map[string]interface{} `json:"config"` // Provider-specific config
 }
 
 // ProviderFactory creates a provider instance
-type ProviderFactory func(config ProviderConfig) (CloudProvider, error)
+type ProviderFactory func(ctx context.Context, config ProviderConfig) (CloudProvider, error)
 
 // Registry of available providers
 var providers = make(map[string]ProviderFactory)
@@ -41,12 +43,12 @@ func RegisterProvider(name string, factory ProviderFactory) {
 }
 
 // GetProvider creates a provider instance by name
-func GetProvider(name string, config ProviderConfig) (CloudProvider, error) {
+func GetProvider(ctx context.Context, name string, config ProviderConfig) (CloudProvider, error) {
 	factory, exists := providers[name]
 	if !exists {
 		return nil, fmt.Errorf("provider %s not found", name)
 	}
-	return factory(config)
+	return factory(ctx, config)
 }
 
 // ListProviders returns available provider names

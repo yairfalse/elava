@@ -154,4 +154,3 @@ func (e *Engine) buildTagsMap(decision types.Decision) (map[string]string, error
 
 	return tags, nil
 }
-

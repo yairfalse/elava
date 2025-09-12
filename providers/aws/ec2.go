@@ -122,7 +122,7 @@ func (p *AWSProvider) convertToResource(instance EC2Instance) types.Resource {
 		Status:    instance.State,
 		Tags:      types.TagsFromMap(instance.Tags),
 		CreatedAt: instance.LaunchTime,
-		UpdatedAt: time.Now(),
+		LastSeenAt: time.Now(),
 	}
 }
 
