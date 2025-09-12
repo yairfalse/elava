@@ -43,7 +43,7 @@ func runScanCommand() error {
 	scanFlags := flag.NewFlagSet("scan", flag.ExitOnError)
 	region := scanFlags.String("region", "us-east-1", "AWS region to scan")
 	output := scanFlags.String("output", "table", "Output format: table, json, csv")
-	filter := scanFlags.String("filter", "", "Filter by resource type (ec2, rds, elb, s3, lambda, ebs, elastic_ip, nat_gateway)")
+	filter := scanFlags.String("filter", "", "Filter by resource type (ec2, rds, elb, s3, lambda, ebs, elastic_ip, nat_gateway, snapshot, ami)")
 	riskOnly := scanFlags.Bool("risk-only", false, "Show only high-risk untracked resources")
 
 	// Parse remaining args

@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -362,4 +363,155 @@ func (p *RealAWSProvider) convertLambdaTags(lambdaTags map[string]string) types.
 	}
 
 	return tags
+}
+
+// listSnapshots discovers EBS snapshots
+func (p *RealAWSProvider) listSnapshots(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	var resources []types.Resource
+
+	// Only list snapshots owned by this account
+	input := &ec2.DescribeSnapshotsInput{
+		OwnerIds: []string{"self"},
+	}
+	
+	paginator := ec2.NewDescribeSnapshotsPaginator(p.ec2Client, input)
+
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to describe snapshots: %w", err)
+		}
+
+		for _, snapshot := range output.Snapshots {
+			tags := p.convertEC2Tags(snapshot.Tags)
+			
+			// Calculate age
+			age := time.Since(p.safeTimeValue(snapshot.StartTime))
+			ageInDays := int(age.Hours() / 24)
+			
+			// Check if snapshot is old (potential waste)
+			isOld := ageInDays > 30
+			
+			// Look for patterns that indicate temporary snapshots
+			description := aws.ToString(snapshot.Description)
+			isTemp := strings.Contains(strings.ToLower(description), "temp") ||
+					  strings.Contains(strings.ToLower(description), "test") ||
+					  strings.Contains(strings.ToLower(description), "backup") ||
+					  strings.Contains(strings.ToLower(description), "before")
+
+			resource := types.Resource{
+				ID:         aws.ToString(snapshot.SnapshotId),
+				Type:       "snapshot",
+				Provider:   "aws",
+				Region:     p.region,
+				AccountID:  p.accountID,
+				Name:       tags.Name,
+				Status:     string(snapshot.State),
+				Tags:       tags,
+				CreatedAt:  p.safeTimeValue(snapshot.StartTime),
+				LastSeenAt: time.Now(),
+				IsOrphaned: p.isResourceOrphaned(tags) || (isOld && isTemp),
+				Metadata: map[string]interface{}{
+					"volume_size_gb": aws.ToInt32(snapshot.VolumeSize),
+					"description":    description,
+					"age_days":       ageInDays,
+					"is_old":         isOld,
+					"is_temp":        isTemp,
+					"volume_id":      aws.ToString(snapshot.VolumeId),
+					"encrypted":      aws.ToBool(snapshot.Encrypted),
+				},
+			}
+
+			resources = append(resources, resource)
+		}
+	}
+
+	return resources, nil
+}
+
+// listAMIs discovers custom AMIs
+func (p *RealAWSProvider) listAMIs(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	var resources []types.Resource
+
+	// Only list AMIs owned by this account
+	input := &ec2.DescribeImagesInput{
+		Owners: []string{"self"},
+	}
+
+	output, err := p.ec2Client.DescribeImages(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe AMIs: %w", err)
+	}
+
+	for _, image := range output.Images {
+		tags := p.convertEC2Tags(image.Tags)
+		
+		// Parse creation date
+		creationTime := time.Now()
+		if image.CreationDate != nil {
+			if t, err := time.Parse(time.RFC3339, *image.CreationDate); err == nil {
+				creationTime = t
+			}
+		}
+		
+		// Calculate age
+		age := time.Since(creationTime)
+		ageInDays := int(age.Hours() / 24)
+		
+		// Check if AMI is old
+		isOld := ageInDays > 90 // AMIs older than 3 months
+		
+		// Look for patterns in name/description
+		name := aws.ToString(image.Name)
+		description := aws.ToString(image.Description)
+		nameAndDesc := strings.ToLower(name + " " + description)
+		
+		isTemp := strings.Contains(nameAndDesc, "temp") ||
+				  strings.Contains(nameAndDesc, "test") ||
+				  strings.Contains(nameAndDesc, "old") ||
+				  strings.Contains(nameAndDesc, "backup")
+
+		// Count associated snapshots (AMIs can have multiple snapshots)
+		snapshotCount := len(image.BlockDeviceMappings)
+		
+		resource := types.Resource{
+			ID:         aws.ToString(image.ImageId),
+			Type:       "ami",
+			Provider:   "aws",
+			Region:     p.region,
+			AccountID:  p.accountID,
+			Name:       name,
+			Status:     string(image.State),
+			Tags:       tags,
+			CreatedAt:  creationTime,
+			LastSeenAt: time.Now(),
+			IsOrphaned: p.isResourceOrphaned(tags) || (isOld && isTemp),
+			Metadata: map[string]interface{}{
+				"description":     description,
+				"age_days":        ageInDays,
+				"is_old":          isOld,
+				"is_temp":         isTemp,
+				"architecture":    string(image.Architecture),
+				"virtualization":  string(image.VirtualizationType),
+				"snapshot_count":  snapshotCount,
+				"root_device":     string(image.RootDeviceType),
+				"public":          aws.ToBool(image.Public),
+			},
+		}
+
+		// Add snapshot IDs to metadata
+		var snapshotIds []string
+		for _, mapping := range image.BlockDeviceMappings {
+			if mapping.Ebs != nil && mapping.Ebs.SnapshotId != nil {
+				snapshotIds = append(snapshotIds, aws.ToString(mapping.Ebs.SnapshotId))
+			}
+		}
+		if len(snapshotIds) > 0 {
+			resource.Metadata["snapshot_ids"] = snapshotIds
+		}
+
+		resources = append(resources, resource)
+	}
+
+	return resources, nil
 }

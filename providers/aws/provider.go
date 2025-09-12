@@ -151,6 +151,22 @@ func (p *RealAWSProvider) ListResources(ctx context.Context, filter types.Resour
 		resources = append(resources, natResources...)
 	}
 
+	// List EBS Snapshots - often forgotten!
+	snapshotResources, err := p.listSnapshots(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list snapshots: %v\n", err)
+	} else {
+		resources = append(resources, snapshotResources...)
+	}
+
+	// List AMIs - custom images that pile up
+	amiResources, err := p.listAMIs(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list AMIs: %v\n", err)
+	} else {
+		resources = append(resources, amiResources...)
+	}
+
 	// Apply filters
 	return p.applyFilters(resources, filter), nil
 }
