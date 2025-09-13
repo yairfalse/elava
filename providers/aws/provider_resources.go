@@ -373,7 +373,7 @@ func (p *RealAWSProvider) listSnapshots(ctx context.Context, filter types.Resour
 	input := &ec2.DescribeSnapshotsInput{
 		OwnerIds: []string{"self"},
 	}
-	
+
 	paginator := ec2.NewDescribeSnapshotsPaginator(p.ec2Client, input)
 
 	for paginator.HasMorePages() {
@@ -384,20 +384,20 @@ func (p *RealAWSProvider) listSnapshots(ctx context.Context, filter types.Resour
 
 		for _, snapshot := range output.Snapshots {
 			tags := p.convertEC2Tags(snapshot.Tags)
-			
+
 			// Calculate age
 			age := time.Since(p.safeTimeValue(snapshot.StartTime))
 			ageInDays := int(age.Hours() / 24)
-			
+
 			// Check if snapshot is old (potential waste)
 			isOld := ageInDays > 30
-			
+
 			// Look for patterns that indicate temporary snapshots
 			description := aws.ToString(snapshot.Description)
 			isTemp := strings.Contains(strings.ToLower(description), "temp") ||
-					  strings.Contains(strings.ToLower(description), "test") ||
-					  strings.Contains(strings.ToLower(description), "backup") ||
-					  strings.Contains(strings.ToLower(description), "before")
+				strings.Contains(strings.ToLower(description), "test") ||
+				strings.Contains(strings.ToLower(description), "backup") ||
+				strings.Contains(strings.ToLower(description), "before")
 
 			resource := types.Resource{
 				ID:         aws.ToString(snapshot.SnapshotId),
@@ -445,7 +445,7 @@ func (p *RealAWSProvider) listAMIs(ctx context.Context, filter types.ResourceFil
 
 	for _, image := range output.Images {
 		tags := p.convertEC2Tags(image.Tags)
-		
+
 		// Parse creation date
 		creationTime := time.Now()
 		if image.CreationDate != nil {
@@ -453,27 +453,27 @@ func (p *RealAWSProvider) listAMIs(ctx context.Context, filter types.ResourceFil
 				creationTime = t
 			}
 		}
-		
+
 		// Calculate age
 		age := time.Since(creationTime)
 		ageInDays := int(age.Hours() / 24)
-		
+
 		// Check if AMI is old
 		isOld := ageInDays > 90 // AMIs older than 3 months
-		
+
 		// Look for patterns in name/description
 		name := aws.ToString(image.Name)
 		description := aws.ToString(image.Description)
 		nameAndDesc := strings.ToLower(name + " " + description)
-		
+
 		isTemp := strings.Contains(nameAndDesc, "temp") ||
-				  strings.Contains(nameAndDesc, "test") ||
-				  strings.Contains(nameAndDesc, "old") ||
-				  strings.Contains(nameAndDesc, "backup")
+			strings.Contains(nameAndDesc, "test") ||
+			strings.Contains(nameAndDesc, "old") ||
+			strings.Contains(nameAndDesc, "backup")
 
 		// Count associated snapshots (AMIs can have multiple snapshots)
 		snapshotCount := len(image.BlockDeviceMappings)
-		
+
 		resource := types.Resource{
 			ID:         aws.ToString(image.ImageId),
 			Type:       "ami",
@@ -487,15 +487,15 @@ func (p *RealAWSProvider) listAMIs(ctx context.Context, filter types.ResourceFil
 			LastSeenAt: time.Now(),
 			IsOrphaned: p.isResourceOrphaned(tags) || (isOld && isTemp),
 			Metadata: map[string]interface{}{
-				"description":     description,
-				"age_days":        ageInDays,
-				"is_old":          isOld,
-				"is_temp":         isTemp,
-				"architecture":    string(image.Architecture),
-				"virtualization":  string(image.VirtualizationType),
-				"snapshot_count":  snapshotCount,
-				"root_device":     string(image.RootDeviceType),
-				"public":          aws.ToBool(image.Public),
+				"description":    description,
+				"age_days":       ageInDays,
+				"is_old":         isOld,
+				"is_temp":        isTemp,
+				"architecture":   string(image.Architecture),
+				"virtualization": string(image.VirtualizationType),
+				"snapshot_count": snapshotCount,
+				"root_device":    string(image.RootDeviceType),
+				"public":         aws.ToBool(image.Public),
 			},
 		}
 

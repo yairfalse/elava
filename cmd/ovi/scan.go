@@ -188,9 +188,10 @@ func (cmd *ScanCommand) printActionSummary(untracked []scanner.UntrackedResource
 	}
 
 	fmt.Printf("\nNext steps:\n")
-	fmt.Printf("   ovi cleanup --dry-run    # Preview cleanup actions\n")
+	fmt.Printf("   ovi cleanup --dry-run    # Preview cleanup actions (SAFE: read-only)\n")
 	fmt.Printf("   ovi tag --interactive    # Tag resources interactively\n")
 	fmt.Printf("   ovi report --team        # Generate team ownership report\n")
+	fmt.Printf("\n🔒 Safety: Ovi NEVER deletes resources. We only detect and recommend.\n")
 }
 
 // outputJSON outputs results as JSON
