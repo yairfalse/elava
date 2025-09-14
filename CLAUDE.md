@@ -5,9 +5,21 @@ YES! Let's update the `claude.md` with those critical points:
 ## 🚪 Project Overview
 Ovi is a living infrastructure reconciliation engine that manages cloud resources without state files. Think "Kubernetes-style reconciliation for EC2/RDS/S3" - your cloud IS the state. Named after the Finnish word for "door" - it's the direct access to your infrastructure, no mazes needed.
 
+## 🧠 Storage-First Architecture
+**THE CORE INSIGHT**: Without persistent storage, you're just taking snapshots. With MVCC storage, you're building infrastructure memory.
+
+```
+The MVCC Storage IS the brain. Everything else is just I/O:
+- Providers: Feed observations INTO the brain
+- Analyzers: Query patterns FROM the brain  
+- Actions: Execute decisions BASED ON the brain
+```
+
 ## 🎯 Core Philosophy
-- **No state files** - AWS/GCP is the source of truth
-- **Living infrastructure** - Continuous reconciliation loop (like K8s for cloud resources)
+- **Storage is the brain** - MVCC storage engine is the core, not an addon
+- **No state files** - AWS/GCP is the source of truth, storage tracks observations
+- **Living infrastructure** - Continuous reconciliation loop with full history
+- **Temporal awareness** - Not just "what is" but "what was, what changed, when, why"
 - **Friendly, not aggressive** - Asks before destroying, notifies about orphans
 - **Simple config** - Plain YAML/data, no programming languages
 - **Direct API calls** - No providers, no abstractions, just AWS/GCP SDKs
@@ -20,12 +32,21 @@ Before writing ANY code:
 ```markdown
 ## Design Session Checklist
 - [ ] What problem are we solving?
+- [ ] How will this interact with storage (read/write/query)?
+- [ ] What historical data do we need to track?
 - [ ] What's the simplest solution?
 - [ ] Can we break it into smaller functions?
 - [ ] What interfaces do we need?
 - [ ] What can go wrong?
 - [ ] Draw the flow (ASCII or diagram)
 ```
+
+### Storage-First Thinking
+Every feature MUST consider:
+1. **What observations to store?** (resource state, timestamps, relationships)
+2. **What queries will we need?** (by time, by resource, by change type)
+3. **What patterns to detect?** (drift, waste, compliance violations)
+4. **What history to maintain?** (revisions, tombstones, compaction)
 
 ### 2. Write Tests Before Code
 ```go
@@ -411,13 +432,16 @@ A feature is complete when:
 
 ## 🎯 Smart Design Principles
 
-1. **Small Functions** - If you can't understand it in 10 seconds, split it
-2. **Interface-Driven** - Define interfaces first, implement later
-3. **Provider Agnostic** - Core logic shouldn't know about AWS/GCP specifics
-4. **Pluggable Everything** - Providers, notifiers, registries should be pluggable
-5. **Composition over Inheritance** - Use interfaces and composition
-6. **Fail Fast** - Validate early, return errors immediately
-7. **No Magic** - Code should be obvious, not clever
+1. **Storage First** - Every feature starts with "what do we store and query?"
+2. **Small Functions** - If you can't understand it in 10 seconds, split it
+3. **Interface-Driven** - Define interfaces first, implement later
+4. **Provider Agnostic** - Core logic shouldn't know about AWS/GCP specifics
+5. **Pluggable Everything** - Providers, notifiers, registries should be pluggable
+6. **Composition over Inheritance** - Use interfaces and composition
+7. **Fail Fast** - Validate early, return errors immediately
+8. **No Magic** - Code should be obvious, not clever
+9. **Temporal Awareness** - Always consider time dimension (when did this happen?)
+10. **Tombstones over Deletion** - Never delete history, mark as disappeared
 
 ## 🔌 Adding a New Provider
 
