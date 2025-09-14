@@ -2,13 +2,15 @@ package reconciler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/yairfalse/ovi/storage"
+	"go.etcd.io/bbolt"
 )
 
-// SimpleCoordinator implements basic resource claiming for coordination
+// SimpleCoordinator implements resource claiming with MVCC storage brain
 type SimpleCoordinator struct {
 	storage    *storage.MVCCStorage
 	instanceID string
@@ -22,75 +24,151 @@ func NewSimpleCoordinator(storage *storage.MVCCStorage, instanceID string) *Simp
 	}
 }
 
-// ClaimResources attempts to claim resources for exclusive access
+// ClaimResources atomically claims resources using MVCC storage brain
 func (c *SimpleCoordinator) ClaimResources(ctx context.Context, resourceIDs []string, ttl time.Duration) error {
 	now := time.Now()
 	expiresAt := now.Add(ttl)
 
-	for _, resourceID := range resourceIDs {
-		// Check if already claimed
-		claimed, err := c.IsResourceClaimed(ctx, resourceID)
-		if err != nil {
-			return fmt.Errorf("failed to check claim for %s: %w", resourceID, err)
+	return c.storage.DB().Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte("claims"))
+		if bucket == nil {
+			return fmt.Errorf("claims bucket not found")
 		}
 
-		if claimed {
-			return fmt.Errorf("resource %s is already claimed", resourceID)
+		// Check all resources before claiming any
+		for _, resourceID := range resourceIDs {
+			if err := c.checkClaimAvailable(bucket, resourceID, now); err != nil {
+				return err
+			}
 		}
 
-		// Create claim
-		claim := Claim{
-			ResourceID: resourceID,
-			InstanceID: c.instanceID,
-			ClaimedAt:  now,
-			ExpiresAt:  expiresAt,
+		// Claim all resources atomically
+		for _, resourceID := range resourceIDs {
+			claim := Claim{
+				ResourceID: resourceID,
+				InstanceID: c.instanceID,
+				ClaimedAt:  now,
+				ExpiresAt:  expiresAt,
+			}
+
+			data, err := json.Marshal(claim)
+			if err != nil {
+				return fmt.Errorf("failed to marshal claim for %s: %w", resourceID, err)
+			}
+
+			if err := bucket.Put([]byte(resourceID), data); err != nil {
+				return fmt.Errorf("failed to store claim for %s: %w", resourceID, err)
+			}
 		}
 
-		// Store claim (using resource state for simplicity)
-		// In production, this would use a dedicated claims storage
-		state := &storage.ResourceState{
-			ResourceID:   resourceID,
-			Owner:        c.instanceID,
-			FirstSeenRev: c.storage.CurrentRevision() + 1,
-			LastSeenRev:  c.storage.CurrentRevision() + 1,
-			Exists:       true,
-		}
-
-		// This is a simplified implementation
-		// Real implementation would need proper claim storage
-		_ = claim
-		_ = state
-	}
-
-	return nil
+		return nil
+	})
 }
 
-// ReleaseResources releases claimed resources
+// ReleaseResources atomically releases claimed resources
 func (c *SimpleCoordinator) ReleaseResources(ctx context.Context, resourceIDs []string) error {
-	for _, resourceID := range resourceIDs {
-		// Mark resource as released
-		// In a real implementation, this would remove the claim
-		_ = resourceID
+	return c.storage.DB().Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte("claims"))
+		if bucket == nil {
+			return nil
+		}
+
+		for _, resourceID := range resourceIDs {
+			if err := bucket.Delete([]byte(resourceID)); err != nil {
+				return fmt.Errorf("failed to release claim for %s: %w", resourceID, err)
+			}
+		}
+
+		return nil
+	})
+}
+
+// IsResourceClaimed checks if resource is claimed with TTL enforcement
+func (c *SimpleCoordinator) IsResourceClaimed(ctx context.Context, resourceID string) (bool, error) {
+	var claimed bool
+	now := time.Now()
+
+	err := c.storage.DB().View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte("claims"))
+		if bucket == nil {
+			claimed = false
+			return nil
+		}
+
+		val := bucket.Get([]byte(resourceID))
+		if val == nil {
+			claimed = false
+			return nil
+		}
+
+		var existing Claim
+		if err := json.Unmarshal(val, &existing); err != nil {
+			claimed = false
+			return nil
+		}
+
+		if existing.ExpiresAt.After(now) {
+			claimed = existing.InstanceID != c.instanceID
+		} else {
+			claimed = false
+		}
+
+		return nil
+	})
+
+	return claimed, err
+}
+
+// checkClaimAvailable verifies if a resource can be claimed
+func (c *SimpleCoordinator) checkClaimAvailable(bucket *bbolt.Bucket, resourceID string, now time.Time) error {
+	val := bucket.Get([]byte(resourceID))
+	if val == nil {
+		return nil
+	}
+
+	var existing Claim
+	if err := json.Unmarshal(val, &existing); err != nil {
+		return nil
+	}
+
+	if existing.ExpiresAt.After(now) {
+		return fmt.Errorf("resource %s is already claimed by %s", resourceID, existing.InstanceID)
 	}
 
 	return nil
 }
 
-// IsResourceClaimed checks if a resource is currently claimed
-func (c *SimpleCoordinator) IsResourceClaimed(ctx context.Context, resourceID string) (bool, error) {
-	// Simplified implementation
-	// Real implementation would check claims storage with TTL
+// CleanupExpiredClaims removes expired claims from storage
+func (c *SimpleCoordinator) CleanupExpiredClaims(ctx context.Context) error {
+	now := time.Now()
 
-	state, err := c.storage.GetResourceState(resourceID)
-	if err != nil {
-		// Resource not found means not claimed
-		return false, nil
-	}
+	return c.storage.DB().Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte("claims"))
+		if bucket == nil {
+			return nil
+		}
 
-	// Check if claimed by another instance
-	if state.Owner != "" && state.Owner != c.instanceID {
-		return true, nil
-	}
+		c := bucket.Cursor()
+		var toDelete [][]byte
 
-	return false, nil
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			var claim Claim
+			if err := json.Unmarshal(v, &claim); err != nil {
+				toDelete = append(toDelete, k)
+				continue
+			}
+
+			if claim.ExpiresAt.Before(now) {
+				toDelete = append(toDelete, k)
+			}
+		}
+
+		for _, key := range toDelete {
+			if err := bucket.Delete(key); err != nil {
+				return fmt.Errorf("failed to delete expired claim: %w", err)
+			}
+		}
+
+		return nil
+	})
 }
