@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
@@ -37,6 +38,7 @@ type RealAWSProvider struct {
 	elbv2Client  *elasticloadbalancingv2.Client
 	s3Client     *s3.Client
 	lambdaClient *lambda.Client
+	cwLogsClient *cloudwatchlogs.Client
 	region       string
 	accountID    string
 }
@@ -70,6 +72,7 @@ func NewRealAWSProvider(ctx context.Context, region string) (*RealAWSProvider, e
 		elbv2Client:  elasticloadbalancingv2.NewFromConfig(cfg),
 		s3Client:     s3.NewFromConfig(cfg),
 		lambdaClient: lambda.NewFromConfig(cfg),
+		cwLogsClient: cloudwatchlogs.NewFromConfig(cfg),
 		region:       region,
 		accountID:    accountID,
 	}, nil
@@ -165,6 +168,14 @@ func (p *RealAWSProvider) ListResources(ctx context.Context, filter types.Resour
 		fmt.Printf("Warning: failed to list AMIs: %v\n", err)
 	} else {
 		resources = append(resources, amiResources...)
+	}
+
+	// List CloudWatch Log Groups - forgotten infinite retention
+	logResources, err := p.listCloudWatchLogs(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list CloudWatch log groups: %v\n", err)
+	} else {
+		resources = append(resources, logResources...)
 	}
 
 	// Apply filters
