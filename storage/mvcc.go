@@ -17,6 +17,7 @@ var (
 	bucketObservations = []byte("observations")
 	bucketIndex        = []byte("index")
 	bucketMeta         = []byte("meta")
+	bucketClaims       = []byte("claims")
 )
 
 // MVCCStorage implements etcd-style multi-version storage
@@ -63,7 +64,7 @@ func NewMVCCStorage(dir string) (*MVCCStorage, error) {
 
 	// Initialize buckets
 	err = db.Update(func(tx *bbolt.Tx) error {
-		for _, bucket := range [][]byte{bucketObservations, bucketIndex, bucketMeta} {
+		for _, bucket := range [][]byte{bucketObservations, bucketIndex, bucketMeta, bucketClaims} {
 			if _, err := tx.CreateBucketIfNotExists(bucket); err != nil {
 				return err
 			}
@@ -299,6 +300,23 @@ func (s *MVCCStorage) GetResourcesByOwner(owner string) ([]*ResourceState, error
 	return results, nil
 }
 
+// GetAllCurrentResources gets all resources that currently exist - CLAUDE.md: Small focused function
+func (s *MVCCStorage) GetAllCurrentResources() ([]*ResourceState, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var results []*ResourceState
+
+	s.index.Ascend(func(state *ResourceState) bool {
+		if state.Exists {
+			results = append(results, state)
+		}
+		return true
+	})
+
+	return results, nil
+}
+
 // CurrentRevision returns the current revision number
 func (s *MVCCStorage) CurrentRevision() int64 {
 	s.mu.RLock()
@@ -408,4 +426,9 @@ func bytesToInt64(b []byte) int64 {
 	var n int64
 	_, _ = fmt.Sscanf(string(b), "%d", &n)
 	return n
+}
+
+// DB returns the underlying BoltDB instance for claims coordination
+func (s *MVCCStorage) DB() *bbolt.DB {
+	return s.db
 }
