@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -287,5 +288,175 @@ func TestMVCCStorage_ConcurrentAccess(t *testing.T) {
 	}
 	if len(apiResources) == 0 {
 		t.Error("Should have api resources")
+	}
+}
+
+func TestMVCCStorage_RebuildIndex(t *testing.T) {
+	tmpDir := t.TempDir()
+	storage, err := NewMVCCStorage(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
+
+	// Add some test data
+	resources := []types.Resource{
+		{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-a"}},
+		{ID: "i-456", Type: "ec2", Tags: types.Tags{OviOwner: "team-b"}},
+		{ID: "i-789", Type: "rds", Tags: types.Tags{OviOwner: "team-a"}},
+	}
+
+	// Record observations
+	for _, resource := range resources {
+		if _, err := storage.RecordObservation(resource); err != nil {
+			t.Fatalf("Failed to record observation: %v", err)
+		}
+	}
+
+	// Record a disappearance
+	if _, err := storage.RecordDisappearance("i-456"); err != nil {
+		t.Fatalf("Failed to record disappearance: %v", err)
+	}
+
+	// Clear the index to simulate a crash
+	storage.index.Clear(false)
+
+	// Rebuild index
+	if err := storage.rebuildIndex(); err != nil {
+		t.Fatalf("Failed to rebuild index: %v", err)
+	}
+
+	// Verify index was rebuilt correctly
+	currentResources, err := storage.GetAllCurrentResources()
+	if err != nil {
+		t.Fatalf("Failed to get current resources: %v", err)
+	}
+
+	// Should have 2 resources (i-456 disappeared)
+	if len(currentResources) != 2 {
+		t.Errorf("Expected 2 current resources, got %d", len(currentResources))
+	}
+
+	// Verify specific resource states
+	state, err := storage.GetResourceState("i-123")
+	if err != nil {
+		t.Fatalf("Failed to get resource state: %v", err)
+	}
+	if !state.Exists {
+		t.Error("Resource i-123 should exist")
+	}
+
+	state, err = storage.GetResourceState("i-456")
+	if err != nil {
+		t.Fatalf("Failed to get resource state: %v", err)
+	}
+	if state.Exists {
+		t.Error("Resource i-456 should be marked as disappeared")
+	}
+
+	if err := storage.Close(); err != nil {
+		t.Errorf("Failed to close storage: %v", err)
+	}
+}
+
+func TestMVCCStorage_Stats(t *testing.T) {
+	tmpDir := t.TempDir()
+	storage, err := NewMVCCStorage(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
+	defer func() { _ = storage.Close() }()
+
+	// Add test data
+	resources := []types.Resource{
+		{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-a"}},
+		{ID: "i-456", Type: "ec2", Tags: types.Tags{OviOwner: "team-b"}},
+	}
+
+	for _, resource := range resources {
+		if _, err := storage.RecordObservation(resource); err != nil {
+			t.Fatalf("Failed to record observation: %v", err)
+		}
+	}
+
+	// Get stats
+	resourceCount, currentRev, dbSize := storage.Stats()
+
+	if resourceCount != 2 {
+		t.Errorf("Expected 2 resources, got %d", resourceCount)
+	}
+
+	if currentRev != 2 {
+		t.Errorf("Expected revision 2, got %d", currentRev)
+	}
+
+	if dbSize <= 0 {
+		t.Error("Database size should be greater than 0")
+	}
+}
+
+func TestMVCCStorage_CompactWithContext(t *testing.T) {
+	tmpDir := t.TempDir()
+	storage, err := NewMVCCStorage(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
+	defer func() { _ = storage.Close() }()
+
+	// Add multiple revisions
+	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-a"}}
+	for i := 0; i < 10; i++ {
+		if _, err := storage.RecordObservation(resource); err != nil {
+			t.Fatalf("Failed to record observation: %v", err)
+		}
+	}
+
+	// Verify we have 10 revisions
+	if storage.CurrentRevision() != 10 {
+		t.Errorf("Expected 10 revisions, got %d", storage.CurrentRevision())
+	}
+
+	// Compact with context
+	ctx := context.Background()
+	if err := storage.CompactWithContext(ctx, 5); err != nil {
+		t.Fatalf("CompactWithContext failed: %v", err)
+	}
+
+	// Verify latest state is still accessible
+	state, err := storage.GetResourceState("i-123")
+	if err != nil {
+		t.Fatalf("Failed to get resource state after compaction: %v", err)
+	}
+	if !state.Exists {
+		t.Error("Resource should still exist after compaction")
+	}
+}
+
+func TestMVCCStorage_CompactWithContext_Cancellation(t *testing.T) {
+	tmpDir := t.TempDir()
+	storage, err := NewMVCCStorage(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
+	defer func() { _ = storage.Close() }()
+
+	// Add many revisions
+	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-a"}}
+	for i := 0; i < 200; i++ {
+		if _, err := storage.RecordObservation(resource); err != nil {
+			t.Fatalf("Failed to record observation: %v", err)
+		}
+	}
+
+	// Create a context that we'll cancel immediately
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	// Compact should fail due to cancelled context
+	err = storage.CompactWithContext(ctx, 100)
+	if err == nil {
+		t.Error("CompactWithContext should fail with cancelled context")
+	}
+	if err != context.Canceled {
+		t.Errorf("Expected context.Canceled error, got %v", err)
 	}
 }
