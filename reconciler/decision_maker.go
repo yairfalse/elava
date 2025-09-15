@@ -3,7 +3,7 @@ package reconciler
 import (
 	"fmt"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 // SimpleDecisionMaker implements basic decision-making logic
@@ -119,6 +119,6 @@ func (dm *SimpleDecisionMaker) decideUnmanaged(diff Diff) (*types.Decision, erro
 	return &types.Decision{
 		Action:     "notify",
 		ResourceID: diff.ResourceID,
-		Reason:     "Resource exists but is not managed by Ovi",
+		Reason:     "Resource exists but is not managed by Elava",
 	}, nil
 }

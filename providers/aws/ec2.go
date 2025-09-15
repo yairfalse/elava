@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 // EC2Client interface for AWS EC2 operations
@@ -105,7 +105,7 @@ func (p *AWSProvider) convertToInstanceFilter(filter types.ResourceFilter) Insta
 
 	// Add owner tag filter if specified
 	if filter.Owner != "" {
-		awsFilter.Tags["ovi:owner"] = filter.Owner
+		awsFilter.Tags["elava:owner"] = filter.Owner
 	}
 
 	return awsFilter

@@ -1,4 +1,4 @@
-# Ovi Scanning Strategy: Configurable & Scalable
+# Elava Scanning Strategy: Configurable & Scalable
 
 ## 🎯 The Challenge
 - Small orgs: 100s of resources - can scan everything frequently
@@ -359,4 +359,4 @@ metrics:
 
 ---
 
-**Built for scale: From startups to enterprises, Ovi adapts to your infrastructure.**
+**Built for scale: From startups to enterprises, Elava adapts to your infrastructure.**

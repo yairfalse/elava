@@ -23,10 +23,10 @@ import (
 // Global telemetry handles - CLAUDE.md: Direct OTEL, no wrappers
 var (
 	// Tracer for distributed tracing
-	Tracer = otel.Tracer("github.com/yairfalse/ovi")
+	Tracer = otel.Tracer("github.com/yairfalse/elava")
 
 	// Meter for metrics
-	Meter = otel.Meter("github.com/yairfalse/ovi")
+	Meter = otel.Meter("github.com/yairfalse/elava")
 
 	// Metrics - following OTEL naming conventions
 	ResourcesScanned   metric.Int64Counter
@@ -140,7 +140,7 @@ func setupTraceProvider(ctx context.Context, cfg Config, res *resource.Resource)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
 	// Update global tracer
-	Tracer = provider.Tracer("github.com/yairfalse/ovi")
+	Tracer = provider.Tracer("github.com/yairfalse/elava")
 
 	return provider.Shutdown, nil
 }
@@ -178,7 +178,7 @@ func setupMetricProvider(ctx context.Context, cfg Config, res *resource.Resource
 	otel.SetMeterProvider(provider)
 
 	// Update global meter
-	Meter = provider.Meter("github.com/yairfalse/ovi")
+	Meter = provider.Meter("github.com/yairfalse/elava")
 
 	return provider.Shutdown, nil
 }

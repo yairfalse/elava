@@ -3,7 +3,7 @@ package reconciler
 import (
 	"testing"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 //nolint:gocognit // Test complexity is acceptable for thorough coverage
@@ -30,7 +30,7 @@ func TestSimpleComparator_Compare(t *testing.T) {
 					ID:       "i-missing",
 					Type:     "ec2",
 					Provider: "aws",
-					Tags:     types.Tags{OviManaged: true},
+					Tags:     types.Tags{ElavaManaged: true},
 				},
 			},
 			expected: []Diff{
@@ -48,7 +48,7 @@ func TestSimpleComparator_Compare(t *testing.T) {
 					ID:       "i-unwanted",
 					Type:     "ec2",
 					Provider: "aws",
-					Tags:     types.Tags{OviManaged: true, OviOwner: "ovi"},
+					Tags:     types.Tags{ElavaManaged: true, ElavaOwner: "ovi"},
 				},
 			},
 			desired: []types.Resource{},
@@ -56,7 +56,7 @@ func TestSimpleComparator_Compare(t *testing.T) {
 				{
 					Type:       DiffUnwanted,
 					ResourceID: "i-unwanted",
-					Reason:     "Resource managed by Ovi but not in current config",
+					Reason:     "Resource managed by Elava but not in current config",
 				},
 			},
 		},
@@ -67,7 +67,7 @@ func TestSimpleComparator_Compare(t *testing.T) {
 					ID:       "i-unmanaged",
 					Type:     "ec2",
 					Provider: "aws",
-					Tags:     types.Tags{}, // No Ovi tags
+					Tags:     types.Tags{}, // No Elava tags
 				},
 			},
 			desired: []types.Resource{},
@@ -75,7 +75,7 @@ func TestSimpleComparator_Compare(t *testing.T) {
 				{
 					Type:       DiffUnmanaged,
 					ResourceID: "i-unmanaged",
-					Reason:     "Resource exists but not managed by Ovi",
+					Reason:     "Resource exists but not managed by Elava",
 				},
 			},
 		},
@@ -86,7 +86,7 @@ func TestSimpleComparator_Compare(t *testing.T) {
 					ID:       "i-drifted",
 					Type:     "ec2",
 					Provider: "aws",
-					Tags:     types.Tags{OviManaged: true, Environment: "prod"},
+					Tags:     types.Tags{ElavaManaged: true, Environment: "prod"},
 				},
 			},
 			desired: []types.Resource{
@@ -94,7 +94,7 @@ func TestSimpleComparator_Compare(t *testing.T) {
 					ID:       "i-drifted",
 					Type:     "ec2",
 					Provider: "aws",
-					Tags:     types.Tags{OviManaged: true, Environment: "staging"},
+					Tags:     types.Tags{ElavaManaged: true, Environment: "staging"},
 				},
 			},
 			expected: []Diff{
@@ -112,7 +112,7 @@ func TestSimpleComparator_Compare(t *testing.T) {
 					ID:       "i-perfect",
 					Type:     "ec2",
 					Provider: "aws",
-					Tags:     types.Tags{OviManaged: true, Environment: "prod"},
+					Tags:     types.Tags{ElavaManaged: true, Environment: "prod"},
 				},
 			},
 			desired: []types.Resource{
@@ -120,7 +120,7 @@ func TestSimpleComparator_Compare(t *testing.T) {
 					ID:       "i-perfect",
 					Type:     "ec2",
 					Provider: "aws",
-					Tags:     types.Tags{OviManaged: true, Environment: "prod"},
+					Tags:     types.Tags{ElavaManaged: true, Environment: "prod"},
 				},
 			},
 			expected: []Diff{},
@@ -211,12 +211,12 @@ func TestIsDrifted(t *testing.T) {
 			current: types.Resource{
 				Type:     "ec2",
 				Provider: "aws",
-				Tags:     types.Tags{OviOwner: "team-web"},
+				Tags:     types.Tags{ElavaOwner: "team-web"},
 			},
 			desired: types.Resource{
 				Type:     "ec2",
 				Provider: "aws",
-				Tags:     types.Tags{OviOwner: "team-api"},
+				Tags:     types.Tags{ElavaOwner: "team-api"},
 			},
 			expected: true,
 		},

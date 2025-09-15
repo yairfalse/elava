@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 // CloudProvider interface for all cloud providers

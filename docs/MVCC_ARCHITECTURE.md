@@ -1,8 +1,8 @@
-# Ovi MVCC Storage Architecture
+# Elava MVCC Storage Architecture
 
 ## 🏗️ Architecture Overview
 
-Ovi uses a **lean MVCC (Multi-Version Concurrency Control) storage engine** that perfectly aligns with Day 2 operations requirements: tracking infrastructure changes over time without traditional state files.
+Elava uses a **lean MVCC (Multi-Version Concurrency Control) storage engine** that perfectly aligns with Day 2 operations requirements: tracking infrastructure changes over time without traditional state files.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -11,7 +11,7 @@ Ovi uses a **lean MVCC (Multi-Version Concurrency Control) storage engine** that
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                      Ovi Scanner Loop                        │
+│                      Elava Scanner Loop                        │
 │  • Polls cloud APIs every N minutes                          │
 │  • Discovers all resources in region                         │
 │  • Detects changes, new resources, disappearances            │
@@ -52,7 +52,7 @@ resource "aws_instance" "web" {
 }
 ```
 
-### Ovi's MVCC Solution
+### Elava's MVCC Solution
 ```go
 // What ACTUALLY exists, with full history
 Revision 1: EC2 instance i-abc123 appeared (no tags)
@@ -170,12 +170,12 @@ func (s *MVCCStorage) CompactionPolicy() {
 
 ## 📚 Comparison with Other Systems
 
-| System | Storage Model | Use Case | Ovi Advantage |
+| System | Storage Model | Use Case | Elava Advantage |
 |--------|--------------|----------|---------------|
-| Terraform State | Single version JSON | Desired state | Ovi tracks actual state with history |
-| CloudTrail | Event log | Audit trail | Ovi provides resource-centric view |
-| AWS Config | Snapshot + changes | Compliance | Ovi is simpler, focused on waste |
-| Prometheus | Time-series | Metrics | Ovi tracks resource lifecycle |
+| Terraform State | Single version JSON | Desired state | Elava tracks actual state with history |
+| CloudTrail | Event log | Audit trail | Elava provides resource-centric view |
+| AWS Config | Snapshot + changes | Compliance | Elava is simpler, focused on waste |
+| Prometheus | Time-series | Metrics | Elava tracks resource lifecycle |
 
 ## 🏆 Why This Architecture Rocks
 
@@ -188,9 +188,9 @@ func (s *MVCCStorage) CompactionPolicy() {
 
 ## 🔑 Key Takeaway
 
-> **"Your cloud IS the state. Ovi just remembers what it saw."**
+> **"Your cloud IS the state. Elava just remembers what it saw."**
 
-Traditional IaC tools manage desired state. Ovi observes actual state over time, making it the perfect companion for Day 2 operations where you need to understand what's REALLY happening in your infrastructure.
+Traditional IaC tools manage desired state. Elava observes actual state over time, making it the perfect companion for Day 2 operations where you need to understand what's REALLY happening in your infrastructure.
 
 ---
 

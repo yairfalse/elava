@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 	"gopkg.in/yaml.v3"
 )
 

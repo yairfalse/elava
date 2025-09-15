@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yairfalse/ovi/providers"
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/providers"
+	"github.com/yairfalse/elava/types"
 )
 
 // MockEC2Client for testing
@@ -106,8 +106,8 @@ func TestAWSProvider_ListResources(t *testing.T) {
 				State:        "running",
 				LaunchTime:   time.Now().Add(-time.Hour),
 				Tags: map[string]string{
-					"Name":      "web-server",
-					"ovi:owner": "team-web",
+					"Name":        "web-server",
+					"elava:owner": "team-web",
 				},
 			},
 			{
@@ -151,7 +151,7 @@ func TestAWSProvider_ListResources(t *testing.T) {
 		t.Errorf("Resource Provider = %v, want aws", r.Provider)
 	}
 	if !r.IsManaged() {
-		t.Error("Resource should be managed (has ovi:owner tag)")
+		t.Error("Resource should be managed (has elava:owner tag)")
 	}
 }
 
@@ -162,7 +162,7 @@ func TestAWSProvider_ListResources_WithFilter(t *testing.T) {
 				InstanceID: "i-managed",
 				State:      "running",
 				Tags: map[string]string{
-					"ovi:owner": "team-web",
+					"elava:owner": "team-web",
 				},
 			},
 			{
@@ -214,7 +214,7 @@ func TestAWSProvider_CreateResource(t *testing.T) {
 		Type: "ec2",
 		Size: "t3.micro",
 		Tags: types.Tags{
-			OviOwner:    "team-web",
+			ElavaOwner:    "team-web",
 			Environment: "test",
 		},
 	}
@@ -258,8 +258,8 @@ func TestAWSProvider_TagResource(t *testing.T) {
 
 	ctx := context.Background()
 	tags := map[string]string{
-		"ovi:managed": "true",
-		"env":         "prod",
+		"elava:managed": "true",
+		"env":           "prod",
 	}
 
 	err := provider.TagResource(ctx, "i-123456", tags)
@@ -276,8 +276,8 @@ func TestAWSProvider_TagResource(t *testing.T) {
 	if call.InstanceID != "i-123456" {
 		t.Errorf("Tag call instance ID = %v, want i-123456", call.InstanceID)
 	}
-	if call.Tags["ovi:managed"] != "true" {
-		t.Errorf("Tag call missing ovi:managed tag")
+	if call.Tags["elava:managed"] != "true" {
+		t.Errorf("Tag call missing elava:managed tag")
 	}
 }
 

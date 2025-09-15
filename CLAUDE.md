@@ -1,9 +1,9 @@
 YES! Let's update the `claude.md` with those critical points:
 
-# Ovi - Living Infrastructure Engine
+# Elava - Living Infrastructure Engine
 
 ## 🚪 Project Overview
-Ovi is a living infrastructure reconciliation engine that manages cloud resources without state files. Think "Kubernetes-style reconciliation for EC2/RDS/S3" - your cloud IS the state. Named after the Finnish word for "door" - it's the direct access to your infrastructure, no mazes needed.
+Elava is a living infrastructure reconciliation engine that manages cloud resources without state files. Think "Kubernetes-style reconciliation for EC2/RDS/S3" - your cloud IS the state. Named after the Finnish word for "door" - it's the direct access to your infrastructure, no mazes needed.
 
 ## 🧠 Storage-First Architecture
 **THE CORE INSIGHT**: Without persistent storage, you're just taking snapshots. With MVCC storage, you're building infrastructure memory.
@@ -185,7 +185,7 @@ resource := NewResourceBuilder().
     WithType("ec2").
     WithRegion("us-east-1").
     WithTags(map[string]string{
-        "ovi:owner": "team-web",
+        "elava:owner": "team-web",
     }).
     Build()
 ```
@@ -209,7 +209,7 @@ reconciler.AddObserver(auditLogger)
 #!/bin/bash
 # .git/hooks/pre-commit
 
-echo "🔍 Running Ovi pre-commit checks..."
+echo "🔍 Running Elava pre-commit checks..."
 
 # Format check
 echo "→ Running go fmt..."
@@ -460,7 +460,7 @@ func init() {
     providers.Register("azure", NewAzureProvider)
 }
 
-// 3. That's it! Ovi can now use Azure
+// 3. That's it! Elava can now use Azure
 ```
 
 ## 💭 Design Patterns We Use
@@ -479,7 +479,7 @@ func init() {
 
 > "Design first, test second, code third"
 
-Keep Ovi modular, testable, and simple. Every function should do ONE thing well.
+Keep Elava modular, testable, and simple. Every function should do ONE thing well.
 
 ---
 

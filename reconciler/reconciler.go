@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yairfalse/ovi/storage"
-	"github.com/yairfalse/ovi/types"
-	"github.com/yairfalse/ovi/wal"
+	"github.com/yairfalse/elava/storage"
+	"github.com/yairfalse/elava/types"
+	"github.com/yairfalse/elava/wal"
 )
 
 // Engine implements the main reconciliation logic
@@ -142,10 +142,10 @@ func (e *Engine) buildDesiredState(config Config) []types.Resource {
 				Tags:     spec.Tags,
 			}
 
-			// Mark as Ovi-managed
-			resource.Tags.OviManaged = true
-			if resource.Tags.OviOwner == "" {
-				resource.Tags.OviOwner = "ovi"
+			// Mark as Elava-managed
+			resource.Tags.ElavaManaged = true
+			if resource.Tags.ElavaOwner == "" {
+				resource.Tags.ElavaOwner = "ovi"
 			}
 
 			desired = append(desired, resource)

@@ -1,15 +1,15 @@
-# Ovi Safety Principles
+# Elava Safety Principles
 
 ## 🔒 Core Safety Rules
 
 ### 1. **NEVER DELETE WITHOUT CONSENT**
-Ovi will **NEVER** automatically delete resources. Period.
+Elava will **NEVER** automatically delete resources. Period.
 - We only **detect** and **report** untracked resources
 - We only **recommend** cleanup actions
 - Actual deletion must be done by humans through AWS Console or IaC tools
 
 ### 2. **READ-ONLY BY DEFAULT**
-Ovi operates in read-only mode for discovery:
+Elava operates in read-only mode for discovery:
 - ✅ List resources
 - ✅ Read tags
 - ✅ Analyze patterns
@@ -49,7 +49,7 @@ cat cleanup_script.sh
 ## Protected Resources
 
 These resources are ALWAYS protected:
-- Resources tagged with `ovi:blessed=true`
+- Resources tagged with `elava:blessed=true`
 - Resources tagged with `do-not-delete=true`
 - Resources tagged with `production=true`
 - NAT Gateways (expensive to recreate)
@@ -58,7 +58,7 @@ These resources are ALWAYS protected:
 
 ## Audit Trail
 
-All Ovi operations are logged:
+All Elava operations are logged:
 - WHO ran the scan
 - WHEN it was run
 - WHAT was detected
@@ -67,10 +67,10 @@ All Ovi operations are logged:
 
 ## Philosophy
 
-> "Ovi is your helpful assistant that points out problems.
+> "Elava is your helpful assistant that points out problems.
 > It never touches your infrastructure without permission.
 > Think of it as a friendly auditor, not an enforcer."
 
 ---
 
-**Remember**: Ovi helps you FIND waste. YOU decide what to do about it.
+**Remember**: Elava helps you FIND waste. YOU decide what to do about it.

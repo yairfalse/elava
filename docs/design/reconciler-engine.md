@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Reconciler Engine is the heart of Ovi that orchestrates the complete reconciliation process: observing current state, comparing with desired configuration, making intelligent decisions, and coordinating execution.
+The Reconciler Engine is the heart of Elava that orchestrates the complete reconciliation process: observing current state, comparing with desired configuration, making intelligent decisions, and coordinating execution.
 
 ## Core Components
 
@@ -118,9 +118,9 @@ type DiffType string
 
 const (
     DiffMissing    DiffType = "missing"    // Should exist but doesn't
-    DiffUnwanted   DiffType = "unwanted"   // Exists but shouldn't (Ovi-managed)
+    DiffUnwanted   DiffType = "unwanted"   // Exists but shouldn't (Elava-managed)
     DiffDrifted    DiffType = "drifted"    // Exists but wrong configuration
-    DiffUnmanaged  DiffType = "unmanaged"  // Exists but not Ovi-managed
+    DiffUnmanaged  DiffType = "unmanaged"  // Exists but not Elava-managed
 )
 ```
 
@@ -153,14 +153,14 @@ func (c *SimpleComparator) Compare(current, desired []Resource) ([]Diff, error) 
                     Type:       DiffUnwanted,
                     ResourceID: id,
                     Current:    &currentResource,
-                    Reason:     "Resource managed by Ovi but not in current config",
+                    Reason:     "Resource managed by Elava but not in current config",
                 })
             } else {
                 diffs = append(diffs, Diff{
                     Type:       DiffUnmanaged,
                     ResourceID: id,
                     Current:    &currentResource,
-                    Reason:     "Resource exists but not managed by Ovi",
+                    Reason:     "Resource exists but not managed by Elava",
                 })
             }
         }
@@ -201,8 +201,8 @@ func isDrifted(current, desired Resource) bool {
 }
 
 func isTagsDrifted(current, desired Tags) bool {
-    return current.OviOwner != desired.OviOwner ||
-           current.OviManaged != desired.OviManaged ||
+    return current.ElavaOwner != desired.ElavaOwner ||
+           current.ElavaManaged != desired.ElavaManaged ||
            current.Environment != desired.Environment ||
            current.Team != desired.Team ||
            current.Project != desired.Project
@@ -279,10 +279,10 @@ func (e *Engine) buildDesiredState(config Config) []Resource {
                 Tags:     spec.Tags,
             }
             
-            // Mark as Ovi-managed
-            resource.Tags.OviManaged = true
-            if resource.Tags.OviOwner == "" {
-                resource.Tags.OviOwner = "ovi"
+            // Mark as Elava-managed
+            resource.Tags.ElavaManaged = true
+            if resource.Tags.ElavaOwner == "" {
+                resource.Tags.ElavaOwner = "ovi"
             }
             
             desired = append(desired, resource)

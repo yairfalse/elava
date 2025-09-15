@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 // Reconciler orchestrates the observation, comparison, and decision-making process
@@ -27,7 +27,7 @@ type DecisionMaker interface {
 	Decide(diffs []Diff) ([]types.Decision, error)
 }
 
-// Coordinator ensures multiple Ovi instances don't conflict
+// Coordinator ensures multiple Elava instances don't conflict
 type Coordinator interface {
 	ClaimResources(ctx context.Context, resourceIDs []string, ttl time.Duration) error
 	ReleaseResources(ctx context.Context, resourceIDs []string) error
@@ -58,7 +58,7 @@ const (
 	DiffMissing   DiffType = "missing"   // Resource should exist but doesn't
 	DiffUnwanted  DiffType = "unwanted"  // Resource exists but shouldn't
 	DiffDrifted   DiffType = "drifted"   // Resource exists but has wrong configuration
-	DiffUnmanaged DiffType = "unmanaged" // Resource exists but isn't managed by Ovi
+	DiffUnmanaged DiffType = "unmanaged" // Resource exists but isn't managed by Elava
 )
 
 // Claim represents a resource claim for coordination

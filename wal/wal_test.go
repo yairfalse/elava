@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 func TestWAL_AppendAndRead(t *testing.T) {
@@ -25,7 +25,7 @@ func TestWAL_AppendAndRead(t *testing.T) {
 		ID:   "i-123456",
 		Type: "ec2",
 		Tags: types.Tags{
-			OviOwner: "team-web",
+			ElavaOwner: "team-web",
 		},
 	}
 
@@ -58,7 +58,7 @@ func TestWAL_AppendAndRead(t *testing.T) {
 	}
 
 	// Read back entries
-	files, _ := filepath.Glob(filepath.Join(dir, "ovi-*.wal"))
+	files, _ := filepath.Glob(filepath.Join(dir, "elava-*.wal"))
 	if len(files) == 0 {
 		t.Fatal("No WAL files found")
 	}
@@ -131,7 +131,7 @@ func TestWAL_AppendError(t *testing.T) {
 	_ = w.Close()
 
 	// Read back
-	files, _ := filepath.Glob(filepath.Join(dir, "ovi-*.wal"))
+	files, _ := filepath.Glob(filepath.Join(dir, "elava-*.wal"))
 	reader, _ := NewReader(files[0])
 	defer func() { _ = reader.Close() }()
 
@@ -213,7 +213,7 @@ func TestWAL_SequenceNumbers(t *testing.T) {
 	_ = w.Close()
 
 	// Read and verify sequences
-	files, _ := filepath.Glob(filepath.Join(dir, "ovi-*.wal"))
+	files, _ := filepath.Glob(filepath.Join(dir, "elava-*.wal"))
 	reader, _ := NewReader(files[0])
 	defer func() { _ = reader.Close() }()
 
@@ -248,7 +248,7 @@ func TestWAL_DataIntegrity(t *testing.T) {
 	_ = w.Close()
 
 	// Read back and verify
-	files, _ := filepath.Glob(filepath.Join(dir, "ovi-*.wal"))
+	files, _ := filepath.Glob(filepath.Join(dir, "elava-*.wal"))
 	reader, _ := NewReader(files[0])
 	defer func() { _ = reader.Close() }()
 

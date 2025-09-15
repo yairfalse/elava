@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yairfalse/ovi/storage"
+	"github.com/yairfalse/elava/storage"
 )
 
 func TestSimpleCoordinator_ClaimResources(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 
-	ovitypes "github.com/yairfalse/ovi/types"
+	ovitypes "github.com/yairfalse/elava/types"
 )
 
 // listCloudWatchLogs discovers CloudWatch Log Groups - CLAUDE.md: Small focused function
@@ -38,7 +38,7 @@ func (p *RealAWSProvider) listCloudWatchLogs(ctx context.Context, filter ovitype
 	return resources, nil
 }
 
-// convertLogGroupToResource converts AWS LogGroup to Ovi Resource - CLAUDE.md: Small focused function
+// convertLogGroupToResource converts AWS LogGroup to Elava Resource - CLAUDE.md: Small focused function
 func convertLogGroupToResource(logGroup *types.LogGroup, region string) ovitypes.Resource {
 	// Determine status based on retention and activity
 	status := "active"

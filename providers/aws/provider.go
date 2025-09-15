@@ -17,8 +17,8 @@ import (
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/yairfalse/ovi/providers"
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/providers"
+	"github.com/yairfalse/elava/types"
 )
 
 // Factory function for creating AWS providers
@@ -258,11 +258,11 @@ func (p *RealAWSProvider) listLoadBalancers(ctx context.Context, filter types.Re
 	return resources, nil
 }
 
-// convertEC2Instance converts AWS EC2 instance to Ovi resource
+// convertEC2Instance converts AWS EC2 instance to Elava resource
 func (p *RealAWSProvider) convertEC2Instance(instance ec2types.Instance) types.Resource {
 	tags := p.convertEC2Tags(instance.Tags)
 
-	// Determine if orphaned (no Ovi owner or common tags)
+	// Determine if orphaned (no Elava owner or common tags)
 	isOrphaned := p.isResourceOrphaned(tags)
 
 	return types.Resource{
@@ -286,7 +286,7 @@ func (p *RealAWSProvider) convertEC2Instance(instance ec2types.Instance) types.R
 	}
 }
 
-// convertRDSInstance converts AWS RDS instance to Ovi resource
+// convertRDSInstance converts AWS RDS instance to Elava resource
 func (p *RealAWSProvider) convertRDSInstance(instance rdstypes.DBInstance) types.Resource {
 	tags := p.convertRDSTags(instance.TagList)
 	isOrphaned := p.isResourceOrphaned(tags)
@@ -313,7 +313,7 @@ func (p *RealAWSProvider) convertRDSInstance(instance rdstypes.DBInstance) types
 	}
 }
 
-// convertLoadBalancer converts AWS ELBv2 to Ovi resource
+// convertLoadBalancer converts AWS ELBv2 to Elava resource
 func (p *RealAWSProvider) convertLoadBalancer(lb elbv2types.LoadBalancer) types.Resource {
 	tags := types.Tags{} // ELB tags require separate API call
 	isOrphaned := p.isResourceOrphaned(tags)
@@ -337,7 +337,7 @@ func (p *RealAWSProvider) convertLoadBalancer(lb elbv2types.LoadBalancer) types.
 	}
 }
 
-// convertEC2Tags converts EC2 tags to Ovi tags
+// convertEC2Tags converts EC2 tags to Elava tags
 func (p *RealAWSProvider) convertEC2Tags(ec2Tags []ec2types.Tag) types.Tags {
 	tags := types.Tags{}
 
@@ -346,12 +346,12 @@ func (p *RealAWSProvider) convertEC2Tags(ec2Tags []ec2types.Tag) types.Tags {
 		value := aws.ToString(tag.Value)
 
 		switch key {
-		case "ovi:owner", "Owner", "owner":
-			tags.OviOwner = value
-		case "ovi:managed":
-			tags.OviManaged = value == "true"
-		case "ovi:blessed":
-			tags.OviBlessed = value == "true"
+		case "elava:owner", "Owner", "owner":
+			tags.ElavaOwner = value
+		case "elava:managed":
+			tags.ElavaManaged = value == "true"
+		case "elava:blessed":
+			tags.ElavaBlessed = value == "true"
 		case "Environment", "environment", "env":
 			tags.Environment = value
 		case "Team", "team":
@@ -368,7 +368,7 @@ func (p *RealAWSProvider) convertEC2Tags(ec2Tags []ec2types.Tag) types.Tags {
 	return tags
 }
 
-// convertRDSTags converts RDS tags to Ovi tags
+// convertRDSTags converts RDS tags to Elava tags
 func (p *RealAWSProvider) convertRDSTags(rdsTags []rdstypes.Tag) types.Tags {
 	tags := types.Tags{}
 
@@ -377,12 +377,12 @@ func (p *RealAWSProvider) convertRDSTags(rdsTags []rdstypes.Tag) types.Tags {
 		value := aws.ToString(tag.Value)
 
 		switch key {
-		case "ovi:owner", "Owner", "owner":
-			tags.OviOwner = value
-		case "ovi:managed":
-			tags.OviManaged = value == "true"
-		case "ovi:blessed":
-			tags.OviBlessed = value == "true"
+		case "elava:owner", "Owner", "owner":
+			tags.ElavaOwner = value
+		case "elava:managed":
+			tags.ElavaManaged = value == "true"
+		case "elava:blessed":
+			tags.ElavaBlessed = value == "true"
 		case "Environment", "environment", "env":
 			tags.Environment = value
 		case "Team", "team":
@@ -402,11 +402,11 @@ func (p *RealAWSProvider) convertRDSTags(rdsTags []rdstypes.Tag) types.Tags {
 // isResourceOrphaned determines if resource lacks proper ownership/management tags
 func (p *RealAWSProvider) isResourceOrphaned(tags types.Tags) bool {
 	// Resource is orphaned if it lacks key identification tags
-	hasOwner := tags.OviOwner != "" || tags.Team != ""
+	hasOwner := tags.ElavaOwner != "" || tags.Team != ""
 	hasProject := tags.Project != "" || tags.Name != ""
-	hasManagement := tags.OviManaged
+	hasManagement := tags.ElavaManaged
 
-	// If it's explicitly managed by Ovi, it's not orphaned
+	// If it's explicitly managed by Elava, it's not orphaned
 	if hasManagement {
 		return false
 	}
@@ -453,7 +453,7 @@ func (p *RealAWSProvider) shouldIncludeResource(resource types.Resource, filter 
 
 // matchesOwner checks if resource matches owner filter
 func (p *RealAWSProvider) matchesOwner(resource types.Resource, owner string) bool {
-	return resource.Tags.OviOwner == owner || resource.Tags.Team == owner
+	return resource.Tags.ElavaOwner == owner || resource.Tags.Team == owner
 }
 
 // matchesID checks if resource ID matches any in the filter list
@@ -476,12 +476,12 @@ func (p *RealAWSProvider) safeTimeValue(t *time.Time) time.Time {
 
 // CreateResource creates a new AWS resource (placeholder - Day 2 ops doesn't create)
 func (p *RealAWSProvider) CreateResource(ctx context.Context, spec types.ResourceSpec) (*types.Resource, error) {
-	return nil, fmt.Errorf("Day 2 operations: Ovi does not create resources - use your IaC tools")
+	return nil, fmt.Errorf("Day 2 operations: Elava does not create resources - use your IaC tools")
 }
 
 // DeleteResource deletes an AWS resource (placeholder - we recommend, don't execute)
 func (p *RealAWSProvider) DeleteResource(ctx context.Context, resourceID string) error {
-	return fmt.Errorf("Day 2 operations: Ovi recommends cleanup - use your IaC tools or AWS console")
+	return fmt.Errorf("Day 2 operations: Elava recommends cleanup - use your IaC tools or AWS console")
 }
 
 // TagResource adds tags to an AWS resource

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 // Calculator interface for cost calculation

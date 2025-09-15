@@ -1,7 +1,7 @@
 package reconciler
 
 import (
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 // SimpleComparator implements basic state comparison logic
@@ -35,20 +35,20 @@ func (c *SimpleComparator) Compare(current, desired []types.Resource) ([]Diff, e
 	// Find unwanted resources (current but not desired)
 	for id, currentResource := range currentMap {
 		if _, exists := desiredMap[id]; !exists {
-			// Check if it's managed by Ovi
+			// Check if it's managed by Elava
 			if currentResource.IsManaged() {
 				diffs = append(diffs, Diff{
 					Type:       DiffUnwanted,
 					ResourceID: id,
 					Current:    &currentResource,
-					Reason:     "Resource managed by Ovi but not in current config",
+					Reason:     "Resource managed by Elava but not in current config",
 				})
 			} else {
 				diffs = append(diffs, Diff{
 					Type:       DiffUnmanaged,
 					ResourceID: id,
 					Current:    &currentResource,
-					Reason:     "Resource exists but not managed by Ovi",
+					Reason:     "Resource exists but not managed by Elava",
 				})
 			}
 		}
@@ -100,11 +100,11 @@ func isDrifted(current, desired types.Resource) bool {
 
 // isTagsDrifted checks if tags have drifted
 func isTagsDrifted(current, desired types.Tags) bool {
-	// Check Ovi management tags
-	if current.OviOwner != desired.OviOwner {
+	// Check Elava management tags
+	if current.ElavaOwner != desired.ElavaOwner {
 		return true
 	}
-	if current.OviManaged != desired.OviManaged {
+	if current.ElavaManaged != desired.ElavaManaged {
 		return true
 	}
 

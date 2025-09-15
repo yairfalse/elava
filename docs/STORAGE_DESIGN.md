@@ -1,4 +1,4 @@
-# Ovi Storage Design: Change-First Architecture
+# Elava Storage Design: Change-First Architecture
 
 ## 🎯 Design Requirements (From User Research)
 
@@ -267,7 +267,7 @@ Compliant: YES
 📄 Audit trail available for download
 ```
 
-## 🎯 Why This Design Works for Ovi
+## 🎯 Why This Design Works for Elava
 
 1. **Change-First**: Optimized for "what's different?" - your #1 question
 2. **Fast Debugging**: Recent changes stored with full context  

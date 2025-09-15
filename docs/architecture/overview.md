@@ -1,12 +1,12 @@
-# Ovi Architecture Overview
+# Elava Architecture Overview
 
 ## High-Level Design
 
-Ovi follows a **stateless-with-memory** architecture inspired by etcd's MVCC design. Multiple Ovi instances can run simultaneously without traditional state file conflicts.
+Elava follows a **stateless-with-memory** architecture inspired by etcd's MVCC design. Multiple Elava instances can run simultaneously without traditional state file conflicts.
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Ovi Instance  │    │   Ovi Instance  │    │   Ovi Instance  │
+│   Elava Instance  │    │   Elava Instance  │    │   Elava Instance  │
 │                 │    │                 │    │                 │
 │  ┌───────────┐  │    │  ┌───────────┐  │    │  ┌───────────┐  │
 │  │Reconciler │  │    │  │Reconciler │  │    │  │Reconciler │  │
@@ -34,7 +34,7 @@ Ovi follows a **stateless-with-memory** architecture inspired by etcd's MVCC des
 ## Core Principles
 
 ### 1. Stateless with Memory
-- **No state files**: Ovi doesn't maintain traditional state files
+- **No state files**: Elava doesn't maintain traditional state files
 - **MVCC storage**: All observations stored with revision numbers
 - **Time-travel queries**: Can view infrastructure state at any point in history
 - **Coordination**: Multiple instances coordinate through claims and WAL
@@ -49,12 +49,12 @@ Ovi follows a **stateless-with-memory** architecture inspired by etcd's MVCC des
 - **WAL logging**: Every operation logged to write-ahead log
 - **Immutable history**: Once written, audit trail cannot be modified
 - **Replay capability**: Can replay decisions from any point in time
-- **Debug support**: "Why did Ovi do X?" becomes answerable
+- **Debug support**: "Why did Elava do X?" becomes answerable
 
 ## System Components
 
 ### Reconciler Engine
-The heart of Ovi that orchestrates the reconciliation process:
+The heart of Elava that orchestrates the reconciliation process:
 
 ```go
 type Engine struct {
@@ -135,7 +135,7 @@ Decision List → Executor → Cloud Provider
 ## Coordination Model
 
 ### Resource Claims
-To prevent multiple Ovi instances from conflicting:
+To prevent multiple Elava instances from conflicting:
 
 ```go
 type Claim struct {
@@ -155,7 +155,7 @@ type Claim struct {
 ## Safety Features
 
 ### Blessed Resources
-Resources tagged with `ovi:blessed: true` are protected:
+Resources tagged with `elava:blessed: true` are protected:
 - Cannot be deleted automatically
 - Generate notification decisions instead
 - Require explicit human intervention
@@ -179,11 +179,11 @@ Resources tagged with `ovi:blessed: true` are protected:
 - **Concurrent reads**: Multiple readers supported
 
 ### Scaling
-- **Horizontal**: Multiple Ovi instances
+- **Horizontal**: Multiple Elava instances
 - **Resource-level parallelism**: Process resources concurrently
 - **Provider-agnostic**: Pluggable cloud providers
 - **Stateless**: Easy to containerize and scale
 
 ---
 
-This architecture enables Ovi to be both powerful and safe, providing complete visibility into infrastructure changes while preventing the coordination issues that plague traditional infrastructure tools.
+This architecture enables Elava to be both powerful and safe, providing complete visibility into infrastructure changes while preventing the coordination issues that plague traditional infrastructure tools.

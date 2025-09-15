@@ -1,7 +1,7 @@
 # Design Session: Core Types
 
 ## What problem are we solving?
-Need to represent cloud resources in a provider-agnostic way that allows Ovi to reconcile desired state with actual state.
+Need to represent cloud resources in a provider-agnostic way that allows Elava to reconcile desired state with actual state.
 
 ## What's the simplest solution?
 - Resource: Represents any cloud resource (EC2, RDS, S3)
@@ -12,12 +12,12 @@ Need to represent cloud resources in a provider-agnostic way that allows Ovi to 
 Yes:
 - Resource validation (max 30 lines)
 - Resource matching against filters (max 30 lines)
-- Tag checking for Ovi management (max 30 lines)
+- Tag checking for Elava management (max 30 lines)
 
 ## What interfaces do we need?
 ```go
 // Resource methods
-- IsManaged() bool - Check if Ovi manages this
+- IsManaged() bool - Check if Elava manages this
 - IsBlessed() bool - Check if protected
 - Matches(filter) bool - Check if matches filter
 

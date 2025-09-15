@@ -41,7 +41,7 @@ type ResourceFilter struct {
 	IDs      []string `json:"ids,omitempty"`
 }
 
-// IsManaged checks if resource is managed by Ovi
+// IsManaged checks if resource is managed by Elava
 func (r *Resource) IsManaged() bool {
 	return r.Tags.IsManaged()
 }

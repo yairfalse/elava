@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 // Tracker identifies untracked resources
@@ -103,7 +103,7 @@ func (t *Tracker) assessRisk(resource *types.Resource) string {
 	}
 
 	// Medium risk: compute resources without clear ownership
-	if resource.Type == "ec2" && resource.Tags.OviOwner == "" {
+	if resource.Type == "ec2" && resource.Tags.ElavaOwner == "" {
 		return "medium"
 	}
 
@@ -116,7 +116,7 @@ func (t *Tracker) recommendAction(resource *types.Resource) string {
 		return "cleanup"
 	}
 
-	if resource.Tags.OviOwner == "" && resource.Tags.Team == "" {
+	if resource.Tags.ElavaOwner == "" && resource.Tags.Team == "" {
 		return "tag_owner"
 	}
 
@@ -138,7 +138,7 @@ type UntrackedResource struct {
 // Tracking rule implementations
 
 func checkMissingOwner(resource *types.Resource) bool {
-	return resource.Tags.OviOwner == "" && resource.Tags.Team == ""
+	return resource.Tags.ElavaOwner == "" && resource.Tags.Team == ""
 }
 
 func checkMissingProject(resource *types.Resource) bool {
@@ -146,8 +146,8 @@ func checkMissingProject(resource *types.Resource) bool {
 }
 
 func checkNoIaCManagement(resource *types.Resource) bool {
-	// Already managed by Ovi
-	if resource.Tags.OviManaged {
+	// Already managed by Elava
+	if resource.Tags.ElavaManaged {
 		return false
 	}
 
@@ -188,7 +188,7 @@ func hasIaCTags(resource *types.Resource) bool {
 		resource.Tags.Name + " " +
 			resource.Tags.Project + " " +
 			resource.Tags.Environment + " " +
-			resource.Tags.OviOwner,
+			resource.Tags.ElavaOwner,
 	)
 
 	for _, indicator := range iacIndicators {
