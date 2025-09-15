@@ -49,7 +49,7 @@ cat cleanup_script.sh
 ## Protected Resources
 
 These resources are ALWAYS protected:
-- Resources tagged with `ovi:blessed=true`
+- Resources tagged with `elava:blessed=true`
 - Resources tagged with `do-not-delete=true`
 - Resources tagged with `production=true`
 - NAT Gateways (expensive to recreate)

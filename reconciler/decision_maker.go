@@ -3,7 +3,7 @@ package reconciler
 import (
 	"fmt"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 // SimpleDecisionMaker implements basic decision-making logic

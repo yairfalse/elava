@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yairfalse/ovi/providers"
-	"github.com/yairfalse/ovi/storage"
-	"github.com/yairfalse/ovi/types"
-	"github.com/yairfalse/ovi/wal"
+	"github.com/yairfalse/elava/providers"
+	"github.com/yairfalse/elava/storage"
+	"github.com/yairfalse/elava/types"
+	"github.com/yairfalse/elava/wal"
 )
 
 // MockProvider for testing

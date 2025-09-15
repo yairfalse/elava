@@ -3,8 +3,8 @@ package main
 import (
 	"testing"
 
-	"github.com/yairfalse/ovi/storage"
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/storage"
+	"github.com/yairfalse/elava/types"
 )
 
 // Test storeObservations function - CLAUDE.md: Small focused tests

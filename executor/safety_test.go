@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 func TestDefaultSafetyChecker_CheckBlessedResource(t *testing.T) {

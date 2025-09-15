@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 // Tracker identifies untracked resources

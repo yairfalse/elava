@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/yairfalse/ovi/providers"
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/providers"
+	"github.com/yairfalse/elava/types"
 )
 
 // DefaultSafetyChecker implements comprehensive safety checks

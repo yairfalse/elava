@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/yairfalse/ovi/telemetry"
+	"github.com/yairfalse/elava/telemetry"
 )
 
 // initTelemetry initializes OTEL for Ovi

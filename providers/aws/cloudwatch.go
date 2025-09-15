@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 
-	ovitypes "github.com/yairfalse/ovi/types"
+	ovitypes "github.com/yairfalse/elava/types"
 )
 
 // listCloudWatchLogs discovers CloudWatch Log Groups - CLAUDE.md: Small focused function

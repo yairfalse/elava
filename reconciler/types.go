@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 // Reconciler orchestrates the observation, comparison, and decision-making process

@@ -161,7 +161,7 @@ resource := NewResourceBuilder().
     WithType("ec2").
     WithRegion("us-east-1").
     WithTags(map[string]string{
-        "ovi:owner": "team-web",
+        "elava:owner": "team-web",
     }).
     Build()
 ```

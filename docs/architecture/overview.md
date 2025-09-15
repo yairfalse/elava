@@ -155,7 +155,7 @@ type Claim struct {
 ## Safety Features
 
 ### Blessed Resources
-Resources tagged with `ovi:blessed: true` are protected:
+Resources tagged with `elava:blessed: true` are protected:
 - Cannot be deleted automatically
 - Generate notification decisions instead
 - Require explicit human intervention

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/yairfalse/ovi/storage"
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/storage"
+	"github.com/yairfalse/elava/types"
 )
 
 // ChangeSet represents detected changes between scans

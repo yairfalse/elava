@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/btree"
-	"github.com/yairfalse/ovi/telemetry"
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/telemetry"
+	"github.com/yairfalse/elava/types"
 	"go.etcd.io/bbolt"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"

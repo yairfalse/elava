@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yairfalse/ovi/storage"
+	"github.com/yairfalse/elava/storage"
 	"go.etcd.io/bbolt"
 )
 

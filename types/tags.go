@@ -51,19 +51,19 @@ func (t Tags) ToMap() map[string]string {
 	tags := make(map[string]string)
 
 	if t.OviOwner != "" {
-		tags["ovi:owner"] = t.OviOwner
+		tags["elava:owner"] = t.OviOwner
 	}
 	if t.OviManaged {
-		tags["ovi:managed"] = "true"
+		tags["elava:managed"] = "true"
 	}
 	if t.OviBlessed {
-		tags["ovi:blessed"] = "true"
+		tags["elava:blessed"] = "true"
 	}
 	if t.OviGeneration != "" {
-		tags["ovi:generation"] = t.OviGeneration
+		tags["elava:generation"] = t.OviGeneration
 	}
 	if t.OviClaimedAt != "" {
-		tags["ovi:claimed_at"] = t.OviClaimedAt
+		tags["elava:claimed_at"] = t.OviClaimedAt
 	}
 	if t.Name != "" {
 		tags["Name"] = t.Name
@@ -105,19 +105,19 @@ func (t Tags) ToMap() map[string]string {
 func TagsFromMap(tagMap map[string]string) Tags {
 	tags := Tags{}
 
-	if val, ok := tagMap["ovi:owner"]; ok {
+	if val, ok := tagMap["elava:owner"]; ok {
 		tags.OviOwner = val
 	}
-	if val, ok := tagMap["ovi:managed"]; ok && val == "true" {
+	if val, ok := tagMap["elava:managed"]; ok && val == "true" {
 		tags.OviManaged = true
 	}
-	if val, ok := tagMap["ovi:blessed"]; ok && val == "true" {
+	if val, ok := tagMap["elava:blessed"]; ok && val == "true" {
 		tags.OviBlessed = true
 	}
-	if val, ok := tagMap["ovi:generation"]; ok {
+	if val, ok := tagMap["elava:generation"]; ok {
 		tags.OviGeneration = val
 	}
-	if val, ok := tagMap["ovi:claimed_at"]; ok {
+	if val, ok := tagMap["elava:claimed_at"]; ok {
 		tags.OviClaimedAt = val
 	}
 	if val, ok := tagMap["Name"]; ok {

@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 // listS3Buckets discovers S3 buckets
@@ -315,11 +315,11 @@ func (p *RealAWSProvider) convertS3Tags(s3Tags []s3types.Tag) types.Tags {
 		value := aws.ToString(tag.Value)
 
 		switch key {
-		case "ovi:owner", "Owner", "owner":
+		case "elava:owner", "Owner", "owner":
 			tags.OviOwner = value
-		case "ovi:managed":
+		case "elava:managed":
 			tags.OviManaged = value == "true"
-		case "ovi:blessed":
+		case "elava:blessed":
 			tags.OviBlessed = value == "true"
 		case "Environment", "environment", "env":
 			tags.Environment = value
@@ -343,11 +343,11 @@ func (p *RealAWSProvider) convertLambdaTags(lambdaTags map[string]string) types.
 
 	for key, value := range lambdaTags {
 		switch key {
-		case "ovi:owner", "Owner", "owner":
+		case "elava:owner", "Owner", "owner":
 			tags.OviOwner = value
-		case "ovi:managed":
+		case "elava:managed":
 			tags.OviManaged = value == "true"
-		case "ovi:blessed":
+		case "elava:blessed":
 			tags.OviBlessed = value == "true"
 		case "Environment", "environment", "env":
 			tags.Environment = value

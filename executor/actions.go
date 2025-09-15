@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/yairfalse/ovi/providers"
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/providers"
+	"github.com/yairfalse/elava/types"
 )
 
 // executeDecision executes a single decision against the appropriate provider
@@ -145,8 +145,8 @@ func (e *Engine) buildResourceSpec(decision types.Decision) (types.ResourceSpec,
 func (e *Engine) buildTagsMap(decision types.Decision) (map[string]string, error) {
 	// Basic Ovi management tags
 	tags := map[string]string{
-		"ovi:managed": "true",
-		"ovi:owner":   "ovi",
+		"elava:managed": "true",
+		"elava:owner":   "ovi",
 	}
 
 	// In a full implementation, this would extract specific tags to apply

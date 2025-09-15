@@ -244,10 +244,10 @@ func (t Tags) ToMap() map[string]string {
     tags := make(map[string]string)
     
     if t.OviOwner != "" {
-        tags["ovi:owner"] = t.OviOwner
+        tags["elava:owner"] = t.OviOwner
     }
     if t.OviManaged {
-        tags["ovi:managed"] = "true"
+        tags["elava:managed"] = "true"
     }
     // ... other fields
     
@@ -258,10 +258,10 @@ func (t Tags) ToMap() map[string]string {
 func TagsFromMap(tagMap map[string]string) Tags {
     tags := Tags{}
     
-    if val, ok := tagMap["ovi:owner"]; ok {
+    if val, ok := tagMap["elava:owner"]; ok {
         tags.OviOwner = val
     }
-    if val, ok := tagMap["ovi:managed"]; ok && val == "true" {
+    if val, ok := tagMap["elava:managed"]; ok && val == "true" {
         tags.OviManaged = true
     }
     // ... other fields

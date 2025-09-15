@@ -32,7 +32,7 @@ for {
 
 1. **No State Files:** Ovi never stores state. Every reconciliation loop fetches fresh state from the cloud provider.
 
-2. **Tag-Based Management:** Resources are identified and managed through tags (ovi:blessed for managed resources, ovi:pending for resources awaiting approval).
+2. **Tag-Based Management:** Resources are identified and managed through tags (elava:blessed for managed resources, elava:pending for resources awaiting approval).
 
 3. **Friendly, Not Aggressive:** Ovi asks before acting, especially for destructive operations. It's a helpful assistant, not an authoritarian enforcer.
 

@@ -17,8 +17,8 @@ import (
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/yairfalse/ovi/providers"
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/providers"
+	"github.com/yairfalse/elava/types"
 )
 
 // Factory function for creating AWS providers
@@ -346,11 +346,11 @@ func (p *RealAWSProvider) convertEC2Tags(ec2Tags []ec2types.Tag) types.Tags {
 		value := aws.ToString(tag.Value)
 
 		switch key {
-		case "ovi:owner", "Owner", "owner":
+		case "elava:owner", "Owner", "owner":
 			tags.OviOwner = value
-		case "ovi:managed":
+		case "elava:managed":
 			tags.OviManaged = value == "true"
-		case "ovi:blessed":
+		case "elava:blessed":
 			tags.OviBlessed = value == "true"
 		case "Environment", "environment", "env":
 			tags.Environment = value
@@ -377,11 +377,11 @@ func (p *RealAWSProvider) convertRDSTags(rdsTags []rdstypes.Tag) types.Tags {
 		value := aws.ToString(tag.Value)
 
 		switch key {
-		case "ovi:owner", "Owner", "owner":
+		case "elava:owner", "Owner", "owner":
 			tags.OviOwner = value
-		case "ovi:managed":
+		case "elava:managed":
 			tags.OviManaged = value == "true"
-		case "ovi:blessed":
+		case "elava:blessed":
 			tags.OviBlessed = value == "true"
 		case "Environment", "environment", "env":
 			tags.Environment = value

@@ -3,7 +3,7 @@ package reconciler
 import (
 	"testing"
 
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 //nolint:gocognit // Test complexity is acceptable for thorough coverage

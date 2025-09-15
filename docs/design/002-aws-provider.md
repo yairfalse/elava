@@ -7,7 +7,7 @@ Need an AWS provider that implements the CloudProvider interface to list, create
 - AWS provider struct with EC2 client
 - List EC2 instances with filters
 - Create instances from ResourceSpec
-- Tag resources with ovi:managed tags
+- Tag resources with elava:managed tags
 - Delete by instance ID
 
 ## Can we break it into smaller functions?

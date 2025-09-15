@@ -1,4 +1,4 @@
-module github.com/yairfalse/ovi
+module github.com/yairfalse/elava
 
 go 1.23.0
 

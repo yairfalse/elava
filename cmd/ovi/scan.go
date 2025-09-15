@@ -9,12 +9,12 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/yairfalse/ovi/providers"
-	_ "github.com/yairfalse/ovi/providers/aws" // Register AWS provider
-	"github.com/yairfalse/ovi/scanner"
-	"github.com/yairfalse/ovi/storage"
-	"github.com/yairfalse/ovi/types"
-	"github.com/yairfalse/ovi/wal"
+	"github.com/yairfalse/elava/providers"
+	_ "github.com/yairfalse/elava/providers/aws" // Register AWS provider
+	"github.com/yairfalse/elava/scanner"
+	"github.com/yairfalse/elava/storage"
+	"github.com/yairfalse/elava/types"
+	"github.com/yairfalse/elava/wal"
 )
 
 // ScanCommand implements the 'ovi scan' command

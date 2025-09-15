@@ -1,7 +1,7 @@
 package reconciler
 
 import (
-	"github.com/yairfalse/ovi/types"
+	"github.com/yairfalse/elava/types"
 )
 
 // SimpleComparator implements basic state comparison logic
