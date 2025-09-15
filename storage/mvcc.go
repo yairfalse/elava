@@ -12,6 +12,7 @@ import (
 	"github.com/yairfalse/ovi/telemetry"
 	"github.com/yairfalse/ovi/types"
 	"go.etcd.io/bbolt"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -87,8 +88,10 @@ func NewMVCCStorage(dir string) (*MVCCStorage, error) {
 		index: btree.NewG[*ResourceState](32, func(a, b *ResourceState) bool {
 			return a.ResourceID < b.ResourceID
 		}),
-		db:  db,
-		dir: dir,
+		db:     db,
+		dir:    dir,
+		logger: telemetry.NewLogger("mvcc-storage"),
+		tracer: otel.Tracer("mvcc-storage"),
 	}
 
 	// Load current revision
@@ -146,12 +149,19 @@ func (s *MVCCStorage) RecordObservation(resource types.Resource) (int64, error) 
 
 // RecordObservationBatch records multiple observations atomically
 func (s *MVCCStorage) RecordObservationBatch(resources []types.Resource) (int64, error) {
+	ctx := context.Background()
+	ctx, span := s.tracer.Start(ctx, "storage.record_batch")
+	defer span.End()
+
+	s.logger.LogBatchOperation(ctx, "record_batch", len(resources))
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.currentRev++
 	rev := s.currentRev
 
+	startTime := time.Now()
 	err := s.db.Update(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(bucketObservations)
 
@@ -173,6 +183,7 @@ func (s *MVCCStorage) RecordObservationBatch(resources []types.Resource) (int64,
 	})
 
 	if err != nil {
+		s.logger.LogStorageError(ctx, "record_batch", err)
 		return 0, err
 	}
 
@@ -180,6 +191,12 @@ func (s *MVCCStorage) RecordObservationBatch(resources []types.Resource) (int64,
 	for _, resource := range resources {
 		s.updateIndex(resource, rev, true)
 	}
+
+	s.logger.WithContext(ctx).Info().
+		Int("batch_size", len(resources)).
+		Int64("revision", rev).
+		Dur("duration", time.Since(startTime)).
+		Msg("batch recorded successfully")
 
 	return rev, nil
 }
@@ -412,10 +429,17 @@ func (s *MVCCStorage) loadRevision() {
 }
 
 func (s *MVCCStorage) rebuildIndex() error {
+	ctx := context.Background()
+	ctx, span := s.tracer.Start(ctx, "storage.rebuild_index")
+	defer span.End()
+
+	s.logger.LogRebuildIndex(ctx, s.index.Len())
+	startTime := time.Now()
+
 	// Clear existing index
 	s.index.Clear(false)
 
-	return s.db.View(func(tx *bbolt.Tx) error {
+	err := s.db.View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket(bucketObservations)
 		if bucket == nil {
 			return nil
@@ -446,6 +470,14 @@ func (s *MVCCStorage) rebuildIndex() error {
 
 		return nil
 	})
+
+	if err != nil {
+		s.logger.LogStorageError(ctx, "rebuild_index", err)
+		return err
+	}
+
+	s.logger.LogRebuildComplete(ctx, s.index.Len(), float64(time.Since(startTime).Milliseconds()))
+	return nil
 }
 
 func makeObservationKey(rev int64, resourceID string) []byte {
@@ -496,60 +528,105 @@ func (s *MVCCStorage) Stats() (resourceCount int, currentRev int64, dbSizeBytes 
 
 // CompactWithContext removes old revisions with cancellation support
 func (s *MVCCStorage) CompactWithContext(ctx context.Context, keepRevisions int64) error {
+	ctx, span := s.tracer.Start(ctx, "storage.compact")
+	defer span.End()
+
+	s.logger.LogCompaction(ctx, keepRevisions, s.currentRev)
+	startTime := time.Now()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	cutoff := s.currentRev - keepRevisions
 	if cutoff <= 0 {
+		s.logger.WithContext(ctx).Debug().Msg("nothing to compact")
 		return nil
 	}
 
-	return s.db.Update(func(tx *bbolt.Tx) error {
-		// Check context before starting
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
+	deletedCount, err := s.performCompaction(ctx, cutoff)
+	if err != nil {
+		s.logger.LogStorageError(ctx, "compact", err)
+		return err
+	}
+
+	s.logger.LogCompactionComplete(ctx, deletedCount, float64(time.Since(startTime).Milliseconds()))
+	return nil
+}
+
+// performCompaction handles the actual compaction work
+func (s *MVCCStorage) performCompaction(ctx context.Context, cutoff int64) (int, error) {
+	deletedCount := 0
+
+	return deletedCount, s.db.Update(func(tx *bbolt.Tx) error {
+		if err := s.checkContext(ctx); err != nil {
+			return err
 		}
 
-		bucket := tx.Bucket(bucketObservations)
-		c := bucket.Cursor()
-
-		var toDelete [][]byte
-		var processed int
-
-		for k, _ := c.First(); k != nil; k, _ = c.Next() {
-			// Check context periodically
-			processed++
-			if processed%100 == 0 {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				default:
-				}
-			}
-
-			rev, _ := parseObservationKey(k)
-			if rev < cutoff {
-				toDelete = append(toDelete, k)
-			}
+		toDelete, err := s.findKeysToDelete(ctx, tx, cutoff)
+		if err != nil {
+			return err
 		}
 
-		for i, key := range toDelete {
-			// Check context during deletion
-			if i%50 == 0 {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				default:
-				}
-			}
-
-			if err := bucket.Delete(key); err != nil {
-				return err
-			}
-		}
-
-		return nil
+		deletedCount, err = s.deleteKeys(ctx, tx, toDelete)
+		return err
 	})
+}
+
+// checkContext checks if context is cancelled
+func (s *MVCCStorage) checkContext(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return nil
+	}
+}
+
+// findKeysToDelete identifies keys to delete during compaction
+func (s *MVCCStorage) findKeysToDelete(ctx context.Context, tx *bbolt.Tx, cutoff int64) ([][]byte, error) {
+	bucket := tx.Bucket(bucketObservations)
+	c := bucket.Cursor()
+
+	var toDelete [][]byte
+	processed := 0
+
+	for k, _ := c.First(); k != nil; k, _ = c.Next() {
+		processed++
+		if processed%100 == 0 {
+			if err := s.checkContext(ctx); err != nil {
+				s.logger.WithContext(ctx).Warn().Int("processed", processed).Msg("compaction cancelled")
+				return nil, err
+			}
+		}
+
+		rev, _ := parseObservationKey(k)
+		if rev < cutoff {
+			toDelete = append(toDelete, k)
+		}
+	}
+
+	return toDelete, nil
+}
+
+// deleteKeys removes the identified keys
+func (s *MVCCStorage) deleteKeys(ctx context.Context, tx *bbolt.Tx, toDelete [][]byte) (int, error) {
+	bucket := tx.Bucket(bucketObservations)
+
+	for i, key := range toDelete {
+		if i%50 == 0 {
+			if err := s.checkContext(ctx); err != nil {
+				s.logger.WithContext(ctx).Warn().
+					Int("deleted", i).
+					Int("total_to_delete", len(toDelete)).
+					Msg("compaction cancelled during deletion")
+				return i, err
+			}
+		}
+
+		if err := bucket.Delete(key); err != nil {
+			return i, err
+		}
+	}
+
+	return len(toDelete), nil
 }

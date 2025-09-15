@@ -29,7 +29,7 @@ type ScanCommand struct {
 func (cmd *ScanCommand) Run() error {
 	ctx := context.Background()
 
-	fmt.Printf("🔍 Scanning AWS region %s for untracked resources...\n\n", cmd.Region)
+	fmt.Printf("Scanning AWS region %s for untracked resources...\n\n", cmd.Region)
 
 	// Initialize storage and WAL
 	tmpDir := os.TempDir() + "/ovi-scan"
@@ -80,6 +80,41 @@ func (cmd *ScanCommand) Run() error {
 		fmt.Printf("Warning: failed to log scan operation: %v\n", err)
 	}
 
+	// Get previous state from storage
+	previousResources, err := getPreviousState(storage)
+	if err != nil {
+		// First scan, no previous state
+		previousResources = []types.Resource{}
+		fmt.Printf("First scan - establishing baseline\n\n")
+	}
+
+	// Store current observations in storage
+	revision, err := storeObservations(storage, resources)
+	if err != nil {
+		fmt.Printf("Warning: failed to store observations: %v\n", err)
+	} else {
+		fmt.Printf("Stored observations at revision %d\n", revision)
+	}
+
+	// Detect changes if we have previous state
+	var changes ChangeSet
+	if len(previousResources) > 0 {
+		changes = detectChanges(resources, previousResources)
+		if len(changes.New) > 0 || len(changes.Modified) > 0 || len(changes.Disappeared) > 0 {
+			fmt.Printf("\nChanges detected:\n")
+			if len(changes.New) > 0 {
+				fmt.Printf("   New resources: %d\n", len(changes.New))
+			}
+			if len(changes.Modified) > 0 {
+				fmt.Printf("   Modified resources: %d\n", len(changes.Modified))
+			}
+			if len(changes.Disappeared) > 0 {
+				fmt.Printf("   Disappeared resources: %d\n", len(changes.Disappeared))
+			}
+			fmt.Printf("\n")
+		}
+	}
+
 	// Find untracked resources
 	untracked := scanner.ScanForUntracked(ctx, resources)
 
@@ -106,14 +141,14 @@ func (cmd *ScanCommand) outputTable(allResources []types.Resource, untracked []s
 	trackedCount := totalResources - untrackedCount
 
 	// Summary
-	fmt.Printf("📊 Scan Summary:\n")
+	fmt.Printf("Scan Summary:\n")
 	fmt.Printf("   Total resources: %d\n", totalResources)
 	fmt.Printf("   Tracked: %d (%.1f%%)\n", trackedCount, float64(trackedCount)/float64(totalResources)*100)
 	fmt.Printf("   Untracked: %d (%.1f%%)\n", untrackedCount, float64(untrackedCount)/float64(totalResources)*100)
 	fmt.Printf("\n")
 
 	if len(untracked) == 0 {
-		fmt.Println("🎉 All resources are properly tracked!")
+		fmt.Println("All resources are properly tracked!")
 		return nil
 	}
 
@@ -123,7 +158,7 @@ func (cmd *ScanCommand) outputTable(allResources []types.Resource, untracked []s
 		return riskOrder[untracked[i].Risk] > riskOrder[untracked[j].Risk]
 	})
 
-	fmt.Printf("🚨 Untracked Resources:\n")
+	fmt.Printf("Untracked Resources:\n")
 
 	// Create table writer
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -136,16 +171,7 @@ func (cmd *ScanCommand) outputTable(allResources []types.Resource, untracked []s
 		issues := strings.Join(item.Issues, ", ")
 		issues = truncate(issues, 40)
 
-		// Add emoji for risk level
 		riskDisplay := item.Risk
-		switch item.Risk {
-		case "high":
-			riskDisplay = "🔴 " + item.Risk
-		case "medium":
-			riskDisplay = "🟡 " + item.Risk
-		case "low":
-			riskDisplay = "🟢 " + item.Risk
-		}
 
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			resourceID,
@@ -173,7 +199,7 @@ func (cmd *ScanCommand) printActionSummary(untracked []scanner.UntrackedResource
 		actions[item.Action]++
 	}
 
-	fmt.Printf("💡 Recommended Actions:\n")
+	fmt.Printf("Recommended Actions:\n")
 	for action, count := range actions {
 		switch action {
 		case "cleanup":
@@ -191,7 +217,7 @@ func (cmd *ScanCommand) printActionSummary(untracked []scanner.UntrackedResource
 	fmt.Printf("   ovi cleanup --dry-run    # Preview cleanup actions (SAFE: read-only)\n")
 	fmt.Printf("   ovi tag --interactive    # Tag resources interactively\n")
 	fmt.Printf("   ovi report --team        # Generate team ownership report\n")
-	fmt.Printf("\n🔒 Safety: Ovi NEVER deletes resources. We only detect and recommend.\n")
+	fmt.Printf("\nSafety: Ovi NEVER deletes resources. We only detect and recommend.\n")
 }
 
 // outputJSON outputs results as JSON
