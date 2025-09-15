@@ -2,13 +2,13 @@
 
 ## Overview
 
-Ovi's WAL system provides complete auditability and crash recovery by logging every operation before it's executed. When someone asks "Why did Ovi delete my database?", the WAL has the answer.
+Elava's WAL system provides complete auditability and crash recovery by logging every operation before it's executed. When someone asks "Why did Elava delete my database?", the WAL has the answer.
 
 ## Design Philosophy
 
 ### Complete Transparency
 Every significant operation is logged:
-- **Observations**: What Ovi saw in the cloud
+- **Observations**: What Elava saw in the cloud
 - **Decisions**: What actions it decided to take  
 - **Executions**: What it actually did
 - **Failures**: What went wrong and why
@@ -226,7 +226,7 @@ for _, decision := range decisions {
 
 #### Partial Execution
 ```go
-// Ovi crashes here - WAL shows exactly what was decided vs executed
+// Elava crashes here - WAL shows exactly what was decided vs executed
 decisions := []Decision{
     {Action: "create", ResourceID: "i-1"},
     {Action: "delete", ResourceID: "i-2"},
@@ -257,7 +257,7 @@ for _, decision := range decisions {
 
 #### Recent Activity
 ```bash
-# Show what Ovi did in the last hour
+# Show what Elava did in the last hour
 ovi wal replay --since "1 hour ago"
 
 # Show only failed operations
@@ -387,7 +387,7 @@ Regular operations:
 ### Troubleshooting
 
 #### Common Issues
-1. **Disk full**: WAL writes fail, Ovi should halt
+1. **Disk full**: WAL writes fail, Elava should halt
 2. **Permission issues**: Check file/directory permissions
 3. **Corruption**: Usually indicates hardware issues
 4. **High latency**: Check disk performance
@@ -415,4 +415,4 @@ Regular operations:
 
 ---
 
-The WAL system transforms Ovi from a "black box" into a completely transparent infrastructure management tool. Every decision is explained, every action is tracked, and every failure is debuggable.
+The WAL system transforms Elava from a "black box" into a completely transparent infrastructure management tool. Every decision is explained, every action is tracked, and every failure is debuggable.

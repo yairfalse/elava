@@ -17,7 +17,7 @@ import (
 	"github.com/yairfalse/elava/wal"
 )
 
-// ScanCommand implements the 'ovi scan' command
+// ScanCommand implements the 'elava scan' command
 type ScanCommand struct {
 	Region   string `help:"AWS region to scan" default:"us-east-1"`
 	Output   string `help:"Output format: table, json, csv" default:"table"`
@@ -32,7 +32,7 @@ func (cmd *ScanCommand) Run() error {
 	fmt.Printf("Scanning AWS region %s for untracked resources...\n\n", cmd.Region)
 
 	// Initialize storage and WAL
-	tmpDir := os.TempDir() + "/ovi-scan"
+	tmpDir := os.TempDir() + "/elava-scan"
 	_ = os.MkdirAll(tmpDir, 0750)
 
 	storage, err := storage.NewMVCCStorage(tmpDir)
@@ -214,10 +214,10 @@ func (cmd *ScanCommand) printActionSummary(untracked []scanner.UntrackedResource
 	}
 
 	fmt.Printf("\nNext steps:\n")
-	fmt.Printf("   ovi cleanup --dry-run    # Preview cleanup actions (SAFE: read-only)\n")
-	fmt.Printf("   ovi tag --interactive    # Tag resources interactively\n")
-	fmt.Printf("   ovi report --team        # Generate team ownership report\n")
-	fmt.Printf("\nSafety: Ovi NEVER deletes resources. We only detect and recommend.\n")
+	fmt.Printf("   elava cleanup --dry-run    # Preview cleanup actions (SAFE: read-only)\n")
+	fmt.Printf("   elava tag --interactive    # Tag resources interactively\n")
+	fmt.Printf("   elava report --team        # Generate team ownership report\n")
+	fmt.Printf("\nSafety: Elava NEVER deletes resources. We only detect and recommend.\n")
 }
 
 // outputJSON outputs results as JSON

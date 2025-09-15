@@ -32,7 +32,7 @@ func TestSimpleDecisionMaker_Decide(t *testing.T) {
 					Desired: &types.Resource{
 						ID:   "i-missing",
 						Type: "ec2",
-						Tags: types.Tags{OviManaged: true},
+						Tags: types.Tags{ElavaManaged: true},
 					},
 					Reason: "Resource specified in config but not found",
 				},
@@ -50,7 +50,7 @@ func TestSimpleDecisionMaker_Decide(t *testing.T) {
 					Current: &types.Resource{
 						ID:   "i-unwanted",
 						Type: "ec2",
-						Tags: types.Tags{OviManaged: true},
+						Tags: types.Tags{ElavaManaged: true},
 					},
 					Reason: "Resource not in config",
 				},
@@ -68,7 +68,7 @@ func TestSimpleDecisionMaker_Decide(t *testing.T) {
 					Current: &types.Resource{
 						ID:   "i-unwanted",
 						Type: "ec2",
-						Tags: types.Tags{OviManaged: true},
+						Tags: types.Tags{ElavaManaged: true},
 					},
 					Reason: "Resource not in config",
 				},
@@ -86,7 +86,7 @@ func TestSimpleDecisionMaker_Decide(t *testing.T) {
 					Current: &types.Resource{
 						ID:   "i-blessed",
 						Type: "ec2",
-						Tags: types.Tags{OviManaged: true, OviBlessed: true},
+						Tags: types.Tags{ElavaManaged: true, ElavaBlessed: true},
 					},
 					Reason: "Resource not in config",
 				},
@@ -127,9 +127,9 @@ func TestSimpleDecisionMaker_Decide(t *testing.T) {
 					Current: &types.Resource{
 						ID:   "i-unmanaged",
 						Type: "ec2",
-						Tags: types.Tags{}, // No Ovi tags
+						Tags: types.Tags{}, // No Elava tags
 					},
-					Reason: "Not managed by Ovi",
+					Reason: "Not managed by Elava",
 				},
 			},
 			expectedActions: []string{"notify"},
@@ -209,7 +209,7 @@ func TestSimpleDecisionMaker_DecideSingle(t *testing.T) {
 				Current: &types.Resource{
 					ID:   "i-unwanted",
 					Type: "ec2",
-					Tags: types.Tags{OviManaged: true},
+					Tags: types.Tags{ElavaManaged: true},
 				},
 				Reason: "Test unwanted",
 			},
@@ -286,7 +286,7 @@ func TestSimpleDecisionMaker_DecideMissing(t *testing.T) {
 	resource := &types.Resource{
 		ID:   "i-test",
 		Type: "ec2",
-		Tags: types.Tags{OviManaged: true},
+		Tags: types.Tags{ElavaManaged: true},
 	}
 
 	diff := Diff{
@@ -316,7 +316,7 @@ func TestSimpleDecisionMaker_DecideUnwanted_Blessed(t *testing.T) {
 	resource := &types.Resource{
 		ID:   "i-blessed",
 		Type: "ec2",
-		Tags: types.Tags{OviManaged: true, OviBlessed: true},
+		Tags: types.Tags{ElavaManaged: true, ElavaBlessed: true},
 	}
 
 	diff := Diff{

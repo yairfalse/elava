@@ -130,8 +130,8 @@ func (e *Engine) buildResourceSpec(decision types.Decision) (types.ResourceSpec,
 	spec := types.ResourceSpec{
 		Type: decision.ResourceType,
 		Tags: types.Tags{
-			OviManaged: true,
-			OviOwner:   "ovi",
+			ElavaManaged: true,
+			ElavaOwner:   "ovi",
 		},
 	}
 
@@ -143,7 +143,7 @@ func (e *Engine) buildResourceSpec(decision types.Decision) (types.ResourceSpec,
 
 // buildTagsMap constructs a tags map from a decision
 func (e *Engine) buildTagsMap(decision types.Decision) (map[string]string, error) {
-	// Basic Ovi management tags
+	// Basic Elava management tags
 	tags := map[string]string{
 		"elava:managed": "true",
 		"elava:owner":   "ovi",

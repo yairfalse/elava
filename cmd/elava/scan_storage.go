@@ -99,7 +99,7 @@ func buildResourceMap(resources []types.Resource) map[string]types.Resource {
 func resourceChanged(current, previous types.Resource) bool {
 	// Compare key fields that indicate meaningful changes
 	return current.Status != previous.Status ||
-		current.Tags.OviOwner != previous.Tags.OviOwner ||
+		current.Tags.ElavaOwner != previous.Tags.ElavaOwner ||
 		current.Tags.Environment != previous.Tags.Environment ||
 		current.Region != previous.Region
 }

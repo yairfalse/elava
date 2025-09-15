@@ -1,7 +1,7 @@
 # Design Session: AWS Provider
 
 ## What problem are we solving?
-Need an AWS provider that implements the CloudProvider interface to list, create, delete, and tag EC2 instances following Ovi's stateless approach.
+Need an AWS provider that implements the CloudProvider interface to list, create, delete, and tag EC2 instances following Elava's stateless approach.
 
 ## What's the simplest solution?
 - AWS provider struct with EC2 client

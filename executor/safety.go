@@ -140,7 +140,7 @@ func checkDestructiveAction(ctx context.Context, decision types.Decision, provid
 func checkResourceOwnership(ctx context.Context, decision types.Decision, provider providers.CloudProvider) SafetyCheck {
 	check := SafetyCheck{
 		Name:        "resource_ownership_check",
-		Description: "Verify Ovi can manage this resource",
+		Description: "Verify Elava can manage this resource",
 		Passed:      true,
 		Severity:    SeverityError,
 	}
@@ -164,10 +164,10 @@ func checkResourceOwnership(ctx context.Context, decision types.Decision, provid
 		return check
 	}
 
-	// Check if resource is managed by Ovi - but allow deletion of any resource if explicitly requested
+	// Check if resource is managed by Elava - but allow deletion of any resource if explicitly requested
 	if !resource.IsManaged() && decision.Action != types.ActionDelete && decision.Action != types.ActionTerminate {
 		check.Passed = false
-		check.Message = fmt.Sprintf("Resource %s is not managed by Ovi", decision.ResourceID)
+		check.Message = fmt.Sprintf("Resource %s is not managed by Elava", decision.ResourceID)
 	}
 
 	return check

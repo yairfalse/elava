@@ -38,7 +38,7 @@ func (p *RealAWSProvider) listCloudWatchLogs(ctx context.Context, filter ovitype
 	return resources, nil
 }
 
-// convertLogGroupToResource converts AWS LogGroup to Ovi Resource - CLAUDE.md: Small focused function
+// convertLogGroupToResource converts AWS LogGroup to Elava Resource - CLAUDE.md: Small focused function
 func convertLogGroupToResource(logGroup *types.LogGroup, region string) ovitypes.Resource {
 	// Determine status based on retention and activity
 	status := "active"

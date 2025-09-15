@@ -194,7 +194,7 @@ func TestEngine_ExecuteSingle_Delete(t *testing.T) {
 				Type:   "ec2",
 				Status: "running",
 				Tags: types.Tags{
-					OviOwner: "test",
+					ElavaOwner: "test",
 				},
 			},
 		},
@@ -260,8 +260,8 @@ func TestEngine_ExecuteSingle_BlessedProtection(t *testing.T) {
 				Type:   "rds",
 				Status: "running",
 				Tags: types.Tags{
-					OviOwner:   "production",
-					OviBlessed: true,
+					ElavaOwner:   "production",
+					ElavaBlessed: true,
 				},
 			},
 		},
@@ -319,8 +319,8 @@ func TestEngine_Execute_Batch(t *testing.T) {
 
 	mockProvider := &MockProvider{
 		resources: []types.Resource{
-			{ID: "resource-1", Type: "ec2", Tags: types.Tags{OviOwner: "test"}},
-			{ID: "resource-2", Type: "ec2", Tags: types.Tags{OviOwner: "test"}},
+			{ID: "resource-1", Type: "ec2", Tags: types.Tags{ElavaOwner: "test"}},
+			{ID: "resource-2", Type: "ec2", Tags: types.Tags{ElavaOwner: "test"}},
 		},
 	}
 	providers := map[string]providers.CloudProvider{
@@ -556,7 +556,7 @@ func TestEngine_Confirmation(t *testing.T) {
 
 	mockProvider := &MockProvider{
 		resources: []types.Resource{
-			{ID: "resource-1", Type: "ec2", Tags: types.Tags{OviOwner: "test"}},
+			{ID: "resource-1", Type: "ec2", Tags: types.Tags{ElavaOwner: "test"}},
 		},
 	}
 	providers := map[string]providers.CloudProvider{

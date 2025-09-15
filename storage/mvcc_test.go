@@ -24,7 +24,7 @@ func TestMVCCStorage_RecordObservation(t *testing.T) {
 		Provider: "aws",
 		Status:   "running",
 		Tags: types.Tags{
-			OviOwner: "team-web",
+			ElavaOwner: "team-web",
 		},
 	}
 
@@ -65,9 +65,9 @@ func TestMVCCStorage_MultipleObservations(t *testing.T) {
 
 	// Observe multiple resources
 	resources := []types.Resource{
-		{ID: "i-001", Type: "ec2", Tags: types.Tags{OviOwner: "team-web"}},
-		{ID: "i-002", Type: "ec2", Tags: types.Tags{OviOwner: "team-web"}},
-		{ID: "i-003", Type: "ec2", Tags: types.Tags{OviOwner: "team-api"}},
+		{ID: "i-001", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-web"}},
+		{ID: "i-002", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-web"}},
+		{ID: "i-003", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-api"}},
 	}
 
 	// Record batch observation
@@ -96,7 +96,7 @@ func TestMVCCStorage_ResourceDisappears(t *testing.T) {
 	}
 	defer func() { _ = storage.Close() }()
 
-	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-web"}}
+	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-web"}}
 
 	// First observation - resource exists
 	rev1, _ := storage.RecordObservation(resource)
@@ -127,7 +127,7 @@ func TestMVCCStorage_GetStateAtRevision(t *testing.T) {
 	defer func() { _ = storage.Close() }()
 
 	// Simulate resource lifecycle
-	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-web"}}
+	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-web"}}
 
 	// Rev 1: Resource appears
 	rev1, _ := storage.RecordObservation(resource)
@@ -166,10 +166,10 @@ func TestMVCCStorage_QueryByOwner(t *testing.T) {
 
 	// Mix of resources from different owners
 	resources := []types.Resource{
-		{ID: "i-001", Type: "ec2", Tags: types.Tags{OviOwner: "team-web"}},
-		{ID: "i-002", Type: "ec2", Tags: types.Tags{OviOwner: "team-web"}},
-		{ID: "i-003", Type: "ec2", Tags: types.Tags{OviOwner: "team-api"}},
-		{ID: "i-004", Type: "rds", Tags: types.Tags{OviOwner: "team-web"}},
+		{ID: "i-001", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-web"}},
+		{ID: "i-002", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-web"}},
+		{ID: "i-003", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-api"}},
+		{ID: "i-004", Type: "rds", Tags: types.Tags{ElavaOwner: "team-web"}},
 	}
 
 	_, _ = storage.RecordObservationBatch(resources)
@@ -199,7 +199,7 @@ func TestMVCCStorage_Compaction(t *testing.T) {
 	}
 	defer func() { _ = storage.Close() }()
 
-	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-web"}}
+	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-web"}}
 
 	// Create many revisions
 	for i := 0; i < 100; i++ {
@@ -242,13 +242,13 @@ func TestMVCCStorage_ConcurrentAccess(t *testing.T) {
 	}
 	defer func() { _ = storage.Close() }()
 
-	// Simulate multiple Ovi instances writing concurrently
+	// Simulate multiple Elava instances writing concurrently
 	done := make(chan bool, 3)
 
 	// Writer 1
 	go func() {
 		for i := 0; i < 10; i++ {
-			r := types.Resource{ID: "web-" + string(rune(i)), Tags: types.Tags{OviOwner: "team-web"}}
+			r := types.Resource{ID: "web-" + string(rune(i)), Tags: types.Tags{ElavaOwner: "team-web"}}
 			_, _ = storage.RecordObservation(r)
 			time.Sleep(10 * time.Millisecond)
 		}
@@ -258,7 +258,7 @@ func TestMVCCStorage_ConcurrentAccess(t *testing.T) {
 	// Writer 2
 	go func() {
 		for i := 0; i < 10; i++ {
-			r := types.Resource{ID: "api-" + string(rune(i)), Tags: types.Tags{OviOwner: "team-api"}}
+			r := types.Resource{ID: "api-" + string(rune(i)), Tags: types.Tags{ElavaOwner: "team-api"}}
 			_, _ = storage.RecordObservation(r)
 			time.Sleep(10 * time.Millisecond)
 		}
@@ -300,9 +300,9 @@ func TestMVCCStorage_RebuildIndex(t *testing.T) {
 
 	// Add some test data
 	resources := []types.Resource{
-		{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-a"}},
-		{ID: "i-456", Type: "ec2", Tags: types.Tags{OviOwner: "team-b"}},
-		{ID: "i-789", Type: "rds", Tags: types.Tags{OviOwner: "team-a"}},
+		{ID: "i-123", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-a"}},
+		{ID: "i-456", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-b"}},
+		{ID: "i-789", Type: "rds", Tags: types.Tags{ElavaOwner: "team-a"}},
 	}
 
 	// Record observations
@@ -368,8 +368,8 @@ func TestMVCCStorage_Stats(t *testing.T) {
 
 	// Add test data
 	resources := []types.Resource{
-		{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-a"}},
-		{ID: "i-456", Type: "ec2", Tags: types.Tags{OviOwner: "team-b"}},
+		{ID: "i-123", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-a"}},
+		{ID: "i-456", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-b"}},
 	}
 
 	for _, resource := range resources {
@@ -403,7 +403,7 @@ func TestMVCCStorage_CompactWithContext(t *testing.T) {
 	defer func() { _ = storage.Close() }()
 
 	// Add multiple revisions
-	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-a"}}
+	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-a"}}
 	for i := 0; i < 10; i++ {
 		if _, err := storage.RecordObservation(resource); err != nil {
 			t.Fatalf("Failed to record observation: %v", err)
@@ -440,7 +440,7 @@ func TestMVCCStorage_CompactWithContext_Cancellation(t *testing.T) {
 	defer func() { _ = storage.Close() }()
 
 	// Add many revisions
-	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{OviOwner: "team-a"}}
+	resource := types.Resource{ID: "i-123", Type: "ec2", Tags: types.Tags{ElavaOwner: "team-a"}}
 	for i := 0; i < 200; i++ {
 		if _, err := storage.RecordObservation(resource); err != nil {
 			t.Fatalf("Failed to record observation: %v", err)

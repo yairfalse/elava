@@ -106,7 +106,7 @@ func TestAWSProvider_ListResources(t *testing.T) {
 				State:        "running",
 				LaunchTime:   time.Now().Add(-time.Hour),
 				Tags: map[string]string{
-					"Name":      "web-server",
+					"Name":        "web-server",
 					"elava:owner": "team-web",
 				},
 			},
@@ -214,7 +214,7 @@ func TestAWSProvider_CreateResource(t *testing.T) {
 		Type: "ec2",
 		Size: "t3.micro",
 		Tags: types.Tags{
-			OviOwner:    "team-web",
+			ElavaOwner:    "team-web",
 			Environment: "test",
 		},
 	}
@@ -259,7 +259,7 @@ func TestAWSProvider_TagResource(t *testing.T) {
 	ctx := context.Background()
 	tags := map[string]string{
 		"elava:managed": "true",
-		"env":         "prod",
+		"env":           "prod",
 	}
 
 	err := provider.TagResource(ctx, "i-123456", tags)

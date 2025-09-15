@@ -2,12 +2,12 @@
 
 ## Overview
 
-Ovi's MVCC (Multi-Version Concurrency Control) storage system is inspired by etcd's design. It provides time-travel capabilities, concurrent access, and atomic operations for infrastructure state tracking.
+Elava's MVCC (Multi-Version Concurrency Control) storage system is inspired by etcd's design. It provides time-travel capabilities, concurrent access, and atomic operations for infrastructure state tracking.
 
 ## Core Concepts
 
 ### Revisions
-Every operation in Ovi gets a monotonic revision number:
+Every operation in Elava gets a monotonic revision number:
 
 ```go
 type ResourceState struct {
@@ -295,7 +295,7 @@ Based on test results with 1000 resources:
 
 ### Why MVCC?
 1. **Time-travel debugging**: "What did infrastructure look like at 2pm yesterday?"
-2. **Concurrent access**: Multiple Ovi instances can read simultaneously  
+2. **Concurrent access**: Multiple Elava instances can read simultaneously  
 3. **Atomic operations**: Batch observations are all-or-nothing
 4. **Audit support**: Complete history for compliance
 
@@ -336,4 +336,4 @@ Based on test results with 1000 resources:
 
 ---
 
-The MVCC storage system provides Ovi with a solid foundation for tracking infrastructure state over time while maintaining the performance and concurrency characteristics needed for production use.
+The MVCC storage system provides Elava with a solid foundation for tracking infrastructure state over time while maintaining the performance and concurrency characteristics needed for production use.

@@ -3,12 +3,12 @@ package types
 // Tags represents resource tags as a structured type
 // No maps! Everything is explicit
 type Tags struct {
-	// Ovi management tags
-	OviOwner      string `json:"ovi_owner,omitempty"`
-	OviManaged    bool   `json:"ovi_managed,omitempty"`
-	OviBlessed    bool   `json:"ovi_blessed,omitempty"`
-	OviGeneration string `json:"ovi_generation,omitempty"`
-	OviClaimedAt  string `json:"ovi_claimed_at,omitempty"`
+	// Elava management tags
+	ElavaOwner      string `json:"elava_owner,omitempty"`
+	ElavaManaged    bool   `json:"elava_managed,omitempty"`
+	ElavaBlessed    bool   `json:"elava_blessed,omitempty"`
+	ElavaGeneration string `json:"elava_generation,omitempty"`
+	ElavaClaimedAt  string `json:"elava_claimed_at,omitempty"`
 
 	// Standard infrastructure tags
 	Name        string `json:"name,omitempty"`
@@ -25,22 +25,22 @@ type Tags struct {
 	CreatedDate string `json:"created_date,omitempty"`
 }
 
-// IsManaged checks if resource is managed by Ovi
+// IsManaged checks if resource is managed by Elava
 func (t Tags) IsManaged() bool {
-	return t.OviOwner != "" || t.OviManaged
+	return t.ElavaOwner != "" || t.ElavaManaged
 }
 
 // IsBlessed checks if resource should be protected
 func (t Tags) IsBlessed() bool {
-	return t.OviBlessed
+	return t.ElavaBlessed
 }
 
 // GetOwner returns the owner of the resource
 func (t Tags) GetOwner() string {
-	if t.OviOwner != "" {
-		return t.OviOwner
+	if t.ElavaOwner != "" {
+		return t.ElavaOwner
 	}
-	// Fallback to Team if no Ovi owner
+	// Fallback to Team if no Elava owner
 	return t.Team
 }
 
@@ -50,20 +50,20 @@ func (t Tags) GetOwner() string {
 func (t Tags) ToMap() map[string]string {
 	tags := make(map[string]string)
 
-	if t.OviOwner != "" {
-		tags["elava:owner"] = t.OviOwner
+	if t.ElavaOwner != "" {
+		tags["elava:owner"] = t.ElavaOwner
 	}
-	if t.OviManaged {
+	if t.ElavaManaged {
 		tags["elava:managed"] = "true"
 	}
-	if t.OviBlessed {
+	if t.ElavaBlessed {
 		tags["elava:blessed"] = "true"
 	}
-	if t.OviGeneration != "" {
-		tags["elava:generation"] = t.OviGeneration
+	if t.ElavaGeneration != "" {
+		tags["elava:generation"] = t.ElavaGeneration
 	}
-	if t.OviClaimedAt != "" {
-		tags["elava:claimed_at"] = t.OviClaimedAt
+	if t.ElavaClaimedAt != "" {
+		tags["elava:claimed_at"] = t.ElavaClaimedAt
 	}
 	if t.Name != "" {
 		tags["Name"] = t.Name
@@ -106,19 +106,19 @@ func TagsFromMap(tagMap map[string]string) Tags {
 	tags := Tags{}
 
 	if val, ok := tagMap["elava:owner"]; ok {
-		tags.OviOwner = val
+		tags.ElavaOwner = val
 	}
 	if val, ok := tagMap["elava:managed"]; ok && val == "true" {
-		tags.OviManaged = true
+		tags.ElavaManaged = true
 	}
 	if val, ok := tagMap["elava:blessed"]; ok && val == "true" {
-		tags.OviBlessed = true
+		tags.ElavaBlessed = true
 	}
 	if val, ok := tagMap["elava:generation"]; ok {
-		tags.OviGeneration = val
+		tags.ElavaGeneration = val
 	}
 	if val, ok := tagMap["elava:claimed_at"]; ok {
-		tags.OviClaimedAt = val
+		tags.ElavaClaimedAt = val
 	}
 	if val, ok := tagMap["Name"]; ok {
 		tags.Name = val

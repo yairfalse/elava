@@ -306,7 +306,7 @@ func (p *RealAWSProvider) listNATGateways(ctx context.Context, filter types.Reso
 	return resources, nil
 }
 
-// convertS3Tags converts S3 tags to Ovi tags
+// convertS3Tags converts S3 tags to Elava tags
 func (p *RealAWSProvider) convertS3Tags(s3Tags []s3types.Tag) types.Tags {
 	tags := types.Tags{}
 
@@ -316,11 +316,11 @@ func (p *RealAWSProvider) convertS3Tags(s3Tags []s3types.Tag) types.Tags {
 
 		switch key {
 		case "elava:owner", "Owner", "owner":
-			tags.OviOwner = value
+			tags.ElavaOwner = value
 		case "elava:managed":
-			tags.OviManaged = value == "true"
+			tags.ElavaManaged = value == "true"
 		case "elava:blessed":
-			tags.OviBlessed = value == "true"
+			tags.ElavaBlessed = value == "true"
 		case "Environment", "environment", "env":
 			tags.Environment = value
 		case "Team", "team":
@@ -337,18 +337,18 @@ func (p *RealAWSProvider) convertS3Tags(s3Tags []s3types.Tag) types.Tags {
 	return tags
 }
 
-// convertLambdaTags converts Lambda tags to Ovi tags
+// convertLambdaTags converts Lambda tags to Elava tags
 func (p *RealAWSProvider) convertLambdaTags(lambdaTags map[string]string) types.Tags {
 	tags := types.Tags{}
 
 	for key, value := range lambdaTags {
 		switch key {
 		case "elava:owner", "Owner", "owner":
-			tags.OviOwner = value
+			tags.ElavaOwner = value
 		case "elava:managed":
-			tags.OviManaged = value == "true"
+			tags.ElavaManaged = value == "true"
 		case "elava:blessed":
-			tags.OviBlessed = value == "true"
+			tags.ElavaBlessed = value == "true"
 		case "Environment", "environment", "env":
 			tags.Environment = value
 		case "Team", "team":

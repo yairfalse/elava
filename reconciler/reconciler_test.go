@@ -120,7 +120,7 @@ func TestEngine_Reconcile(t *testing.T) {
 						ID:       "i-existing",
 						Type:     "ec2",
 						Provider: "aws",
-						Tags:     types.Tags{OviManaged: true},
+						Tags:     types.Tags{ElavaManaged: true},
 					},
 				},
 			},
@@ -149,7 +149,7 @@ func TestEngine_Reconcile(t *testing.T) {
 					{
 						Type:  "ec2",
 						Count: 1,
-						Tags:  types.Tags{OviManaged: true},
+						Tags:  types.Tags{ElavaManaged: true},
 					},
 				},
 			},
@@ -246,14 +246,14 @@ func TestEngine_BuildDesiredState(t *testing.T) {
 		t.Errorf("buildDesiredState() got %d resources, want %d", len(desired), expectedCount)
 	}
 
-	// Check that all resources are marked as Ovi-managed
+	// Check that all resources are marked as Elava-managed
 	for i, resource := range desired {
-		if !resource.Tags.OviManaged {
-			t.Errorf("Resource[%d] not marked as OviManaged", i)
+		if !resource.Tags.ElavaManaged {
+			t.Errorf("Resource[%d] not marked as ElavaManaged", i)
 		}
 
-		if resource.Tags.OviOwner == "" {
-			t.Errorf("Resource[%d] missing OviOwner", i)
+		if resource.Tags.ElavaOwner == "" {
+			t.Errorf("Resource[%d] missing ElavaOwner", i)
 		}
 
 		if resource.Provider != config.Provider {

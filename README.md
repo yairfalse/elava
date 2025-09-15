@@ -1,19 +1,19 @@
-# Ovi - Day 2 Operations Scanner for AWS
+# Elava - Day 2 Operations Scanner for AWS
 
-Find untracked, untagged, and forgotten resources in your AWS account. Ovi scans your infrastructure and identifies what's not properly managed.
+Find untracked, untagged, and forgotten resources in your AWS account. Elava scans your infrastructure and identifies what's not properly managed.
 
 ```
-     Your AWS Account                    Ovi Scans                    Finds Problems
+     Your AWS Account                    Elava Scans                    Finds Problems
     ┌─────────────────┐                     │                       ┌──────────────┐
     │                 │                     ▼                       │ 🔴 HIGH RISK │
-    │  EC2   RDS  S3  │    ─────────►  [Ovi Scanner]  ─────────►   │ 🟡 MEDIUM    │
+    │  EC2   RDS  S3  │    ─────────►  [Elava Scanner]  ─────────►   │ 🟡 MEDIUM    │
     │  EBS   AMI  EIP │                                             │ 🟢 UNTRACKED │
     │                 │                                             └──────────────┘
     └─────────────────┘                                           
          500+ Resources            Reads tags & metadata            108 Issues Found
 ```
 
-## What Ovi Does Best
+## What Elava Does Best
 
 ### 🔍 **Discovers Everything**
 Scans 10+ AWS resource types to build a complete picture of your infrastructure:
@@ -48,21 +48,21 @@ Intelligently identifies suspicious resources:
 
 ```bash
 # Build
-go build ./cmd/ovi
+go build ./cmd/elava
 
 # Scan everything in your default region
-./ovi scan
+./elava scan
 
 # Scan specific region
-./ovi scan --region us-west-2
+./elava scan --region us-west-2
 
 # Focus on specific resource types
-./ovi scan --filter snapshot   # Just snapshots
-./ovi scan --filter ec2        # Just EC2 instances
-./ovi scan --filter ebs        # Just EBS volumes
+./elava scan --filter snapshot   # Just snapshots
+./elava scan --filter ec2        # Just EC2 instances
+./elava scan --filter ebs        # Just EBS volumes
 
 # Show only high-risk findings
-./ovi scan --risk-only
+./elava scan --risk-only
 ```
 
 ## Real Example Output
@@ -89,13 +89,13 @@ nat-12345678          nat_gw    available    🔴 high     Expensive resource, n
    • Add owner tags to 67 resources
    • Verify IaC management for 18 resources
 
-🔒 Safety: Ovi operates read-only. We detect, you decide.
+🔒 Safety: Elava operates read-only. We detect, you decide.
 ```
 
 ## How It Works
 
 ```
-AWS Account → Ovi Scanner → Detection Rules → Risk Assessment → Report
+AWS Account → Elava Scanner → Detection Rules → Risk Assessment → Report
      ↑                             ↓
      └──── Read-Only API ←─────────┘
 ```
@@ -117,21 +117,21 @@ AWS Account → Ovi Scanner → Detection Rules → Risk Assessment → Report
 
 ```bash
 # Clone and build
-git clone https://github.com/yairfalse/ovi.git
+git clone https://github.com/yairfalse/elava.git
 cd ovi
-go build ./cmd/ovi
+go build ./cmd/elava
 
 # Configure AWS credentials (standard AWS CLI/SDK methods)
 export AWS_REGION=us-east-1
 export AWS_PROFILE=production
 
 # Run your first scan
-./ovi scan
+./elava scan
 ```
 
 ## Required AWS Permissions
 
-Ovi needs read-only access to scan your resources:
+Elava needs read-only access to scan your resources:
 
 ```json
 {
@@ -151,7 +151,7 @@ Ovi needs read-only access to scan your resources:
 }
 ```
 
-## Why Ovi?
+## Why Elava?
 
 - **🚀 Fast**: Parallel scanning gets results in seconds
 - **🔒 Safe**: Read-only operations, never modifies anything
@@ -161,7 +161,7 @@ Ovi needs read-only access to scan your resources:
 
 ## Contributing
 
-We'd love your help making Ovi better! Key areas:
+We'd love your help making Elava better! Key areas:
 - Adding more AWS resource types
 - Improving detection patterns
 - Supporting other clouds (GCP, Azure)

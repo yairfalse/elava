@@ -8,20 +8,20 @@ import (
 	"github.com/yairfalse/elava/telemetry"
 )
 
-// initTelemetry initializes OTEL for Ovi
-// Can be disabled with OVI_TELEMETRY_DISABLED=true
+// initTelemetry initializes OTEL for Elava
+// Can be disabled with ELAVA_TELEMETRY_DISABLED=true
 func initTelemetry(ctx context.Context) func() {
 	// Check if telemetry is disabled
-	if os.Getenv("OVI_TELEMETRY_DISABLED") == "true" {
+	if os.Getenv("ELAVA_TELEMETRY_DISABLED") == "true" {
 		log.Println("📡 Telemetry disabled")
 		return func() {}
 	}
 
 	// Configure OTEL
 	cfg := telemetry.Config{
-		ServiceName:    "ovi",
+		ServiceName:    "elava",
 		ServiceVersion: "0.1.0", // TODO: Get from build
-		Environment:    os.Getenv("OVI_ENVIRONMENT"),
+		Environment:    os.Getenv("ELAVA_ENVIRONMENT"),
 		OTELEndpoint:   os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		Insecure:       true, // For local development
 	}
@@ -52,5 +52,5 @@ func initTelemetry(ctx context.Context) func() {
 
 // Environment variables for configuration:
 // - OTEL_EXPORTER_OTLP_ENDPOINT: Where to send telemetry (default: localhost:4317)
-// - OVI_TELEMETRY_DISABLED: Set to "true" to disable telemetry
-// - OVI_ENVIRONMENT: Environment name (dev, staging, prod)
+// - ELAVA_TELEMETRY_DISABLED: Set to "true" to disable telemetry
+// - ELAVA_ENVIRONMENT: Environment name (dev, staging, prod)

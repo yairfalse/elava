@@ -142,10 +142,10 @@ func (e *Engine) buildDesiredState(config Config) []types.Resource {
 				Tags:     spec.Tags,
 			}
 
-			// Mark as Ovi-managed
-			resource.Tags.OviManaged = true
-			if resource.Tags.OviOwner == "" {
-				resource.Tags.OviOwner = "ovi"
+			// Mark as Elava-managed
+			resource.Tags.ElavaManaged = true
+			if resource.Tags.ElavaOwner == "" {
+				resource.Tags.ElavaOwner = "ovi"
 			}
 
 			desired = append(desired, resource)

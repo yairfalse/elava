@@ -16,8 +16,8 @@ func TestDefaultSafetyChecker_CheckBlessedResource(t *testing.T) {
 				ID:   "blessed-db",
 				Type: "rds",
 				Tags: types.Tags{
-					OviBlessed: true,
-					OviOwner:   "production",
+					ElavaBlessed: true,
+					ElavaOwner:   "production",
 				},
 			},
 		},
@@ -101,7 +101,7 @@ func TestDefaultSafetyChecker_CheckResourceExists(t *testing.T) {
 				ID:   "existing-resource",
 				Type: "ec2",
 				Tags: types.Tags{
-					OviOwner: "test",
+					ElavaOwner: "test",
 				},
 			},
 		},
@@ -188,7 +188,7 @@ func TestDefaultSafetyChecker_CheckDestructiveAction(t *testing.T) {
 				ID:   "prod-db",
 				Type: "rds",
 				Tags: types.Tags{
-					OviOwner:    "production",
+					ElavaOwner:    "production",
 					Environment: "production",
 				},
 			},
@@ -196,7 +196,7 @@ func TestDefaultSafetyChecker_CheckDestructiveAction(t *testing.T) {
 				ID:   "dev-server",
 				Type: "ec2",
 				Tags: types.Tags{
-					OviOwner:    "development",
+					ElavaOwner:    "development",
 					Environment: "dev",
 				},
 			},
@@ -279,8 +279,8 @@ func TestDefaultSafetyChecker_CheckResourceOwnership(t *testing.T) {
 				ID:   "managed-resource",
 				Type: "ec2",
 				Tags: types.Tags{
-					OviOwner:   "team-web",
-					OviManaged: true,
+					ElavaOwner:   "team-web",
+					ElavaManaged: true,
 				},
 			},
 			{
@@ -360,8 +360,8 @@ func TestDefaultSafetyChecker_AllChecks(t *testing.T) {
 				ID:   "test-resource",
 				Type: "ec2",
 				Tags: types.Tags{
-					OviOwner:   "test",
-					OviManaged: true,
+					ElavaOwner:   "test",
+					ElavaManaged: true,
 				},
 			},
 		},

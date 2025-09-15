@@ -1,10 +1,10 @@
-# Ovi Documentation
+# Elava Documentation
 
-**Ovi** is a living infrastructure reconciliation engine that acts as a "benevolent dictator" for cloud resources.
+**Elava** is a living infrastructure reconciliation engine that acts as a "benevolent dictator" for cloud resources.
 
 ## Overview
 
-Ovi continuously observes your cloud infrastructure, compares it with desired state, and makes intelligent decisions about what actions to take. Unlike traditional tools, Ovi is stateless but has memory through an etcd-inspired MVCC storage system.
+Elava continuously observes your cloud infrastructure, compares it with desired state, and makes intelligent decisions about what actions to take. Unlike traditional tools, Elava is stateless but has memory through an etcd-inspired MVCC storage system.
 
 ## Key Principles
 
@@ -43,9 +43,9 @@ go build ./cmd/ovi
 ./ovi reconcile --config infrastructure.yaml
 ```
 
-## What Makes Ovi Different
+## What Makes Elava Different
 
-| Feature | Terraform | Ovi |
+| Feature | Terraform | Elava |
 |---------|-----------|-----|
 | State Management | State files | MVCC storage |
 | Coordination | Locking | Claims + WAL |
@@ -64,7 +64,7 @@ go build ./cmd/ovi
 
 ## Test Coverage
 
-Ovi has comprehensive test coverage with 67+ passing tests across all components:
+Elava has comprehensive test coverage with 67+ passing tests across all components:
 
 ```bash
 go test ./... -v
@@ -77,4 +77,4 @@ go test ./... -v
 
 ---
 
-*Ovi: Infrastructure reconciliation done right.*
+*Elava: Infrastructure reconciliation done right.*

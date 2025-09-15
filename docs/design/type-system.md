@@ -2,7 +2,7 @@
 
 ## Philosophy: No Maps Allowed
 
-Ovi enforces stricter typing than even CLAUDE.md requires. The core principle: **no `map[string]string` or `map[string]interface{}` anywhere in the codebase**.
+Elava enforces stricter typing than even CLAUDE.md requires. The core principle: **no `map[string]string` or `map[string]interface{}` anywhere in the codebase**.
 
 ## Structured Tags
 
@@ -22,16 +22,16 @@ Problems with this approach:
 - **Runtime errors**: Missing tags cause nil pointer exceptions
 - **Poor documentation**: No clear schema for expected tags
 
-### Ovi's Structured Approach
+### Elava's Structured Approach
 ```go
-// ✅ Ovi's approach
+// ✅ Elava's approach
 type Tags struct {
-    // Ovi management tags
-    OviOwner      string `json:"ovi_owner,omitempty"`
-    OviManaged    bool   `json:"ovi_managed,omitempty"`
-    OviBlessed    bool   `json:"ovi_blessed,omitempty"`
-    OviGeneration string `json:"ovi_generation,omitempty"`
-    OviClaimedAt  string `json:"ovi_claimed_at,omitempty"`
+    // Elava management tags
+    ElavaOwner      string `json:"ovi_owner,omitempty"`
+    ElavaManaged    bool   `json:"ovi_managed,omitempty"`
+    ElavaBlessed    bool   `json:"ovi_blessed,omitempty"`
+    ElavaGeneration string `json:"ovi_generation,omitempty"`
+    ElavaClaimedAt  string `json:"ovi_claimed_at,omitempty"`
     
     // Standard infrastructure tags
     Name        string `json:"name,omitempty"`
@@ -243,10 +243,10 @@ Since cloud provider APIs use maps, we provide conversion functions:
 func (t Tags) ToMap() map[string]string {
     tags := make(map[string]string)
     
-    if t.OviOwner != "" {
-        tags["elava:owner"] = t.OviOwner
+    if t.ElavaOwner != "" {
+        tags["elava:owner"] = t.ElavaOwner
     }
-    if t.OviManaged {
+    if t.ElavaManaged {
         tags["elava:managed"] = "true"
     }
     // ... other fields
@@ -259,10 +259,10 @@ func TagsFromMap(tagMap map[string]string) Tags {
     tags := Tags{}
     
     if val, ok := tagMap["elava:owner"]; ok {
-        tags.OviOwner = val
+        tags.ElavaOwner = val
     }
     if val, ok := tagMap["elava:managed"]; ok && val == "true" {
-        tags.OviManaged = true
+        tags.ElavaManaged = true
     }
     // ... other fields
     
@@ -315,16 +315,16 @@ func (r *Resource) Matches(filter ResourceFilter) bool {
 
 // Tags methods
 func (t Tags) IsManaged() bool {
-    return t.OviOwner != "" || t.OviManaged
+    return t.ElavaOwner != "" || t.ElavaManaged
 }
 
 func (t Tags) IsBlessed() bool {
-    return t.OviBlessed
+    return t.ElavaBlessed
 }
 
 func (t Tags) GetOwner() string {
-    if t.OviOwner != "" {
-        return t.OviOwner
+    if t.ElavaOwner != "" {
+        return t.ElavaOwner
     }
     return t.Team // Fallback
 }
@@ -401,7 +401,7 @@ func createResource() Resource {
     return Resource{
         Tags: Tags{
             Environment: "prod",    // String, clear intent
-            OviManaged:  true,      // Boolean, no "true" strings
+            ElavaManaged:  true,      // Boolean, no "true" strings
             Team:        "platform", // Explicit field names
         },
     }
@@ -411,7 +411,7 @@ func createResource() Resource {
 ### 4. Easy Validation
 ```go
 func validateTags(tags Tags) error {
-    if tags.OviOwner == "" {
+    if tags.ElavaOwner == "" {
         return fmt.Errorf("ovi_owner is required")
     }
     if tags.Environment == "" {
@@ -434,12 +434,12 @@ func TestResource_IsManaged(t *testing.T) {
     }{
         {
             name:     "managed with owner",
-            tags:     Tags{OviOwner: "team-web"},
+            tags:     Tags{ElavaOwner: "team-web"},
             expected: true,
         },
         {
             name:     "managed with flag",
-            tags:     Tags{OviManaged: true},
+            tags:     Tags{ElavaManaged: true},
             expected: true,
         },
         {
@@ -523,4 +523,4 @@ func (c Config) Validate() error {
 
 ---
 
-This type system makes Ovi's codebase more maintainable, safer, and easier to work with than traditional infrastructure tools that rely heavily on untyped maps and interfaces.
+This type system makes Elava's codebase more maintainable, safer, and easier to work with than traditional infrastructure tools that rely heavily on untyped maps and interfaces.

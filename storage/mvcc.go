@@ -63,7 +63,7 @@ func (r *ResourceState) Less(than *ResourceState) bool {
 
 // NewMVCCStorage creates a new MVCC storage instance
 func NewMVCCStorage(dir string) (*MVCCStorage, error) {
-	dbPath := filepath.Join(dir, "ovi.db")
+	dbPath := filepath.Join(dir, "elava.db")
 
 	db, err := bbolt.Open(dbPath, 0600, nil)
 	if err != nil {

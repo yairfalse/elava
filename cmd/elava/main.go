@@ -17,7 +17,7 @@ func main() {
 	command := os.Args[1]
 	switch command {
 	case "version":
-		fmt.Printf("Ovi %s - Day 2 Operations Companion\n", version)
+		fmt.Printf("Elava %s - Day 2 Operations Companion\n", version)
 	case "scan":
 		if err := runScanCommand(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -61,11 +61,11 @@ func runScanCommand() error {
 }
 
 func printUsage() {
-	fmt.Println("Ovi - Day 2 Operations Companion")
+	fmt.Println("Elava - Day 2 Operations Companion")
 	fmt.Println("Find and clean up untracked resources in your cloud")
 	fmt.Println()
 	fmt.Println("Usage:")
-	fmt.Println("  ovi <command> [options]")
+	fmt.Println("  elava <command> [options]")
 	fmt.Println()
 	fmt.Println("Commands:")
 	fmt.Println("  scan      Find untracked resources")
@@ -76,10 +76,10 @@ func printUsage() {
 	fmt.Println("  help      Show this help")
 	fmt.Println()
 	fmt.Println("Examples:")
-	fmt.Println("  ovi scan                    # Scan current region")
-	fmt.Println("  ovi scan --region us-west-2 # Scan specific region")
-	fmt.Println("  ovi scan --filter ec2       # Only scan EC2 instances")
-	fmt.Println("  ovi scan --filter s3        # Only scan S3 buckets")
-	fmt.Println("  ovi scan --filter ebs       # Only scan unattached EBS volumes")
-	fmt.Println("  ovi scan --risk-only        # Only high-risk resources")
+	fmt.Println("  elava scan                    # Scan current region")
+	fmt.Println("  elava scan --region us-west-2 # Scan specific region")
+	fmt.Println("  elava scan --filter ec2       # Only scan EC2 instances")
+	fmt.Println("  elava scan --filter s3        # Only scan S3 buckets")
+	fmt.Println("  elava scan --filter ebs       # Only scan unattached EBS volumes")
+	fmt.Println("  elava scan --risk-only        # Only high-risk resources")
 }

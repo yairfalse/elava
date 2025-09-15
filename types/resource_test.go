@@ -14,19 +14,19 @@ func TestResource_IsManaged(t *testing.T) {
 		{
 			name: "managed with owner tag",
 			resource: Resource{
-				Tags: Tags{OviOwner: "team-web"},
+				Tags: Tags{ElavaOwner: "team-web"},
 			},
 			want: true,
 		},
 		{
 			name: "managed with managed tag",
 			resource: Resource{
-				Tags: Tags{OviManaged: true},
+				Tags: Tags{ElavaManaged: true},
 			},
 			want: true,
 		},
 		{
-			name: "not managed - no ovi tags",
+			name: "not managed - no elava tags",
 			resource: Resource{
 				Tags: Tags{Name: "test"},
 			},
@@ -57,14 +57,14 @@ func TestResource_IsBlessed(t *testing.T) {
 		{
 			name: "blessed resource",
 			resource: Resource{
-				Tags: Tags{OviBlessed: true},
+				Tags: Tags{ElavaBlessed: true},
 			},
 			want: true,
 		},
 		{
 			name: "not blessed - false value",
 			resource: Resource{
-				Tags: Tags{OviBlessed: false},
+				Tags: Tags{ElavaBlessed: false},
 			},
 			want: false,
 		},
@@ -180,7 +180,7 @@ func TestResourceCreation(t *testing.T) {
 		CreatedAt:  time.Now(),
 		LastSeenAt: time.Now(),
 		Tags: Tags{
-			OviOwner:    "team-web",
+			ElavaOwner:    "team-web",
 			Environment: "prod",
 		},
 	}
