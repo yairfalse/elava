@@ -28,7 +28,7 @@ issues:
   exclude-files:
     # Legacy code with complexity issues - will refactor later
     - "providers/aws/.*"
-    - "cmd/ovi/scan.go"
-    - "cmd/ovi/otel_init.go"
+    - "cmd/elava/scan.go"
+    - "cmd/elava/otel_init.go"
     - "telemetry/otel.go"
     - "storage/mvcc_test.go"

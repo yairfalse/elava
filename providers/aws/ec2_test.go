@@ -214,7 +214,7 @@ func TestAWSProvider_CreateResource(t *testing.T) {
 		Type: "ec2",
 		Size: "t3.micro",
 		Tags: types.Tags{
-			ElavaOwner:    "team-web",
+			ElavaOwner:  "team-web",
 			Environment: "test",
 		},
 	}
