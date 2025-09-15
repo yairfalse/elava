@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/google/btree"
+	"github.com/yairfalse/ovi/telemetry"
 	"github.com/yairfalse/ovi/types"
 	"go.etcd.io/bbolt"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Bucket names in bbolt
@@ -36,6 +38,10 @@ type MVCCStorage struct {
 
 	// Path to storage directory
 	dir string
+
+	// Observability
+	logger *telemetry.Logger
+	tracer trace.Tracer
 }
 
 // ResourceState tracks a resource's state in the index
