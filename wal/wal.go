@@ -49,7 +49,7 @@ func Open(dir string) (*WAL, error) {
 	}
 
 	// Use timestamp in filename for rotation
-	filename := fmt.Sprintf("ovi-%s.wal", time.Now().Format("20060102-150405"))
+	filename := fmt.Sprintf("elava-%s.wal", time.Now().Format("20060102-150405"))
 	path := filepath.Join(dir, filename)
 
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600) // #nosec G304 - path is constructed from trusted dir
@@ -200,7 +200,7 @@ func (r *Reader) Close() error {
 
 // Replay replays WAL entries from a specific time
 func Replay(dir string, since time.Time, handler func(*Entry) error) error {
-	files, err := filepath.Glob(filepath.Join(dir, "ovi-*.wal"))
+	files, err := filepath.Glob(filepath.Join(dir, "elava-*.wal"))
 	if err != nil {
 		return fmt.Errorf("failed to list WAL files: %w", err)
 	}
