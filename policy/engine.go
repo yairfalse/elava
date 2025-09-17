@@ -216,30 +216,44 @@ func (pe *PolicyEngine) parseEvalResults(results rego.ResultSet, result *PolicyR
 }
 
 func (pe *PolicyEngine) bindPolicyValue(key string, value interface{}, result *PolicyResult) {
+	if pe.bindStringField(key, value, result) {
+		return
+	}
+	if pe.bindFloatField(key, value, result) {
+		return
+	}
+	result.Metadata[key] = value
+}
+
+func (pe *PolicyEngine) bindStringField(key string, value interface{}, result *PolicyResult) bool {
+	str, ok := value.(string)
+	if !ok {
+		return false
+	}
+
 	switch key {
 	case "decision":
-		if str, ok := value.(string); ok {
-			result.Decision = str
-		}
+		result.Decision = str
 	case "action":
-		if str, ok := value.(string); ok {
-			result.Action = str
-		}
+		result.Action = str
 	case "reason":
-		if str, ok := value.(string); ok {
-			result.Reason = str
-		}
+		result.Reason = str
 	case "risk":
-		if str, ok := value.(string); ok {
-			result.Risk = str
-		}
-	case "confidence":
+		result.Risk = str
+	default:
+		return false
+	}
+	return true
+}
+
+func (pe *PolicyEngine) bindFloatField(key string, value interface{}, result *PolicyResult) bool {
+	if key == "confidence" {
 		if num, ok := value.(float64); ok {
 			result.Confidence = num
+			return true
 		}
-	default:
-		result.Metadata[key] = value
 	}
+	return false
 }
 
 // aggregateResults combines multiple policy results into a final decision
