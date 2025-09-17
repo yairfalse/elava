@@ -44,6 +44,40 @@ func (t Tags) GetOwner() string {
 	return t.Team
 }
 
+// Get returns the value of a tag by key name
+func (t Tags) Get(key string) string {
+	switch key {
+	case "elava:owner", "elava_owner":
+		return t.ElavaOwner
+	case "elava:generation", "elava_generation":
+		return t.ElavaGeneration
+	case "elava:claimed_at", "elava_claimed_at":
+		return t.ElavaClaimedAt
+	case "Name", "name":
+		return t.Name
+	case "Environment", "environment":
+		return t.Environment
+	case "Team", "team":
+		return t.Team
+	case "Project", "project":
+		return t.Project
+	case "CostCenter", "cost_center":
+		return t.CostCenter
+	case "Application", "application":
+		return t.Application
+	case "Owner", "owner":
+		return t.Owner
+	case "Contact", "contact":
+		return t.Contact
+	case "CreatedBy", "created_by":
+		return t.CreatedBy
+	case "CreatedDate", "created_date":
+		return t.CreatedDate
+	default:
+		return ""
+	}
+}
+
 // ToMap converts structured tags to map for AWS API compatibility
 //
 //nolint:gocyclo // Simple field mapping, complexity is acceptable
