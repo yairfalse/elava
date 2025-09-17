@@ -188,7 +188,7 @@ func TestDefaultSafetyChecker_CheckDestructiveAction(t *testing.T) {
 				ID:   "prod-db",
 				Type: "rds",
 				Tags: types.Tags{
-					ElavaOwner:    "production",
+					ElavaOwner:  "production",
 					Environment: "production",
 				},
 			},
@@ -196,7 +196,7 @@ func TestDefaultSafetyChecker_CheckDestructiveAction(t *testing.T) {
 				ID:   "dev-server",
 				Type: "ec2",
 				Tags: types.Tags{
-					ElavaOwner:    "development",
+					ElavaOwner:  "development",
 					Environment: "dev",
 				},
 			},

@@ -1,6 +1,6 @@
 # Binaries
-ovi
-cmd/ovi/ovi
+elava
+cmd/elava/elava
 *.exe
 *.exe~
 *.dll

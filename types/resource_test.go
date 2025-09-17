@@ -180,7 +180,7 @@ func TestResourceCreation(t *testing.T) {
 		CreatedAt:  time.Now(),
 		LastSeenAt: time.Now(),
 		Tags: Tags{
-			ElavaOwner:    "team-web",
+			ElavaOwner:  "team-web",
 			Environment: "prod",
 		},
 	}
