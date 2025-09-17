@@ -1,0 +1,123 @@
+# Elava Configuration Example
+# Place this file at ~/.elava/config.yaml or specify with --config flag
+
+# Scanning strategy configuration
+scanning:
+  # Global settings
+  enabled: true
+  adaptive_hours: true  # Scan more frequently during work hours (9-6 local time)
+  
+  # Define your own tiers based on your infrastructure
+  tiers:
+    # Tier 1: Mission critical - scan every 15 minutes
+    critical:
+      description: "Production databases and expensive resources"
+      scan_interval: 15m
+      patterns:
+        - type: "rds"
+          tags: 
+            environment: "production"
+        - type: "nat_gateway"  # These cost $45/month minimum!
+        - type: "ec2"
+          instance_type_pattern: "*xlarge"  # Large instances
+        - tags:
+            tier: "tier-0"  # Your custom critical tag
+      
+    # Tier 2: Important - scan hourly  
+    important:
+      description: "Regular production resources"
+      scan_interval: 1h
+      patterns:
+        - tags:
+            environment: "production"
+        - status: "running"
+          tags:
+            environment: "staging"  # Running staging resources
+      
+    # Tier 3: Standard - scan every 4 hours
+    standard:
+      description: "Development and non-critical resources"  
+      scan_interval: 4h
+      patterns:
+        - tags:
+            environment: ["development", "dev", "test"]
+        - type: "ec2"
+          status: "stopped"  # Stopped instances still cost for storage
+    
+    # Tier 4: Archive - scan daily
+    archive:
+      description: "Rarely changing resources"
+      scan_interval: 24h
+      patterns:
+        - type: ["snapshot", "ami", "backup"]
+        - tags:
+            lifecycle: "archive"
+
+  # What changes to detect and alert on
+  change_detection:
+    enabled: true
+    check_interval: 5m
+    alert_on:
+      - new_untagged_resources: true  # Alert on resources without owner
+      - status_changes: true           # Running -> stopped, etc
+      - disappeared_resources: true    # Resources that vanished
+      - cost_increases: true           # Size changes that increase cost
+      - tag_changes: ["Owner", "Environment", "Project", "CostCenter"]
+    
+  # Performance tuning for your scale
+  performance:
+    batch_size: 1000      # Process resources in chunks
+    parallel_workers: 4   # Concurrent API calls
+    rate_limit: 100      # Max API calls per second
+    
+  # Storage settings
+  storage:
+    path: "~/.elava/data"
+    retention:
+      hot_days: 7        # Keep detailed recent data
+      warm_days: 30      # Keep daily summaries  
+      cold_days: 90      # Keep weekly summaries
+      archive_days: 365  # Keep monthly summaries
+
+# Provider-specific settings
+providers:
+  aws:
+    regions:
+      - us-east-1
+      - us-west-2
+      - eu-west-1
+    # Skip certain resource types entirely
+    skip_types:
+      - cloudformation  # If you don't use CF
+      - backup         # If you use different backup solution
+    
+# Alerting (future feature)
+alerts:
+  slack:
+    enabled: false
+    webhook_url: ""
+    alert_on: ["new_untagged", "disappeared", "cost_spike"]
+  
+  email:
+    enabled: false
+    recipients: []
+
+# Waste detection thresholds
+waste_detection:
+  stopped_instance_days: 7  # Flag instances stopped > 7 days
+  unattached_volume_days: 3  # Flag unattached EBS volumes
+  unused_elastic_ip: true    # Flag unassociated EIPs ($3.6/month each!)
+  old_snapshots_days: 30     # Flag snapshots older than 30 days
+  
+# Custom business rules (using OPA - future)
+custom_rules:
+  - name: "production_must_have_owner"
+    description: "All production resources must have an Owner tag"
+    rule: |
+      tags.Environment == "production" -> tags.Owner != ""
+      
+  - name: "dev_instances_small_only"  
+    description: "Dev instances should be t3.micro or t3.small"
+    rule: |
+      tags.Environment == "development" && type == "ec2" -> 
+        instance_type in ["t3.micro", "t3.small"]

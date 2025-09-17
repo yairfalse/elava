@@ -1,0 +1,61 @@
+version: "1.0"
+provider: "aws"
+region: "us-east-1"
+
+# Tiered scanning configuration
+scanning:
+  enabled: true
+  adaptive_hours: true  # Scan 2x more during work hours
+
+  # Define your tiers
+  tiers:
+    critical:
+      description: "Mission critical - production databases and expensive resources"
+      scan_interval: 15m
+      patterns:
+        - type: "rds"
+          tags:
+            environment: "production"
+        - type: "nat_gateway"  # $45/month minimum!
+        - type: "ec2"
+          instance_type_pattern: "*xlarge"  # Large instances
+
+    production:
+      description: "Regular production resources"
+      scan_interval: 1h
+      patterns:
+        - tags:
+            environment: "production"
+        - status: "running"
+
+    standard:
+      description: "Development and staging"
+      scan_interval: 4h
+      patterns:
+        - tags:
+            environment: "development"
+        - tags:
+            environment: "staging"
+
+    archive:
+      description: "Rarely changing resources"
+      scan_interval: 24h
+      patterns:
+        - types: ["snapshot", "ami"]
+        - status: "stopped"
+
+  # Change detection settings
+  change_detection:
+    enabled: true
+    check_interval: 5m
+    alert_on:
+      new_untagged_resources: true
+      status_changes: true
+      disappeared_resources: true
+      tag_changes: ["Owner", "Environment"]
+
+  # Performance settings
+  performance:
+    batch_size: 1000
+    parallel_workers: 4
+    rate_limit: 100
