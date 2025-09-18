@@ -89,133 +89,176 @@ func (m *MockCoordinator) IsResourceClaimed(ctx context.Context, resourceID stri
 }
 
 func TestEngine_Reconcile(t *testing.T) {
-	// Setup test storage and WAL
+	storage, walInstance := setupTestInfrastructure(t)
+	defer func() { _ = storage.Close() }()
+	defer func() { _ = walInstance.Close() }()
+
+	tests := getReconcileTestCases()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := setupTestEngine(tt, storage, walInstance)
+			runReconcileTest(t, engine, tt)
+		})
+	}
+}
+
+// setupTestInfrastructure creates test storage and WAL
+func setupTestInfrastructure(t *testing.T) (*storage.MVCCStorage, *wal.WAL) {
 	tmpDir := t.TempDir()
+
 	storage, err := storage.NewMVCCStorage(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer func() { _ = storage.Close() }()
 
 	walInstance, err := wal.Open(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create WAL: %v", err)
 	}
-	defer func() { _ = walInstance.Close() }()
 
-	tests := []struct {
-		name              string
-		observer          Observer
-		comparator        Comparator
-		decisionMaker     DecisionMaker
-		config            Config
-		expectedDecisions int
-		shouldError       bool
-	}{
+	return storage, walInstance
+}
+
+// reconcileTestCase defines a test case for reconciliation
+type reconcileTestCase struct {
+	name              string
+	observer          Observer
+	comparator        Comparator
+	decisionMaker     DecisionMaker
+	config            Config
+	expectedDecisions int
+	shouldError       bool
+}
+
+// getReconcileTestCases returns all test cases
+func getReconcileTestCases() []reconcileTestCase {
+	return []reconcileTestCase{
 		{
-			name: "successful reconciliation",
-			observer: &MockObserver{
-				resources: []types.Resource{
-					{
-						ID:       "i-existing",
-						Type:     "ec2",
-						Provider: "aws",
-						Tags:     types.Tags{ElavaManaged: true},
-					},
-				},
-			},
-			comparator: &MockComparator{
-				diffs: []Diff{
-					{
-						Type:       DiffMissing,
-						ResourceID: "i-missing",
-						Reason:     "Test missing resource",
-					},
-				},
-			},
-			decisionMaker: &MockDecisionMaker{
-				decisions: []types.Decision{
-					{
-						Action:     "create",
-						ResourceID: "i-missing",
-						Reason:     "Test decision",
-					},
-				},
-			},
-			config: Config{
-				Provider: "aws",
-				Region:   "us-east-1",
-				Resources: []types.ResourceSpec{
-					{
-						Type:  "ec2",
-						Count: 1,
-						Tags:  types.Tags{ElavaManaged: true},
-					},
-				},
-			},
+			name:              "successful reconciliation",
+			observer:          createMockObserverWithResources(),
+			comparator:        createMockComparatorWithDiffs(),
+			decisionMaker:     createMockDecisionMakerWithDecisions(),
+			config:            createTestConfig(),
 			expectedDecisions: 1,
 			shouldError:       false,
 		},
 		{
-			name: "empty reconciliation",
-			observer: &MockObserver{
-				resources: []types.Resource{},
-			},
-			comparator: &MockComparator{
-				diffs: []Diff{},
-			},
-			decisionMaker: &MockDecisionMaker{
-				decisions: []types.Decision{},
-			},
-			config: Config{
-				Provider:  "aws",
-				Region:    "us-east-1",
-				Resources: []types.ResourceSpec{},
-			},
+			name:              "empty reconciliation",
+			observer:          &MockObserver{resources: []types.Resource{}},
+			comparator:        &MockComparator{diffs: []Diff{}},
+			decisionMaker:     &MockDecisionMaker{decisions: []types.Decision{}},
+			config:            createEmptyTestConfig(),
 			expectedDecisions: 0,
 			shouldError:       false,
 		},
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			coordinator := NewMockCoordinator()
-			options := ReconcilerOptions{
-				DryRun:          false,
-				MaxConcurrency:  1,
-				ClaimTTL:        time.Minute,
-				SkipDestructive: false,
-			}
+// createMockObserverWithResources creates a mock observer with test resources
+func createMockObserverWithResources() *MockObserver {
+	return &MockObserver{
+		resources: []types.Resource{
+			{
+				ID:       "i-existing",
+				Type:     "ec2",
+				Provider: "aws",
+				Tags:     types.Tags{ElavaManaged: true},
+			},
+		},
+	}
+}
 
-			engine := NewEngine(
-				tt.observer,
-				tt.comparator,
-				tt.decisionMaker,
-				coordinator,
-				storage,
-				walInstance,
-				"test-instance",
-				options,
-			)
+// createMockComparatorWithDiffs creates a mock comparator with test diffs
+func createMockComparatorWithDiffs() *MockComparator {
+	return &MockComparator{
+		diffs: []Diff{
+			{
+				Type:       DiffMissing,
+				ResourceID: "i-missing",
+				Reason:     "Test missing resource",
+			},
+		},
+	}
+}
 
-			ctx := context.Background()
-			decisions, err := engine.Reconcile(ctx, tt.config)
+// createMockDecisionMakerWithDecisions creates a mock decision maker with test decisions
+func createMockDecisionMakerWithDecisions() *MockDecisionMaker {
+	return &MockDecisionMaker{
+		decisions: []types.Decision{
+			{
+				Action:     "create",
+				ResourceID: "i-missing",
+				Reason:     "Test decision",
+			},
+		},
+	}
+}
 
-			if tt.shouldError {
-				if err == nil {
-					t.Errorf("Reconcile() expected error but got none")
-				}
-				return
-			}
+// createTestConfig creates a test configuration
+func createTestConfig() Config {
+	return Config{
+		Provider: "aws",
+		Region:   "us-east-1",
+		Resources: []types.ResourceSpec{
+			{
+				Type:  "ec2",
+				Count: 1,
+				Tags:  types.Tags{ElavaManaged: true},
+			},
+		},
+	}
+}
 
-			if err != nil {
-				t.Fatalf("Reconcile() error = %v", err)
-			}
+// createEmptyTestConfig creates an empty test configuration
+func createEmptyTestConfig() Config {
+	return Config{
+		Provider:  "aws",
+		Region:    "us-east-1",
+		Resources: []types.ResourceSpec{},
+	}
+}
 
-			if len(decisions) != tt.expectedDecisions {
-				t.Errorf("Reconcile() got %d decisions, want %d", len(decisions), tt.expectedDecisions)
-			}
-		})
+// setupTestEngine creates and configures a test engine
+func setupTestEngine(tt reconcileTestCase, storage *storage.MVCCStorage, walInstance *wal.WAL) *Engine {
+	coordinator := NewMockCoordinator()
+	options := ReconcilerOptions{
+		DryRun:          false,
+		MaxConcurrency:  1,
+		ClaimTTL:        time.Minute,
+		SkipDestructive: false,
+	}
+
+	return NewEngine(
+		tt.observer,
+		tt.comparator,
+		tt.decisionMaker,
+		coordinator,
+		storage,
+		walInstance,
+		"test-instance",
+		options,
+	)
+}
+
+// runReconcileTest executes a reconcile test case
+func runReconcileTest(t *testing.T, engine *Engine, tt reconcileTestCase) {
+	ctx := context.Background()
+	decisions, err := engine.Reconcile(ctx, tt.config)
+
+	if tt.shouldError {
+		if err == nil {
+			t.Errorf("Reconcile() expected error but got none")
+		}
+		return
+	}
+
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	if len(decisions) != tt.expectedDecisions {
+		t.Errorf("Reconcile() got %d decisions, want %d", len(decisions), tt.expectedDecisions)
 	}
 }
 

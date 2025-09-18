@@ -46,26 +46,30 @@ type PolicyResult struct {
 
 ### 2. Policy Types
 
-#### Cost Optimization Policies
+#### Waste Detection Policies (Observable Behaviors, Not Cost Guessing)
 ```rego
-package elava.cost
+package elava.waste
 
-# Delete stopped instances after 7 days
-allow_deletion {
+# Detect stopped instances (observable state, not cost)
+decision := "flag" if {
     input.resource.type == "ec2"
     input.resource.status == "stopped"
-    days_stopped > 7
+    input.context.last_seen_days > 7
     not input.resource.tags.elava_blessed
 }
 
-days_stopped := time.diff_days(time.now_ns(), input.resource.status_changed_at)
+# Unattached volumes are pure waste (observable, not cost)
+decision := "flag" if {
+    input.resource.type == "ebs"
+    input.resource.status == "available"  # Not attached
+    input.context.resource_age_days > 3
+}
 
-# Flag expensive unused resources
-flag_waste {
-    input.resource.type == "ec2"
-    input.resource.instance_type in ["m5.xlarge", "m5.2xlarge", "c5.2xlarge"]
-    input.resource.cpu_utilization < 10
-    observation_period_days > 14
+# Old snapshots without access (observable pattern)
+decision := "flag" if {
+    input.resource.type == "snapshot"
+    input.context.resource_age_days > 90
+    input.context.last_seen_days > 30  # Not accessed
 }
 ```
 

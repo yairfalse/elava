@@ -17,8 +17,6 @@ type Resource struct {
 	CreatedAt  time.Time              `json:"created_at"`
 	LastSeenAt time.Time              `json:"last_seen_at"`
 	IsOrphaned bool                   `json:"is_orphaned"`
-	CostInfo   *CostInfo              `json:"cost_info,omitempty"`
-	UsageInfo  *UsageInfo             `json:"usage_info,omitempty"`
 	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
@@ -96,25 +94,4 @@ func (r *Resource) matchesTags(filter ResourceFilter) bool {
 	}
 
 	return true
-}
-
-// CostInfo represents cost data for a resource
-type CostInfo struct {
-	MonthlyCost    float64   `json:"monthly_cost"`
-	DailyCost      float64   `json:"daily_cost"`
-	Currency       string    `json:"currency"`
-	PricingUnit    string    `json:"pricing_unit"`
-	LastUpdated    time.Time `json:"last_updated"`
-	EstimatedWaste float64   `json:"estimated_waste,omitempty"`
-	CostOptimized  bool      `json:"cost_optimized"`
-}
-
-// UsageInfo represents usage patterns for a resource
-type UsageInfo struct {
-	LastActivity      time.Time `json:"last_activity"`
-	DaysUnused        int       `json:"days_unused"`
-	UtilizationPct    float64   `json:"utilization_pct"`
-	PeakUsage         time.Time `json:"peak_usage,omitempty"`
-	UsagePattern      string    `json:"usage_pattern"`                // "continuous", "scheduled", "sporadic", "unused"
-	RecommendedAction string    `json:"recommended_action,omitempty"` // "keep", "resize", "schedule", "terminate"
 }

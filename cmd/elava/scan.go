@@ -19,10 +19,19 @@ import (
 
 // ScanCommand implements the 'elava scan' command
 type ScanCommand struct {
-	Region   string `help:"AWS region to scan" default:"us-east-1"`
-	Output   string `help:"Output format: table, json, csv" default:"table"`
-	Filter   string `help:"Filter by resource type (ec2, rds, elb)"`
-	RiskOnly bool   `help:"Show only high-risk untracked resources" default:"false"`
+	Region         string `help:"AWS region to scan" default:"us-east-1"`
+	Output         string `help:"Output format: table, json, csv" default:"table"`
+	Filter         string `help:"Filter by resource type (ec2, rds, elb)"`
+	RiskOnly       bool   `help:"Show only high-risk untracked resources" default:"false"`
+	Tiers          string `help:"Comma-separated list of tiers to scan (critical,production,standard,archive)"`
+	ShowTierStatus bool   `help:"Show tiered scanning status" default:"false"`
+}
+
+// scanInfra holds scanning infrastructure components
+type scanInfra struct {
+	provider providers.CloudProvider
+	storage  *storage.MVCCStorage
+	wal      *wal.WAL
 }
 
 // Run executes the scan command
@@ -57,16 +66,31 @@ func (cmd *ScanCommand) Run() error {
 		return fmt.Errorf("failed to create AWS provider: %w", err)
 	}
 
-	// Build filter
+	// Create scan infrastructure
+	infra := &scanInfra{
+		provider: provider,
+		storage:  storage,
+		wal:      walInstance,
+	}
+
+	// Check if we should use tiered scanning
+	var resources []types.Resource
+	if cmd.Tiers != "" || cmd.ShowTierStatus {
+		resources, err = cmd.runTieredScan(ctx, infra)
+		if err != nil {
+			return fmt.Errorf("failed to run tiered scan: %w", err)
+		}
+	} else {
+		resources, err = cmd.scanResources(ctx, provider)
+		if err != nil {
+			return fmt.Errorf("failed to scan resources: %w", err)
+		}
+	}
+
+	// Build filter for WAL logging
 	filter := types.ResourceFilter{}
 	if cmd.Filter != "" {
 		filter.Type = cmd.Filter
-	}
-
-	// Scan resources
-	resources, err := provider.ListResources(ctx, filter)
-	if err != nil {
-		return fmt.Errorf("failed to scan resources: %w", err)
 	}
 
 	// Record observation in WAL
@@ -132,6 +156,18 @@ func (cmd *ScanCommand) Run() error {
 	default:
 		return cmd.outputTable(resources, untracked)
 	}
+}
+
+// scanResources scans for resources using the provider
+func (cmd *ScanCommand) scanResources(ctx context.Context, provider providers.CloudProvider) ([]types.Resource, error) {
+	// Build filter
+	filter := types.ResourceFilter{}
+	if cmd.Filter != "" {
+		filter.Type = cmd.Filter
+	}
+
+	// Scan resources
+	return provider.ListResources(ctx, filter)
 }
 
 // outputTable displays results in a nice table format

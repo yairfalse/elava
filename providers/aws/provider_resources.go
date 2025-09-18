@@ -7,8 +7,22 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	asgtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/aws/aws-sdk-go-v2/service/eks"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	"github.com/aws/aws-sdk-go-v2/service/rds"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
+	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
@@ -514,4 +528,754 @@ func (p *RealAWSProvider) listAMIs(ctx context.Context, filter types.ResourceFil
 	}
 
 	return resources, nil
+}
+
+// listSecurityGroups discovers Security Groups - accumulate the fastest
+func (p *RealAWSProvider) listSecurityGroups(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	var resources []types.Resource
+
+	input := &ec2.DescribeSecurityGroupsInput{}
+	paginator := ec2.NewDescribeSecurityGroupsPaginator(p.ec2Client, input)
+
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to describe security groups: %w", err)
+		}
+
+		for _, sg := range output.SecurityGroups {
+			tags := p.convertEC2Tags(sg.Tags)
+
+			// Check if security group is overly permissive
+			hasWideOpen := false
+			ruleCount := len(sg.IpPermissions) + len(sg.IpPermissionsEgress)
+
+			for _, rule := range sg.IpPermissions {
+				for _, ipRange := range rule.IpRanges {
+					if aws.ToString(ipRange.CidrIp) == "0.0.0.0/0" {
+						hasWideOpen = true
+						break
+					}
+				}
+			}
+
+			// Check if default security group (usually orphaned)
+			isDefault := aws.ToString(sg.GroupName) == "default"
+
+			resource := types.Resource{
+				ID:         aws.ToString(sg.GroupId),
+				Type:       "security_group",
+				Provider:   "aws",
+				Region:     p.region,
+				AccountID:  p.accountID,
+				Name:       aws.ToString(sg.GroupName),
+				Status:     "active",
+				Tags:       tags,
+				CreatedAt:  time.Now(), // SGs don't have creation time
+				LastSeenAt: time.Now(),
+				IsOrphaned: p.isResourceOrphaned(tags) || isDefault,
+				Metadata: map[string]interface{}{
+					"description":   aws.ToString(sg.Description),
+					"vpc_id":        aws.ToString(sg.VpcId),
+					"rule_count":    ruleCount,
+					"has_wide_open": hasWideOpen,
+					"is_default":    isDefault,
+					"owner_id":      aws.ToString(sg.OwnerId),
+				},
+			}
+
+			// High priority if overly permissive
+			if hasWideOpen {
+				resource.Metadata["security_priority"] = "high"
+			}
+
+			resources = append(resources, resource)
+		}
+	}
+
+	return resources, nil
+}
+
+// Helper functions for tag conversion
+func (p *RealAWSProvider) convertGenericTags(tags map[string]string) types.Tags {
+	result := types.Tags{}
+	for key, value := range tags {
+		switch key {
+		case "elava:owner", "Owner", "owner":
+			result.ElavaOwner = value
+		case "elava:managed":
+			result.ElavaManaged = value == "true"
+		case "elava:blessed":
+			result.ElavaBlessed = value == "true"
+		case "Environment", "environment", "env":
+			result.Environment = value
+		case "Team", "team":
+			result.Team = value
+		case "Name", "name":
+			result.Name = value
+		case "Project", "project":
+			result.Project = value
+		case "CostCenter", "cost-center", "costcenter":
+			result.CostCenter = value
+		}
+	}
+	return result
+}
+
+func (p *RealAWSProvider) convertECSTags(tags []ecstypes.Tag) types.Tags {
+	result := types.Tags{}
+	for _, tag := range tags {
+		key := aws.ToString(tag.Key)
+		value := aws.ToString(tag.Value)
+		switch key {
+		case "elava:owner", "Owner", "owner":
+			result.ElavaOwner = value
+		case "elava:managed":
+			result.ElavaManaged = value == "true"
+		case "elava:blessed":
+			result.ElavaBlessed = value == "true"
+		case "Environment", "environment", "env":
+			result.Environment = value
+		case "Team", "team":
+			result.Team = value
+		case "Name", "name":
+			result.Name = value
+		case "Project", "project":
+			result.Project = value
+		case "CostCenter", "cost-center", "costcenter":
+			result.CostCenter = value
+		}
+	}
+	return result
+}
+
+func (p *RealAWSProvider) convertASGTags(tags []asgtypes.TagDescription) types.Tags {
+	result := types.Tags{}
+	for _, tag := range tags {
+		key := aws.ToString(tag.Key)
+		value := aws.ToString(tag.Value)
+		switch key {
+		case "elava:owner", "Owner", "owner":
+			result.ElavaOwner = value
+		case "elava:managed":
+			result.ElavaManaged = value == "true"
+		case "elava:blessed":
+			result.ElavaBlessed = value == "true"
+		case "Environment", "environment", "env":
+			result.Environment = value
+		case "Team", "team":
+			result.Team = value
+		case "Name", "name":
+			result.Name = value
+		case "Project", "project":
+			result.Project = value
+		case "CostCenter", "cost-center", "costcenter":
+			result.CostCenter = value
+		}
+	}
+	return result
+}
+
+func (p *RealAWSProvider) convertIAMTags(tags []iamtypes.Tag) types.Tags {
+	result := types.Tags{}
+	for _, tag := range tags {
+		key := aws.ToString(tag.Key)
+		value := aws.ToString(tag.Value)
+		switch key {
+		case "elava:owner", "Owner", "owner":
+			result.ElavaOwner = value
+		case "elava:managed":
+			result.ElavaManaged = value == "true"
+		case "elava:blessed":
+			result.ElavaBlessed = value == "true"
+		case "Environment", "environment", "env":
+			result.Environment = value
+		case "Team", "team":
+			result.Team = value
+		case "Name", "name":
+			result.Name = value
+		case "Project", "project":
+			result.Project = value
+		case "CostCenter", "cost-center", "costcenter":
+			result.CostCenter = value
+		}
+	}
+	return result
+}
+
+func (p *RealAWSProvider) convertECRTags(tags []ecrtypes.Tag) types.Tags {
+	result := types.Tags{}
+	for _, tag := range tags {
+		key := aws.ToString(tag.Key)
+		value := aws.ToString(tag.Value)
+		switch key {
+		case "elava:owner", "Owner", "owner":
+			result.ElavaOwner = value
+		case "elava:managed":
+			result.ElavaManaged = value == "true"
+		case "elava:blessed":
+			result.ElavaBlessed = value == "true"
+		case "Environment", "environment", "env":
+			result.Environment = value
+		case "Team", "team":
+			result.Team = value
+		case "Name", "name":
+			result.Name = value
+		case "Project", "project":
+			result.Project = value
+		case "CostCenter", "cost-center", "costcenter":
+			result.CostCenter = value
+		}
+	}
+	return result
+}
+
+func (p *RealAWSProvider) convertRoute53Tags(tags []route53types.Tag) types.Tags {
+	result := types.Tags{}
+	for _, tag := range tags {
+		key := aws.ToString(tag.Key)
+		value := aws.ToString(tag.Value)
+		switch key {
+		case "elava:owner", "Owner", "owner":
+			result.ElavaOwner = value
+		case "elava:managed":
+			result.ElavaManaged = value == "true"
+		case "elava:blessed":
+			result.ElavaBlessed = value == "true"
+		case "Environment", "environment", "env":
+			result.Environment = value
+		case "Team", "team":
+			result.Team = value
+		case "Name", "name":
+			result.Name = value
+		case "Project", "project":
+			result.Project = value
+		case "CostCenter", "cost-center", "costcenter":
+			result.CostCenter = value
+		}
+	}
+	return result
+}
+
+func (p *RealAWSProvider) convertKMSTags(tags []kmstypes.Tag) types.Tags {
+	result := types.Tags{}
+	for _, tag := range tags {
+		key := aws.ToString(tag.TagKey)
+		value := aws.ToString(tag.TagValue)
+		switch key {
+		case "elava:owner", "Owner", "owner":
+			result.ElavaOwner = value
+		case "elava:managed":
+			result.ElavaManaged = value == "true"
+		case "elava:blessed":
+			result.ElavaBlessed = value == "true"
+		case "Environment", "environment", "env":
+			result.Environment = value
+		case "Team", "team":
+			result.Team = value
+		case "Name", "name":
+			result.Name = value
+		case "Project", "project":
+			result.Project = value
+		case "CostCenter", "cost-center", "costcenter":
+			result.CostCenter = value
+		}
+	}
+	return result
+}
+
+// listEKSClusters scans for EKS clusters
+func (p *RealAWSProvider) listEKSClusters(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	if filter.Type != "" && filter.Type != "eks" {
+		return nil, nil
+	}
+
+	client := p.eksClient
+	output, err := client.ListClusters(ctx, &eks.ListClustersInput{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list EKS clusters: %w", err)
+	}
+
+	var resources []types.Resource
+	for _, clusterName := range output.Clusters {
+		clusterDetails, err := client.DescribeCluster(ctx, &eks.DescribeClusterInput{
+			Name: aws.String(clusterName),
+		})
+		if err != nil {
+			continue
+		}
+
+		cluster := clusterDetails.Cluster
+		tags := p.convertEKSTags(cluster.Tags)
+
+		resource := types.Resource{
+			ID:         aws.ToString(cluster.Name),
+			Type:       "eks",
+			Region:     p.region,
+			Status:     string(cluster.Status),
+			Tags:       tags,
+			CreatedAt:  aws.ToTime(cluster.CreatedAt),
+			LastSeenAt: time.Now(),
+			IsOrphaned: p.isResourceOrphaned(tags),
+			Metadata: map[string]interface{}{
+				"version":          aws.ToString(cluster.Version),
+				"endpoint":         aws.ToString(cluster.Endpoint),
+				"platform_version": aws.ToString(cluster.PlatformVersion),
+				"role_arn":         aws.ToString(cluster.RoleArn),
+			},
+		}
+
+		resources = append(resources, resource)
+	}
+
+	return resources, nil
+}
+
+// listECSClusters scans for ECS clusters
+func (p *RealAWSProvider) listECSClusters(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	if filter.Type != "" && filter.Type != "ecs" {
+		return nil, nil
+	}
+
+	client := p.ecsClient
+	output, err := client.ListClusters(ctx, &ecs.ListClustersInput{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ECS clusters: %w", err)
+	}
+
+	if len(output.ClusterArns) == 0 {
+		return nil, nil
+	}
+
+	details, err := client.DescribeClusters(ctx, &ecs.DescribeClustersInput{
+		Clusters: output.ClusterArns,
+		Include:  []ecstypes.ClusterField{ecstypes.ClusterFieldTags},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe ECS clusters: %w", err)
+	}
+
+	var resources []types.Resource
+	for _, cluster := range details.Clusters {
+		tags := p.convertECSTags(cluster.Tags)
+
+		resource := types.Resource{
+			ID:         aws.ToString(cluster.ClusterName),
+			Type:       "ecs",
+			Region:     p.region,
+			Status:     aws.ToString(cluster.Status),
+			Tags:       tags,
+			CreatedAt:  time.Now(),
+			LastSeenAt: time.Now(),
+			IsOrphaned: p.isResourceOrphaned(tags),
+			Metadata: map[string]interface{}{
+				"active_services":    cluster.ActiveServicesCount,
+				"running_tasks":      cluster.RunningTasksCount,
+				"pending_tasks":      cluster.PendingTasksCount,
+				"capacity_providers": cluster.CapacityProviders,
+			},
+		}
+
+		resources = append(resources, resource)
+	}
+
+	return resources, nil
+}
+
+// listAutoScalingGroups scans for Auto Scaling Groups
+func (p *RealAWSProvider) listAutoScalingGroups(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	if filter.Type != "" && filter.Type != "asg" {
+		return nil, nil
+	}
+
+	client := p.asgClient
+	paginator := autoscaling.NewDescribeAutoScalingGroupsPaginator(client, &autoscaling.DescribeAutoScalingGroupsInput{})
+
+	var resources []types.Resource
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list Auto Scaling Groups: %w", err)
+		}
+
+		for _, asg := range output.AutoScalingGroups {
+			tags := p.convertASGTags(asg.Tags)
+
+			resource := types.Resource{
+				ID:         aws.ToString(asg.AutoScalingGroupName),
+				Type:       "asg",
+				Region:     p.region,
+				Status:     "active",
+				Tags:       tags,
+				CreatedAt:  aws.ToTime(asg.CreatedTime),
+				LastSeenAt: time.Now(),
+				IsOrphaned: p.isResourceOrphaned(tags),
+				Metadata: map[string]interface{}{
+					"min_size":         asg.MinSize,
+					"max_size":         asg.MaxSize,
+					"desired_capacity": asg.DesiredCapacity,
+					"instances":        len(asg.Instances),
+					"launch_template":  asg.LaunchTemplate,
+				},
+			}
+
+			resources = append(resources, resource)
+		}
+	}
+
+	return resources, nil
+}
+
+// listVPCEndpoints scans for VPC endpoints
+func (p *RealAWSProvider) listVPCEndpoints(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	if filter.Type != "" && filter.Type != "vpc_endpoint" {
+		return nil, nil
+	}
+
+	client := p.ec2Client
+	output, err := client.DescribeVpcEndpoints(ctx, &ec2.DescribeVpcEndpointsInput{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list VPC endpoints: %w", err)
+	}
+
+	var resources []types.Resource
+	for _, endpoint := range output.VpcEndpoints {
+		tags := p.convertEC2Tags(endpoint.Tags)
+
+		resource := types.Resource{
+			ID:         aws.ToString(endpoint.VpcEndpointId),
+			Type:       "vpc_endpoint",
+			Region:     p.region,
+			Status:     string(endpoint.State),
+			Tags:       tags,
+			CreatedAt:  aws.ToTime(endpoint.CreationTimestamp),
+			LastSeenAt: time.Now(),
+			IsOrphaned: p.isResourceOrphaned(tags),
+			Metadata: map[string]interface{}{
+				"service_name": aws.ToString(endpoint.ServiceName),
+				"vpc_id":       aws.ToString(endpoint.VpcId),
+				"type":         string(endpoint.VpcEndpointType),
+			},
+		}
+
+		resources = append(resources, resource)
+	}
+
+	return resources, nil
+}
+
+// listRDSSnapshots scans for RDS snapshots
+func (p *RealAWSProvider) listRDSSnapshots(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	if filter.Type != "" && filter.Type != "rds_snapshot" {
+		return nil, nil
+	}
+
+	rdsClient := p.rdsClient
+	output, err := rdsClient.DescribeDBSnapshots(ctx, &rds.DescribeDBSnapshotsInput{
+		SnapshotType: aws.String("manual"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list RDS snapshots: %w", err)
+	}
+
+	var resources []types.Resource
+	for _, snapshot := range output.DBSnapshots {
+		// Get snapshot tags
+		tagsOutput, err := rdsClient.ListTagsForResource(ctx, &rds.ListTagsForResourceInput{
+			ResourceName: snapshot.DBSnapshotArn,
+		})
+		var tags types.Tags
+		if err == nil && tagsOutput.TagList != nil {
+			tags = p.convertRDSTags(tagsOutput.TagList)
+		} else {
+			tags = types.Tags{}
+		}
+
+		resource := types.Resource{
+			ID:         aws.ToString(snapshot.DBSnapshotIdentifier),
+			Type:       "rds_snapshot",
+			Region:     p.region,
+			Status:     aws.ToString(snapshot.Status),
+			Tags:       tags,
+			CreatedAt:  aws.ToTime(snapshot.SnapshotCreateTime),
+			LastSeenAt: time.Now(),
+			IsOrphaned: p.isResourceOrphaned(tags),
+			Metadata: map[string]interface{}{
+				"db_instance_identifier": aws.ToString(snapshot.DBInstanceIdentifier),
+				"engine":                 aws.ToString(snapshot.Engine),
+				"allocated_storage":      snapshot.AllocatedStorage,
+				"encrypted":              snapshot.Encrypted,
+			},
+		}
+
+		resources = append(resources, resource)
+	}
+
+	return resources, nil
+}
+
+// listIAMRoles scans for IAM roles
+func (p *RealAWSProvider) listIAMRoles(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	if filter.Type != "" && filter.Type != "iam_role" {
+		return nil, nil
+	}
+
+	client := p.iamClient
+	paginator := iam.NewListRolesPaginator(client, &iam.ListRolesInput{})
+
+	var resources []types.Resource
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list IAM roles: %w", err)
+		}
+
+		for _, role := range output.Roles {
+			tagsOutput, err := client.ListRoleTags(ctx, &iam.ListRoleTagsInput{
+				RoleName: role.RoleName,
+			})
+			var tags types.Tags
+			if err == nil {
+				tags = p.convertIAMTags(tagsOutput.Tags)
+			} else {
+				tags = types.Tags{}
+			}
+
+			resource := types.Resource{
+				ID:         aws.ToString(role.RoleName),
+				Type:       "iam_role",
+				Region:     "global",
+				Status:     "active",
+				Tags:       tags,
+				CreatedAt:  aws.ToTime(role.CreateDate),
+				LastSeenAt: time.Now(),
+				IsOrphaned: p.isResourceOrphaned(tags),
+				Metadata: map[string]interface{}{
+					"arn":                    aws.ToString(role.Arn),
+					"path":                   aws.ToString(role.Path),
+					"max_session_duration":   role.MaxSessionDuration,
+					"assume_role_policy_doc": aws.ToString(role.AssumeRolePolicyDocument),
+				},
+			}
+
+			resources = append(resources, resource)
+		}
+	}
+
+	return resources, nil
+}
+
+// listNetworkInterfaces scans for network interfaces
+func (p *RealAWSProvider) listNetworkInterfaces(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	if filter.Type != "" && filter.Type != "network_interface" {
+		return nil, nil
+	}
+
+	client := p.ec2Client
+	output, err := client.DescribeNetworkInterfaces(ctx, &ec2.DescribeNetworkInterfacesInput{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list network interfaces: %w", err)
+	}
+
+	var resources []types.Resource
+	for _, eni := range output.NetworkInterfaces {
+		tags := p.convertEC2Tags(eni.TagSet)
+
+		resource := types.Resource{
+			ID:         aws.ToString(eni.NetworkInterfaceId),
+			Type:       "network_interface",
+			Region:     p.region,
+			Status:     string(eni.Status),
+			Tags:       tags,
+			CreatedAt:  time.Now(),
+			LastSeenAt: time.Now(),
+			IsOrphaned: p.isResourceOrphaned(tags),
+			Metadata: map[string]interface{}{
+				"vpc_id":         aws.ToString(eni.VpcId),
+				"subnet_id":      aws.ToString(eni.SubnetId),
+				"private_ip":     aws.ToString(eni.PrivateIpAddress),
+				"interface_type": string(eni.InterfaceType),
+				"attachment":     eni.Attachment,
+			},
+		}
+
+		resources = append(resources, resource)
+	}
+
+	return resources, nil
+}
+
+// listECRRepositories scans for ECR repositories
+func (p *RealAWSProvider) listECRRepositories(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	if filter.Type != "" && filter.Type != "ecr" {
+		return nil, nil
+	}
+
+	client := p.ecrClient
+	output, err := client.DescribeRepositories(ctx, &ecr.DescribeRepositoriesInput{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ECR repositories: %w", err)
+	}
+
+	var resources []types.Resource
+	for _, repo := range output.Repositories {
+		tagsOutput, err := client.ListTagsForResource(ctx, &ecr.ListTagsForResourceInput{
+			ResourceArn: repo.RepositoryArn,
+		})
+		var tags types.Tags
+		if err == nil {
+			tags = p.convertECRTags(tagsOutput.Tags)
+		} else {
+			tags = types.Tags{}
+		}
+
+		resource := types.Resource{
+			ID:         aws.ToString(repo.RepositoryName),
+			Type:       "ecr",
+			Region:     p.region,
+			Status:     "active",
+			Tags:       tags,
+			CreatedAt:  aws.ToTime(repo.CreatedAt),
+			LastSeenAt: time.Now(),
+			IsOrphaned: p.isResourceOrphaned(tags),
+			Metadata: map[string]interface{}{
+				"registry_id":          aws.ToString(repo.RegistryId),
+				"repository_uri":       aws.ToString(repo.RepositoryUri),
+				"image_tag_mutability": string(repo.ImageTagMutability),
+			},
+		}
+
+		resources = append(resources, resource)
+	}
+
+	return resources, nil
+}
+
+// listRoute53HostedZones scans for Route53 hosted zones
+func (p *RealAWSProvider) listRoute53HostedZones(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	if filter.Type != "" && filter.Type != "route53" {
+		return nil, nil
+	}
+
+	client := p.route53Client
+	output, err := client.ListHostedZones(ctx, &route53.ListHostedZonesInput{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Route53 hosted zones: %w", err)
+	}
+
+	var resources []types.Resource
+	for _, zone := range output.HostedZones {
+		tagsOutput, err := client.ListTagsForResource(ctx, &route53.ListTagsForResourceInput{
+			ResourceType: "hostedzone",
+			ResourceId:   zone.Id,
+		})
+		var tags types.Tags
+		if err == nil {
+			tags = p.convertRoute53Tags(tagsOutput.ResourceTagSet.Tags)
+		} else {
+			tags = types.Tags{}
+		}
+
+		resource := types.Resource{
+			ID:         aws.ToString(zone.Id),
+			Type:       "route53",
+			Region:     "global",
+			Status:     "active",
+			Tags:       tags,
+			CreatedAt:  time.Now(),
+			LastSeenAt: time.Now(),
+			IsOrphaned: p.isResourceOrphaned(tags),
+			Metadata: map[string]interface{}{
+				"name":         aws.ToString(zone.Name),
+				"record_count": zone.ResourceRecordSetCount,
+				"private_zone": zone.Config.PrivateZone,
+				"comment":      aws.ToString(zone.Config.Comment),
+			},
+		}
+
+		resources = append(resources, resource)
+	}
+
+	return resources, nil
+}
+
+// listKMSKeys scans for KMS keys
+func (p *RealAWSProvider) listKMSKeys(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	if filter.Type != "" && filter.Type != "kms" {
+		return nil, nil
+	}
+
+	client := p.kmsClient
+	output, err := client.ListKeys(ctx, &kms.ListKeysInput{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list KMS keys: %w", err)
+	}
+
+	var resources []types.Resource
+	for _, keyEntry := range output.Keys {
+		keyMetadata, err := client.DescribeKey(ctx, &kms.DescribeKeyInput{
+			KeyId: keyEntry.KeyId,
+		})
+		if err != nil {
+			continue
+		}
+
+		tagsOutput, err := client.ListResourceTags(ctx, &kms.ListResourceTagsInput{
+			KeyId: keyEntry.KeyId,
+		})
+		var tags types.Tags
+		if err == nil {
+			tags = p.convertKMSTags(tagsOutput.Tags)
+		} else {
+			tags = types.Tags{}
+		}
+
+		key := keyMetadata.KeyMetadata
+		resource := types.Resource{
+			ID:         aws.ToString(key.KeyId),
+			Type:       "kms",
+			Region:     p.region,
+			Status:     string(key.KeyState),
+			Tags:       tags,
+			CreatedAt:  aws.ToTime(key.CreationDate),
+			LastSeenAt: time.Now(),
+			IsOrphaned: p.isResourceOrphaned(tags),
+			Metadata: map[string]interface{}{
+				"arn":         aws.ToString(key.Arn),
+				"description": aws.ToString(key.Description),
+				"usage":       string(key.KeyUsage),
+				"enabled":     key.Enabled,
+			},
+		}
+
+		resources = append(resources, resource)
+	}
+
+	return resources, nil
+}
+
+// convertEKSTags converts EKS tags to Elava tags format
+func (p *RealAWSProvider) convertEKSTags(tags map[string]string) types.Tags {
+	result := types.Tags{}
+	for key, value := range tags {
+		switch key {
+		case "elava:owner", "Owner", "owner":
+			result.ElavaOwner = value
+		case "elava:managed":
+			result.ElavaManaged = value == "true"
+		case "elava:blessed":
+			result.ElavaBlessed = value == "true"
+		case "Environment", "environment", "env":
+			result.Environment = value
+		case "Team", "team":
+			result.Team = value
+		case "Name", "name":
+			result.Name = value
+		case "Project", "project":
+			result.Project = value
+		case "CostCenter", "cost-center", "costcenter":
+			result.CostCenter = value
+		}
+	}
+	return result
 }
