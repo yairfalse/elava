@@ -23,6 +23,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+	case "tiers":
+		if err := runTiersCommand(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	case "cleanup":
 		fmt.Println("Cleanup recommendations... (coming soon)")
 	case "tag":
@@ -45,18 +50,30 @@ func runScanCommand() error {
 	output := scanFlags.String("output", "table", "Output format: table, json, csv")
 	filter := scanFlags.String("filter", "", "Filter by resource type (ec2, rds, elb, s3, lambda, ebs, elastic_ip, nat_gateway, snapshot, ami)")
 	riskOnly := scanFlags.Bool("risk-only", false, "Show only high-risk untracked resources")
+	tiers := scanFlags.String("tiers", "", "Comma-separated list of tiers to scan (critical,production,standard,archive)")
+	showTierStatus := scanFlags.Bool("show-tier-status", false, "Show tiered scanning status")
 
 	// Parse remaining args
 	_ = scanFlags.Parse(os.Args[2:])
 
 	// Create and run scan command
 	scanCmd := &ScanCommand{
-		Region:   *region,
-		Output:   *output,
-		Filter:   *filter,
-		RiskOnly: *riskOnly,
+		Region:         *region,
+		Output:         *output,
+		Filter:         *filter,
+		RiskOnly:       *riskOnly,
+		Tiers:          *tiers,
+		ShowTierStatus: *showTierStatus,
 	}
 
+	return scanCmd.Run()
+}
+
+func runTiersCommand() error {
+	// Create a scan command with ShowTierStatus enabled
+	scanCmd := &ScanCommand{
+		ShowTierStatus: true,
+	}
 	return scanCmd.Run()
 }
 
@@ -69,6 +86,7 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("Commands:")
 	fmt.Println("  scan      Find untracked resources")
+	fmt.Println("  tiers     Show tiered scanning status")
 	fmt.Println("  cleanup   Get cleanup recommendations")
 	fmt.Println("  tag       Tag resources interactively")
 	fmt.Println("  report    Generate ownership reports")

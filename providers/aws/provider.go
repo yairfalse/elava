@@ -7,14 +7,21 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/service/eks"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/yairfalse/elava/providers"
@@ -33,14 +40,21 @@ func init() {
 
 // RealAWSProvider implements CloudProvider using AWS SDK v2
 type RealAWSProvider struct {
-	ec2Client    *ec2.Client
-	rdsClient    *rds.Client
-	elbv2Client  *elasticloadbalancingv2.Client
-	s3Client     *s3.Client
-	lambdaClient *lambda.Client
-	cwLogsClient *cloudwatchlogs.Client
-	region       string
-	accountID    string
+	ec2Client     *ec2.Client
+	rdsClient     *rds.Client
+	elbv2Client   *elasticloadbalancingv2.Client
+	s3Client      *s3.Client
+	lambdaClient  *lambda.Client
+	cwLogsClient  *cloudwatchlogs.Client
+	eksClient     *eks.Client
+	ecsClient     *ecs.Client
+	asgClient     *autoscaling.Client
+	iamClient     *iam.Client
+	ecrClient     *ecr.Client
+	route53Client *route53.Client
+	kmsClient     *kms.Client
+	region        string
+	accountID     string
 }
 
 // NewRealAWSProvider creates a new real AWS provider
@@ -67,14 +81,21 @@ func NewRealAWSProvider(ctx context.Context, region string) (*RealAWSProvider, e
 	}
 
 	return &RealAWSProvider{
-		ec2Client:    ec2Client,
-		rdsClient:    rds.NewFromConfig(cfg),
-		elbv2Client:  elasticloadbalancingv2.NewFromConfig(cfg),
-		s3Client:     s3.NewFromConfig(cfg),
-		lambdaClient: lambda.NewFromConfig(cfg),
-		cwLogsClient: cloudwatchlogs.NewFromConfig(cfg),
-		region:       region,
-		accountID:    accountID,
+		ec2Client:     ec2Client,
+		rdsClient:     rds.NewFromConfig(cfg),
+		elbv2Client:   elasticloadbalancingv2.NewFromConfig(cfg),
+		s3Client:      s3.NewFromConfig(cfg),
+		lambdaClient:  lambda.NewFromConfig(cfg),
+		cwLogsClient:  cloudwatchlogs.NewFromConfig(cfg),
+		eksClient:     eks.NewFromConfig(cfg),
+		ecsClient:     ecs.NewFromConfig(cfg),
+		asgClient:     autoscaling.NewFromConfig(cfg),
+		iamClient:     iam.NewFromConfig(cfg),
+		ecrClient:     ecr.NewFromConfig(cfg),
+		route53Client: route53.NewFromConfig(cfg),
+		kmsClient:     kms.NewFromConfig(cfg),
+		region:        region,
+		accountID:     accountID,
 	}, nil
 }
 
@@ -176,6 +197,96 @@ func (p *RealAWSProvider) ListResources(ctx context.Context, filter types.Resour
 		fmt.Printf("Warning: failed to list CloudWatch log groups: %v\n", err)
 	} else {
 		resources = append(resources, logResources...)
+	}
+
+	// HIGH PRIORITY RESOURCES - These accumulate the fastest and cost the most
+
+	// List Security Groups - accumulate the fastest
+	sgResources, err := p.listSecurityGroups(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list security groups: %v\n", err)
+	} else {
+		resources = append(resources, sgResources...)
+	}
+
+	// List EKS Clusters - expensive if forgotten
+	eksResources, err := p.listEKSClusters(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list EKS clusters: %v\n", err)
+	} else {
+		resources = append(resources, eksResources...)
+	}
+
+	// List ECS Clusters - expensive if forgotten
+	ecsResources, err := p.listECSClusters(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list ECS clusters: %v\n", err)
+	} else {
+		resources = append(resources, ecsResources...)
+	}
+
+	// List Auto Scaling Groups - can spawn resources
+	asgResources, err := p.listAutoScalingGroups(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list auto scaling groups: %v\n", err)
+	} else {
+		resources = append(resources, asgResources...)
+	}
+
+	// List VPC Endpoints - often forgotten, accumulate
+	vpcEndpointResources, err := p.listVPCEndpoints(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list VPC endpoints: %v\n", err)
+	} else {
+		resources = append(resources, vpcEndpointResources...)
+	}
+
+	// List RDS Snapshots - storage accumulation
+	rdsSnapshotResources, err := p.listRDSSnapshots(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list RDS snapshots: %v\n", err)
+	} else {
+		resources = append(resources, rdsSnapshotResources...)
+	}
+
+	// List IAM Roles - security debt
+	iamRoleResources, err := p.listIAMRoles(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list IAM roles: %v\n", err)
+	} else {
+		resources = append(resources, iamRoleResources...)
+	}
+
+	// List Network Interfaces (ENIs) - get stuck
+	eniResources, err := p.listNetworkInterfaces(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list network interfaces: %v\n", err)
+	} else {
+		resources = append(resources, eniResources...)
+	}
+
+	// List ECR Repositories - container storage
+	ecrResources, err := p.listECRRepositories(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list ECR repositories: %v\n", err)
+	} else {
+		resources = append(resources, ecrResources...)
+	}
+
+	// List Route53 Hosted Zones - DNS costs
+	route53Resources, err := p.listRoute53HostedZones(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list Route53 hosted zones: %v\n", err)
+	} else {
+		resources = append(resources, route53Resources...)
+	}
+
+	// List KMS Keys - encryption keys
+	kmsResources, err := p.listKMSKeys(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list KMS keys: %v\n", err)
+	} else {
+		resources = append(resources, kmsResources...)
 	}
 
 	// Apply filters

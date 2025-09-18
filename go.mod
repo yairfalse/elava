@@ -5,11 +5,18 @@ go 1.24.6
 require (
 	github.com/aws/aws-sdk-go-v2 v1.39.0
 	github.com/aws/aws-sdk-go-v2/config v1.28.7
+	github.com/aws/aws-sdk-go-v2/service/autoscaling v1.59.1
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.57.4
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.218.0
+	github.com/aws/aws-sdk-go-v2/service/ecr v1.50.3
+	github.com/aws/aws-sdk-go-v2/service/ecs v1.64.0
+	github.com/aws/aws-sdk-go-v2/service/eks v1.73.3
 	github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2 v1.50.4
+	github.com/aws/aws-sdk-go-v2/service/iam v1.47.5
+	github.com/aws/aws-sdk-go-v2/service/kms v1.45.3
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.70.0
 	github.com/aws/aws-sdk-go-v2/service/rds v1.88.0
+	github.com/aws/aws-sdk-go-v2/service/route53 v1.58.2
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.68.0
 	github.com/google/btree v1.1.3
 	github.com/open-policy-agent/opa v1.8.0
