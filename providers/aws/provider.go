@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
@@ -19,8 +20,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	"github.com/aws/aws-sdk-go-v2/service/memorydb"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	"github.com/aws/aws-sdk-go-v2/service/redshift"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
@@ -40,21 +43,24 @@ func init() {
 
 // RealAWSProvider implements CloudProvider using AWS SDK v2
 type RealAWSProvider struct {
-	ec2Client     *ec2.Client
-	rdsClient     *rds.Client
-	elbv2Client   *elasticloadbalancingv2.Client
-	s3Client      *s3.Client
-	lambdaClient  *lambda.Client
-	cwLogsClient  *cloudwatchlogs.Client
-	eksClient     *eks.Client
-	ecsClient     *ecs.Client
-	asgClient     *autoscaling.Client
-	iamClient     *iam.Client
-	ecrClient     *ecr.Client
-	route53Client *route53.Client
-	kmsClient     *kms.Client
-	region        string
-	accountID     string
+	ec2Client      *ec2.Client
+	rdsClient      *rds.Client
+	elbv2Client    *elasticloadbalancingv2.Client
+	s3Client       *s3.Client
+	lambdaClient   *lambda.Client
+	cwLogsClient   *cloudwatchlogs.Client
+	eksClient      *eks.Client
+	ecsClient      *ecs.Client
+	asgClient      *autoscaling.Client
+	iamClient      *iam.Client
+	ecrClient      *ecr.Client
+	route53Client  *route53.Client
+	kmsClient      *kms.Client
+	dynamodbClient *dynamodb.Client
+	memorydbClient *memorydb.Client
+	redshiftClient *redshift.Client
+	region         string
+	accountID      string
 }
 
 // NewRealAWSProvider creates a new real AWS provider
@@ -81,21 +87,24 @@ func NewRealAWSProvider(ctx context.Context, region string) (*RealAWSProvider, e
 	}
 
 	return &RealAWSProvider{
-		ec2Client:     ec2Client,
-		rdsClient:     rds.NewFromConfig(cfg),
-		elbv2Client:   elasticloadbalancingv2.NewFromConfig(cfg),
-		s3Client:      s3.NewFromConfig(cfg),
-		lambdaClient:  lambda.NewFromConfig(cfg),
-		cwLogsClient:  cloudwatchlogs.NewFromConfig(cfg),
-		eksClient:     eks.NewFromConfig(cfg),
-		ecsClient:     ecs.NewFromConfig(cfg),
-		asgClient:     autoscaling.NewFromConfig(cfg),
-		iamClient:     iam.NewFromConfig(cfg),
-		ecrClient:     ecr.NewFromConfig(cfg),
-		route53Client: route53.NewFromConfig(cfg),
-		kmsClient:     kms.NewFromConfig(cfg),
-		region:        region,
-		accountID:     accountID,
+		ec2Client:      ec2Client,
+		rdsClient:      rds.NewFromConfig(cfg),
+		elbv2Client:    elasticloadbalancingv2.NewFromConfig(cfg),
+		s3Client:       s3.NewFromConfig(cfg),
+		lambdaClient:   lambda.NewFromConfig(cfg),
+		cwLogsClient:   cloudwatchlogs.NewFromConfig(cfg),
+		eksClient:      eks.NewFromConfig(cfg),
+		ecsClient:      ecs.NewFromConfig(cfg),
+		asgClient:      autoscaling.NewFromConfig(cfg),
+		iamClient:      iam.NewFromConfig(cfg),
+		ecrClient:      ecr.NewFromConfig(cfg),
+		route53Client:  route53.NewFromConfig(cfg),
+		kmsClient:      kms.NewFromConfig(cfg),
+		dynamodbClient: dynamodb.NewFromConfig(cfg),
+		memorydbClient: memorydb.NewFromConfig(cfg),
+		redshiftClient: redshift.NewFromConfig(cfg),
+		region:         region,
+		accountID:      accountID,
 	}, nil
 }
 
@@ -287,6 +296,54 @@ func (p *RealAWSProvider) ListResources(ctx context.Context, filter types.Resour
 		fmt.Printf("Warning: failed to list KMS keys: %v\n", err)
 	} else {
 		resources = append(resources, kmsResources...)
+	}
+
+	// List Aurora Clusters - expensive RDS clusters
+	auroraResources, err := p.listAuroraClusters(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list Aurora clusters: %v\n", err)
+	} else {
+		resources = append(resources, auroraResources...)
+	}
+
+	// List Redshift Clusters - data warehouse clusters
+	redshiftResources, err := p.listRedshiftClusters(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list Redshift clusters: %v\n", err)
+	} else {
+		resources = append(resources, redshiftResources...)
+	}
+
+	// List Redshift Snapshots - data warehouse backups
+	redshiftSnapshotResources, err := p.listRedshiftSnapshots(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list Redshift snapshots: %v\n", err)
+	} else {
+		resources = append(resources, redshiftSnapshotResources...)
+	}
+
+	// List MemoryDB Clusters - in-memory Redis clusters
+	memorydbResources, err := p.listMemoryDBClusters(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list MemoryDB clusters: %v\n", err)
+	} else {
+		resources = append(resources, memorydbResources...)
+	}
+
+	// List DynamoDB Tables - NoSQL tables
+	dynamodbResources, err := p.listDynamoDBTables(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list DynamoDB tables: %v\n", err)
+	} else {
+		resources = append(resources, dynamodbResources...)
+	}
+
+	// List DynamoDB Backups - NoSQL backups
+	dynamodbBackupResources, err := p.listDynamoDBBackups(ctx, filter)
+	if err != nil {
+		fmt.Printf("Warning: failed to list DynamoDB backups: %v\n", err)
+	} else {
+		resources = append(resources, dynamodbBackupResources...)
 	}
 
 	// Apply filters
