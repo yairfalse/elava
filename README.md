@@ -1,48 +1,82 @@
-# Elava - Day 2 Operations Scanner for AWS
+# Elava - Infrastructure Reconciliation Engine
 
-Find untracked, untagged, and forgotten resources in your AWS account. Elava scans your infrastructure and identifies what's not properly managed.
+Infrastructure reconciliation without state files. Elava continuously observes your cloud resources, detects drift, and explains changes through attribution.
 
 ```
-     Your AWS Account                    Elava Scans                    Finds Problems
-    ┌─────────────────┐                     │                       ┌──────────────┐
-    │                 │                     ▼                       │ 🔴 HIGH RISK │
-    │  EC2   RDS  S3  │    ─────────►  [Elava Scanner]  ─────────►   │ 🟡 MEDIUM    │
-    │  EBS   AMI  EIP │                                             │ 🟢 UNTRACKED │
-    │                 │                                             └──────────────┘
-    └─────────────────┘                                           
-         500+ Resources            Reads tags & metadata            108 Issues Found
+    Cloud Infrastructure              Elava Engine                     Intelligence
+   ┌──────────────────┐                   │                      ┌─────────────────┐
+   │ AWS Resources    │                   ▼                      │ Drift Detection │
+   │ • EC2 • RDS      │ ──────► ┌─────────────────┐ ──────►    │ Attribution     │
+   │ • S3  • Lambda   │         │ MVCC Storage    │             │ Waste Analysis  │
+   │ • EKS • VPC      │ ◄────── │ (Living Memory) │ ◄──────     │ OPA Policies    │
+   └──────────────────┘         └─────────────────┘             └─────────────────┘
+     Actual State                 Temporal Awareness              Operational Actions
 ```
 
-## What Elava Does Best
+## What Elava Does
 
-### 🔍 **Discovers Everything**
-Scans 10+ AWS resource types to build a complete picture of your infrastructure:
-- EC2 instances, RDS databases, Load Balancers
-- EBS volumes, Snapshots, AMIs
+### 🔍 Resource Discovery
+Scans 15+ AWS resource types with full tag analysis:
+- EC2 instances, Auto Scaling Groups, Load Balancers
+- RDS databases (including Aurora clusters)
 - S3 buckets, Lambda functions
-- Elastic IPs, NAT Gateways
+- EBS volumes, Snapshots, AMIs
+- VPCs, Subnets, Security Groups
+- EKS clusters, ECR repositories
+- KMS keys, Route53 zones
 
-### 🏷️ **Finds Untagged Resources**
-Identifies resources missing critical tags:
-- No owner or team assignment
-- Missing environment tags (prod/staging/dev)
-- Resources without cost center tags
-- Infrastructure not tracked in Terraform/CloudFormation
+### 🕵️ Drift Attribution
+Explains WHO changed WHAT and WHY through CloudTrail integration:
+- Correlates resource changes with API calls
+- Identifies the actor (human/service/automation)
+- Provides confidence scoring for attribution
+- Falls back to heuristics when CloudTrail unavailable
 
-### 🧟 **Detects Zombie Resources**
-Finds resources that are dead but still costing money:
-- Stopped EC2 instances (why not terminated?)
-- Unattached EBS volumes
-- Unused Elastic IPs
-- Old snapshots and AMIs
-- Empty S3 buckets
+### 📊 Operational Intelligence
+Analyzes patterns without calculating costs:
+- Detects orphaned resources (no owner tags)
+- Identifies idle and oversized resources
+- Tracks resource lifecycle patterns
+- Provides waste analysis for FinOps tools to price
 
-### 🎯 **Pattern Recognition**
-Intelligently identifies suspicious resources:
-- Names containing "test", "temp", "old", "delete-me"
-- Resources created at unusual times
-- Infrastructure in unexpected regions
-- Resources older than your retention policy
+### 🎯 Policy Enforcement
+Uses Open Policy Agent (OPA) for Day-2 operations:
+- Enforce tagging requirements
+- Block non-compliant resources
+- Auto-remediate violations
+- Custom policy definitions
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    MVCC Storage (Brain)                     │
+├─────────────────────────────────────────────────────────────┤
+│ • Resource Observations  • Change Events                    │
+│ • Attribution Data       • Policy Decisions                 │
+│ • 30-day Rolling Window  • Temporal Queries                 │
+└─────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│  Providers   │    │   Analyzer   │    │ Attribution  │
+├──────────────┤    ├──────────────┤    ├──────────────┤
+│ • AWS        │    │ • Drift      │    │ • CloudTrail │
+│ • GCP*       │    │ • Waste      │    │ • Correlation│
+│ • Azure*     │    │ • Patterns   │    │ • Confidence │
+└──────────────┘    └──────────────┘    └──────────────┘
+                              │
+                    ┌─────────▼─────────┐
+                    │   Reconciler      │
+                    ├───────────────────┤
+                    │ • Compare State   │
+                    │ • Make Decisions  │
+                    │ • Execute Actions │
+                    └───────────────────┘
+
+* = Planned
+```
 
 ## Quick Start
 
@@ -50,88 +84,108 @@ Intelligently identifies suspicious resources:
 # Build
 go build ./cmd/elava
 
-# Scan everything in your default region
+# Basic scan
 ./elava scan
 
 # Scan specific region
 ./elava scan --region us-west-2
 
-# Focus on specific resource types
-./elava scan --filter snapshot   # Just snapshots
-./elava scan --filter ec2        # Just EC2 instances
-./elava scan --filter ebs        # Just EBS volumes
+# Scan with attribution
+./elava scan --explain-drift
 
-# Show only high-risk findings
-./elava scan --risk-only
+# Filter resource types
+./elava scan --filter ec2
+./elava scan --filter rds
+
+# Tiered scanning (fast → thorough)
+./elava scan --tiers
 ```
 
-## Real Example Output
-
-```
-🔍 Scanning AWS region us-east-1 for untracked resources...
-
-📊 Scan Summary:
-   Total resources: 342
-   Tracked: 234 (68.4%)
-   Untracked: 108 (31.6%)
-
-🚨 Untracked Resources:
-RESOURCE              TYPE      STATUS       RISK        ISSUES
-snap-0abc123def       snapshot  completed    🔴 high     427 days old, named "temp-backup"
-vol-0def456ghi        ebs       available    🔴 high     Unattached, 500GB, no tags
-i-0ghi789jkl          ec2       stopped      🔴 high     Stopped 67 days ago, no owner
-ami-backup-old-v2     ami       available    🟡 medium   Created 2022, 5 snapshots attached
-test-lambda-func      lambda    active       🟡 medium   Last invoked 89 days ago
-nat-12345678          nat_gw    available    🔴 high     Expensive resource, no tags
-
-💡 Recommended Actions:
-   • Clean up 23 stopped/dead resources
-   • Add owner tags to 67 resources
-   • Verify IaC management for 18 resources
-
-🔒 Safety: Elava operates read-only. We detect, you decide.
-```
-
-## How It Works
-
-```
-AWS Account → Elava Scanner → Detection Rules → Risk Assessment → Report
-     ↑                             ↓
-     └──── Read-Only API ←─────────┘
-```
-
-1. **Connects** to AWS using your existing credentials
-2. **Scans** resources using read-only API calls
-3. **Analyzes** using smart detection rules
-4. **Reports** findings with actionable recommendations
-
-## Supported AWS Resources
-
-- ✅ **Compute**: EC2 Instances, Lambda Functions
-- ✅ **Storage**: S3 Buckets, EBS Volumes, Snapshots, AMIs
-- ✅ **Database**: RDS Instances
-- ✅ **Network**: Elastic IPs, NAT Gateways, Load Balancers
-- 🔜 **Coming Soon**: CloudFormation Stacks, Security Groups, CloudWatch Logs
-
-## Installation
+## Example: Drift Attribution
 
 ```bash
-# Clone and build
-git clone https://github.com/yairfalse/elava.git
-cd ovi
-go build ./cmd/elava
+$ ./elava explain i-mysterious-instance
 
-# Configure AWS credentials (standard AWS CLI/SDK methods)
-export AWS_REGION=us-east-1
-export AWS_PROFILE=production
+📊 Attribution Report for i-mysterious-instance
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Resource Type: EC2 Instance
+Current State: Running
+Tags: {} (no tags)
 
-# Run your first scan
-./elava scan
+🕵️ Attribution:
+Actor: john.doe@company.com
+Action: RunInstances
+Timestamp: 2024-09-21 03:15:23 UTC
+Source: AWS Console (73.162.248.123)
+Confidence: 0.92 (High)
+
+📝 Context:
+- Created outside business hours
+- No associated Terraform/CloudFormation
+- Similar to previous debug instances
+
+🎯 Recommendation:
+Contact john.doe@company.com for cleanup
 ```
 
-## Required AWS Permissions
+## Core Components
 
-Elava needs read-only access to scan your resources:
+### Storage Engine
+MVCC (Multi-Version Concurrency Control) storage provides:
+- Living memory of infrastructure state
+- Temporal queries across time ranges
+- Change event tracking
+- No state file conflicts
+
+### Attribution Service
+CloudTrail integration for drift explanation:
+- API call correlation
+- Actor identification
+- Confidence scoring
+- Heuristic fallbacks
+
+### Analyzer Package
+Pattern detection without cost calculation:
+- **DriftAnalyzer**: Detects configuration changes
+- **WasteAnalyzer**: Identifies unused resources
+- **PatternDetector**: Finds recurring behaviors
+- **QueryEngine**: Temporal data queries
+
+### Policy Engine
+OPA integration for enforcement:
+- YAML policy definitions
+- Monitor/Notify/Enforce modes
+- Custom rule creation
+- Automated remediation
+
+## Configuration
+
+```yaml
+# elava.yaml
+providers:
+  aws:
+    regions:
+      - us-east-1
+      - us-west-2
+
+storage:
+  path: /var/lib/elava
+  retention: 30d
+
+analyzer:
+  drift:
+    enabled: true
+    attribution: true
+  waste:
+    enabled: true
+    idle_threshold: 7d
+
+policies:
+  enforcement_mode: notify  # monitor|notify|enforce
+  path: ./policies/
+```
+
+## AWS Permissions
 
 ```json
 {
@@ -144,33 +198,174 @@ Elava needs read-only access to scan your resources:
       "s3:List*",
       "s3:GetBucketTagging",
       "lambda:List*",
-      "elasticloadbalancing:Describe*"
+      "eks:List*",
+      "eks:Describe*",
+      "elasticloadbalancing:Describe*",
+      "autoscaling:Describe*",
+      "kms:List*",
+      "kms:Describe*",
+      "cloudtrail:LookupEvents"
     ],
     "Resource": "*"
   }]
 }
 ```
 
-## Why Elava?
+## OPA Policy Integration
 
-- **🚀 Fast**: Parallel scanning gets results in seconds
-- **🔒 Safe**: Read-only operations, never modifies anything
-- **🎯 Accurate**: Smart pattern detection reduces false positives
-- **💰 Saves Money**: Find waste without complex cost calculations
-- **🛠️ Practical**: Focuses on real Day 2 operations problems
+Elava uses Open Policy Agent for policy-driven Day-2 operations:
+
+### Policy Examples
+
+```rego
+# policies/tagging.rego - Enforce resource tagging
+package elava.tagging
+
+# Automatically tag orphaned resources
+tag_orphan[action] {
+    input.resource.tags.owner == ""
+    input.attribution.actor != ""
+
+    action := {
+        "type": "tag",
+        "tags": {
+            "owner": input.attribution.actor,
+            "elava_managed": "true"
+        },
+        "reason": "Auto-tagged based on CloudTrail attribution"
+    }
+}
+
+# Block unencrypted production databases
+deny[msg] {
+    input.resource.type == "rds"
+    input.resource.tags.environment == "production"
+    input.resource.metadata.encrypted == false
+
+    msg := "Unencrypted RDS in production is forbidden"
+}
+```
+
+```rego
+# policies/cleanup.rego - Resource lifecycle management
+package elava.cleanup
+
+# Terminate expired temporary resources
+terminate[action] {
+    contains(input.resource.name, "temp-")
+    resource_age_days > 7
+
+    action := {
+        "type": "terminate",
+        "grace_period": "24h",
+        "notification": input.resource.tags.owner
+    }
+}
+
+# Calculate resource age
+resource_age_days := days {
+    now := time.now_ns()
+    created := input.resource.created_at
+    days := (now - created) / (24 * 60 * 60 * 1000000000)
+}
+```
+
+### Enforcement Modes
+
+```yaml
+# Policy enforcement configuration
+policies:
+  enforcement_mode: notify  # monitor|notify|enforce|block
+
+  # Per-environment settings
+  environments:
+    production:
+      encryption_required: block
+      tagging_required: enforce
+    development:
+      cleanup_temp_resources: enforce
+      oversized_instances: notify
+```
+
+### CLI Integration
+
+```bash
+# Evaluate policies
+./elava policy evaluate --resource i-123456
+
+# Apply policies with dry-run
+./elava policy apply --dry-run
+
+# Show policy violations
+./elava policy violations --last 24h
+
+# Test policy against resource
+./elava policy test policies/tagging.rego --resource-file resource.json
+```
+
+## Integration with FinOps Tools
+
+Elava identifies waste patterns but doesn't calculate costs. Integration points:
+
+```go
+// Export waste patterns for cost tools
+GET /api/waste-patterns
+
+// Response format for FinOps tools
+{
+  "patterns": [
+    {
+      "type": "orphaned",
+      "resource_ids": ["i-123", "i-456"],
+      "reason": "No owner tags for 30+ days",
+      "confidence": 0.95
+    }
+  ]
+}
+```
+
+## Development
+
+```bash
+# Run tests
+go test ./...
+
+# Format and lint
+go fmt ./...
+go vet ./...
+golangci-lint run
+
+# Run with telemetry
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 ./elava scan
+```
+
+## Project Structure
+
+```
+elava/
+├── analyzer/          # Drift, waste, pattern analysis
+├── attribution/       # CloudTrail correlation
+├── cmd/elava/        # CLI commands
+├── config/           # Configuration management
+├── executor/         # Action execution with safety
+├── policy/           # OPA policy engine
+├── providers/        # Cloud provider implementations
+│   └── aws/         # AWS-specific code
+├── reconciler/       # Reconciliation engine
+├── storage/          # MVCC storage engine
+├── telemetry/        # OpenTelemetry integration
+└── types/           # Core type definitions
+```
 
 ## Contributing
 
-We'd love your help making Elava better! Key areas:
-- Adding more AWS resource types
-- Improving detection patterns
-- Supporting other clouds (GCP, Azure)
-- Better output formats (JSON, CSV, HTML reports)
+Key areas for contribution:
+- Additional AWS resource types
+- GCP and Azure provider implementations
+- Policy templates for common scenarios
+- Performance optimizations
+- Documentation improvements
 
 ## License
 
 MIT - See [LICENSE](LICENSE)
-
----
-
-**Built for DevOps teams who want to know what's really in their AWS account.**
