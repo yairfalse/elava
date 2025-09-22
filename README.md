@@ -6,10 +6,10 @@ Infrastructure reconciliation without state files. Elava continuously observes y
     Cloud Infrastructure              Elava Engine                     Intelligence
    ┌──────────────────┐                   │                      ┌─────────────────┐
    │ AWS Resources    │                   ▼                      │ Drift Detection │
-   │ • EC2 • RDS      │ ──────► ┌─────────────────┐ ──────►    │ Attribution     │
-   │ • S3  • Lambda   │         │ MVCC Storage    │             │ Waste Analysis  │
-   │ • EKS • VPC      │ ◄────── │ (Living Memory) │ ◄──────     │ OPA Policies    │
-   └──────────────────┘         └─────────────────┘             └─────────────────┘
+   │ • EC2 • RDS      │ ──────► ┌─────────────────┐ ──────►      │ Attribution     │
+   │ • S3  • Lambda   │         │ MVCC Storage    │              │ Waste Analysis  │
+   │ • EKS • VPC      │ ◄────── │ (Living Memory) │ ◄──────      │ OPA Policies    │
+   └──────────────────┘         └─────────────────┘              └─────────────────┘
      Actual State                 Temporal Awareness              Operational Actions
 ```
 
