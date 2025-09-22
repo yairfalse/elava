@@ -222,13 +222,7 @@ func (q *QueryEngineImpl) AggregateByTag(ctx context.Context, tag string, period
 		return q.aggregateResources(bucket, tag, cutoff, metrics)
 	})
 
-	// Calculate averages
-	for k, m := range metrics {
-		if m.Count > 0 {
-			m.AverageCost = m.TotalCost / float64(m.Count)
-			metrics[k] = m
-		}
-	}
+	// Metrics aggregated - costs handled by FinOps tools
 
 	return metrics, err
 }
@@ -286,10 +280,7 @@ func (q *QueryEngineImpl) updateMetrics(m *Metrics, resource types.Resource) {
 	m.Count++
 	m.ResourceTypes[resource.Type]++
 
-	// Extract cost from metadata if available
-	if cost, ok := resource.Metadata["monthly_cost_estimate"].(float64); ok {
-		m.TotalCost += cost
-	}
+	// Cost extraction removed - let FinOps tools handle this
 }
 
 // extractRevision gets revision from key
