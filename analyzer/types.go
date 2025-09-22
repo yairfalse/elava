@@ -15,7 +15,6 @@ type Analyzer interface {
 	// Pattern detection
 	DriftAnalyzer
 	WasteAnalyzer
-	CostAnalyzer
 	PatternDetector
 }
 
@@ -53,18 +52,6 @@ type WasteAnalyzer interface {
 
 	// Identify idle resources
 	FindIdleResources(ctx context.Context, idleThreshold time.Duration) ([]types.Resource, error)
-}
-
-// CostAnalyzer tracks spending patterns
-type CostAnalyzer interface {
-	// Analyze cost trends
-	AnalyzeCosts(ctx context.Context, period time.Duration) (CostTrends, error)
-
-	// Get cost by owner
-	GetCostByOwner(ctx context.Context, period time.Duration) (map[string]float64, error)
-
-	// Detect cost anomalies
-	DetectCostAnomalies(ctx context.Context, threshold float64) ([]CostAnomaly, error)
 }
 
 // PatternDetector identifies recurring behaviors
@@ -124,13 +111,13 @@ const (
 
 // WastePattern identifies waste patterns
 type WastePattern struct {
-	Type        WasteType              `json:"type"`
-	ResourceIDs []string               `json:"resource_ids"`
-	Reason      string                 `json:"reason"`
-	Impact      float64                `json:"impact"` // Estimated monthly cost
-	Confidence  float64                `json:"confidence"`
-	FirstSeen   time.Time              `json:"first_seen"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	Type        WasteType `json:"type"`
+	ResourceIDs []string  `json:"resource_ids"`
+	Reason      string    `json:"reason"`
+	// Impact field removed - let FinOps tools calculate costs
+	Confidence float64                `json:"confidence"`
+	FirstSeen  time.Time              `json:"first_seen"`
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // WasteType categories
@@ -144,29 +131,6 @@ const (
 	WasteUnattached WasteType = "unattached"
 	WasteObsolete   WasteType = "obsolete"
 )
-
-// CostTrends tracks cost patterns
-type CostTrends struct {
-	Period     time.Duration         `json:"period"`
-	TotalCost  float64               `json:"total_cost"`
-	DailyCosts map[time.Time]float64 `json:"daily_costs"`
-	ByType     map[string]float64    `json:"by_type"`
-	ByOwner    map[string]float64    `json:"by_owner"`
-	TrendSlope float64               `json:"trend_slope"` // Positive = increasing
-	Forecast   float64               `json:"forecast"`    // Next period estimate
-}
-
-// CostAnomaly represents unusual spending
-type CostAnomaly struct {
-	Timestamp   time.Time              `json:"timestamp"`
-	ResourceID  string                 `json:"resource_id"`
-	Type        string                 `json:"type"`
-	Expected    float64                `json:"expected"`
-	Actual      float64                `json:"actual"`
-	Deviation   float64                `json:"deviation"`
-	Explanation string                 `json:"explanation"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
-}
 
 // Pattern represents recurring behavior
 type Pattern struct {
@@ -213,8 +177,6 @@ type ResourceRevision struct {
 // Metrics for aggregation
 type Metrics struct {
 	Count         int                    `json:"count"`
-	TotalCost     float64                `json:"total_cost"`
-	AverageCost   float64                `json:"average_cost"`
 	ResourceTypes map[string]int         `json:"resource_types"`
 	Tags          map[string]string      `json:"tags"`
 	Metadata      map[string]interface{} `json:"metadata,omitempty"`

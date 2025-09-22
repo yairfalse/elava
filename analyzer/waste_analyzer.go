@@ -83,7 +83,7 @@ func (w *WasteAnalyzerImpl) detectOrphaned(resources []types.Resource) WastePatt
 		}
 	}
 
-	pattern.Impact = totalCost
+	// Impact calculation removed - let FinOps tools handle
 	return pattern
 }
 
@@ -127,7 +127,7 @@ func (w *WasteAnalyzerImpl) detectIdle(resources []types.Resource) WastePattern 
 		}
 	}
 
-	pattern.Impact = totalCost
+	// Impact calculation removed - let FinOps tools handle
 	return pattern
 }
 
@@ -170,7 +170,7 @@ func (w *WasteAnalyzerImpl) detectOversized(resources []types.Resource) WastePat
 		}
 	}
 
-	pattern.Impact = totalCost
+	// Impact calculation removed - let FinOps tools handle
 	return pattern
 }
 
@@ -227,7 +227,7 @@ func (w *WasteAnalyzerImpl) detectUnattached(resources []types.Resource) WastePa
 		}
 	}
 
-	pattern.Impact = totalCost
+	// Impact calculation removed - let FinOps tools handle
 	return pattern
 }
 
@@ -264,7 +264,7 @@ func (w *WasteAnalyzerImpl) detectObsolete(resources []types.Resource) WastePatt
 		}
 	}
 
-	pattern.Impact = totalCost
+	// Impact calculation removed - let FinOps tools handle
 	return pattern
 }
 
