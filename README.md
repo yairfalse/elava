@@ -90,42 +90,8 @@ go build ./cmd/elava
 # Scan specific region
 ./elava scan --region us-west-2
 
-# Scan with attribution
-./elava scan --explain-drift
-
 # Filter resource types
 ./elava scan --filter ec2
-./elava scan --filter rds
-
-# Tiered scanning (fast → thorough)
-./elava scan --tiers
-```
-
-## Example: Drift Attribution
-
-```bash
-$ ./elava explain i-mysterious-instance
-
-📊 Attribution Report for i-mysterious-instance
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Resource Type: EC2 Instance
-Current State: Running
-Tags: {} (no tags)
-
-🕵️ Attribution:
-Actor: john.doe@company.com
-Action: RunInstances
-Timestamp: 2024-09-21 03:15:23 UTC
-Source: AWS Console (73.162.248.123)
-Confidence: 0.92 (High)
-
-📝 Context:
-- Created outside business hours
-- No associated Terraform/CloudFormation
-- Similar to previous debug instances
-
-🎯 Recommendation:
-Contact john.doe@company.com for cleanup
 ```
 
 ## Core Components
@@ -245,6 +211,7 @@ deny[msg] {
     msg := "Unencrypted RDS in production is forbidden"
 }
 ```
+
 
 ## Development
 
