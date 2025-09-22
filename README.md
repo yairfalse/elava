@@ -6,10 +6,10 @@ Infrastructure reconciliation without state files. Elava continuously observes y
     Cloud Infrastructure              Elava Engine                     Intelligence
    ┌──────────────────┐                   │                      ┌─────────────────┐
    │ AWS Resources    │                   ▼                      │ Drift Detection │
-   │ • EC2 • RDS      │ ──────► ┌─────────────────┐ ──────►    │ Attribution     │
-   │ • S3  • Lambda   │         │ MVCC Storage    │             │ Waste Analysis  │
-   │ • EKS • VPC      │ ◄────── │ (Living Memory) │ ◄──────     │ OPA Policies    │
-   └──────────────────┘         └─────────────────┘             └─────────────────┘
+   │ • EC2 • RDS      │ ──────► ┌─────────────────┐ ──────►      │ Attribution     │
+   │ • S3  • Lambda   │         │ MVCC Storage    │              │ Waste Analysis  │
+   │ • EKS • VPC      │ ◄────── │ (Living Memory) │ ◄──────      │ OPA Policies    │
+   └──────────────────┘         └─────────────────┘              └─────────────────┘
      Actual State                 Temporal Awareness              Operational Actions
 ```
 
@@ -212,83 +212,8 @@ deny[msg] {
 }
 ```
 
-```rego
-# policies/cleanup.rego - Resource lifecycle management
-package elava.cleanup
-
-# Terminate expired temporary resources
-terminate[action] {
-    contains(input.resource.name, "temp-")
-    resource_age_days > 7
-
-    action := {
-        "type": "terminate",
-        "grace_period": "24h",
-        "notification": input.resource.tags.owner
-    }
-}
-
-# Calculate resource age
-resource_age_days := days {
-    now := time.now_ns()
-    created := input.resource.created_at
-    days := (now - created) / (24 * 60 * 60 * 1000000000)
-}
-```
-
-### Enforcement Modes
-
-```yaml
-# Policy enforcement configuration
-policies:
-  enforcement_mode: notify  # monitor|notify|enforce|block
-
-  # Per-environment settings
-  environments:
-    production:
-      encryption_required: block
-      tagging_required: enforce
-    development:
-      cleanup_temp_resources: enforce
-      oversized_instances: notify
-```
-
-
-## Integration with FinOps Tools
-
-Elava identifies waste patterns but doesn't calculate costs. Integration points:
-
-```go
-// Export waste patterns for cost tools
-GET /api/waste-patterns
-
-// Response format for FinOps tools
-{
-  "patterns": [
-    {
-      "type": "orphaned",
-      "resource_ids": ["i-123", "i-456"],
-      "reason": "No owner tags for 30+ days",
-      "confidence": 0.95
-    }
-  ]
-}
-```
 
 ## Development
-
-```bash
-# Run tests
-go test ./...
-
-# Format and lint
-go fmt ./...
-go vet ./...
-golangci-lint run
-
-# Run with telemetry
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 ./elava scan
-```
 
 ## Project Structure
 
