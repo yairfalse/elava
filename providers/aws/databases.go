@@ -31,7 +31,7 @@ func (p *RealAWSProvider) listAuroraClusters(ctx context.Context, filter types.R
 		}
 
 		for _, cluster := range output.DBClusters {
-			tags := p.convertRDSTags(cluster.TagList)
+			tags := p.convertTagsToElava(cluster.TagList)
 
 			// Calculate cost based on instance count and types
 			instanceCount := len(cluster.DBClusterMembers)

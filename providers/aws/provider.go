@@ -428,7 +428,7 @@ func (p *RealAWSProvider) listLoadBalancers(ctx context.Context, filter types.Re
 
 // convertEC2Instance converts AWS EC2 instance to Elava resource
 func (p *RealAWSProvider) convertEC2Instance(instance ec2types.Instance) types.Resource {
-	tags := p.convertEC2Tags(instance.Tags)
+	tags := p.convertTagsToElava(instance.Tags)
 
 	// Determine if orphaned (no Elava owner or common tags)
 	isOrphaned := p.isResourceOrphaned(tags)
@@ -456,7 +456,7 @@ func (p *RealAWSProvider) convertEC2Instance(instance ec2types.Instance) types.R
 
 // convertRDSInstance converts AWS RDS instance to Elava resource
 func (p *RealAWSProvider) convertRDSInstance(instance rdstypes.DBInstance) types.Resource {
-	tags := p.convertRDSTags(instance.TagList)
+	tags := p.convertTagsToElava(instance.TagList)
 	isOrphaned := p.isResourceOrphaned(tags)
 
 	return types.Resource{
@@ -503,68 +503,6 @@ func (p *RealAWSProvider) convertLoadBalancer(lb elbv2types.LoadBalancer) types.
 			"dns_name": aws.ToString(lb.DNSName),
 		},
 	}
-}
-
-// convertEC2Tags converts EC2 tags to Elava tags
-func (p *RealAWSProvider) convertEC2Tags(ec2Tags []ec2types.Tag) types.Tags {
-	tags := types.Tags{}
-
-	for _, tag := range ec2Tags {
-		key := aws.ToString(tag.Key)
-		value := aws.ToString(tag.Value)
-
-		switch key {
-		case "elava:owner", "Owner", "owner":
-			tags.ElavaOwner = value
-		case "elava:managed":
-			tags.ElavaManaged = value == "true"
-		case "elava:blessed":
-			tags.ElavaBlessed = value == "true"
-		case "Environment", "environment", "env":
-			tags.Environment = value
-		case "Team", "team":
-			tags.Team = value
-		case "Name", "name":
-			tags.Name = value
-		case "Project", "project":
-			tags.Project = value
-		case "CostCenter", "cost-center", "costcenter":
-			tags.CostCenter = value
-		}
-	}
-
-	return tags
-}
-
-// convertRDSTags converts RDS tags to Elava tags
-func (p *RealAWSProvider) convertRDSTags(rdsTags []rdstypes.Tag) types.Tags {
-	tags := types.Tags{}
-
-	for _, tag := range rdsTags {
-		key := aws.ToString(tag.Key)
-		value := aws.ToString(tag.Value)
-
-		switch key {
-		case "elava:owner", "Owner", "owner":
-			tags.ElavaOwner = value
-		case "elava:managed":
-			tags.ElavaManaged = value == "true"
-		case "elava:blessed":
-			tags.ElavaBlessed = value == "true"
-		case "Environment", "environment", "env":
-			tags.Environment = value
-		case "Team", "team":
-			tags.Team = value
-		case "Name", "name":
-			tags.Name = value
-		case "Project", "project":
-			tags.Project = value
-		case "CostCenter", "cost-center", "costcenter":
-			tags.CostCenter = value
-		}
-	}
-
-	return tags
 }
 
 // isResourceOrphaned determines if resource lacks proper ownership/management tags

@@ -8,23 +8,17 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
-	asgtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
-	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
-	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
-	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
-	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"github.com/yairfalse/elava/types"
 )
@@ -61,7 +55,7 @@ func (p *RealAWSProvider) listS3Buckets(ctx context.Context, filter types.Resour
 			Bucket: bucket.Name,
 		})
 		if err == nil && tagsOutput.TagSet != nil {
-			tags = p.convertS3Tags(tagsOutput.TagSet)
+			tags = p.convertTagsToElava(tagsOutput.TagSet)
 		}
 
 		// Check if bucket is empty (good indicator of unused)
@@ -115,7 +109,7 @@ func (p *RealAWSProvider) listLambdaFunctions(ctx context.Context, filter types.
 					Resource: function.FunctionArn,
 				})
 				if err == nil && tagsOutput.Tags != nil {
-					tags = p.convertLambdaTags(tagsOutput.Tags)
+					tags = p.convertTagsToElava(tagsOutput.Tags)
 				}
 			}
 
@@ -175,7 +169,7 @@ func (p *RealAWSProvider) listEBSVolumes(ctx context.Context, filter types.Resou
 		}
 
 		for _, volume := range output.Volumes {
-			tags := p.convertEC2Tags(volume.Tags)
+			tags := p.convertTagsToElava(volume.Tags)
 
 			// Check if volume is attached
 			isAttached := len(volume.Attachments) > 0
@@ -229,7 +223,7 @@ func (p *RealAWSProvider) listElasticIPs(ctx context.Context, filter types.Resou
 	}
 
 	for _, address := range output.Addresses {
-		tags := p.convertEC2Tags(address.Tags)
+		tags := p.convertTagsToElava(address.Tags)
 
 		// Check if EIP is associated
 		isAssociated := address.AssociationId != nil
@@ -286,7 +280,7 @@ func (p *RealAWSProvider) listNATGateways(ctx context.Context, filter types.Reso
 		}
 
 		for _, natGw := range output.NatGateways {
-			tags := p.convertEC2Tags(natGw.Tags)
+			tags := p.convertTagsToElava(natGw.Tags)
 
 			resource := types.Resource{
 				ID:         aws.ToString(natGw.NatGatewayId),
@@ -320,65 +314,6 @@ func (p *RealAWSProvider) listNATGateways(ctx context.Context, filter types.Reso
 	return resources, nil
 }
 
-// convertS3Tags converts S3 tags to Elava tags
-func (p *RealAWSProvider) convertS3Tags(s3Tags []s3types.Tag) types.Tags {
-	tags := types.Tags{}
-
-	for _, tag := range s3Tags {
-		key := aws.ToString(tag.Key)
-		value := aws.ToString(tag.Value)
-
-		switch key {
-		case "elava:owner", "Owner", "owner":
-			tags.ElavaOwner = value
-		case "elava:managed":
-			tags.ElavaManaged = value == "true"
-		case "elava:blessed":
-			tags.ElavaBlessed = value == "true"
-		case "Environment", "environment", "env":
-			tags.Environment = value
-		case "Team", "team":
-			tags.Team = value
-		case "Name", "name":
-			tags.Name = value
-		case "Project", "project":
-			tags.Project = value
-		case "CostCenter", "cost-center", "costcenter":
-			tags.CostCenter = value
-		}
-	}
-
-	return tags
-}
-
-// convertLambdaTags converts Lambda tags to Elava tags
-func (p *RealAWSProvider) convertLambdaTags(lambdaTags map[string]string) types.Tags {
-	tags := types.Tags{}
-
-	for key, value := range lambdaTags {
-		switch key {
-		case "elava:owner", "Owner", "owner":
-			tags.ElavaOwner = value
-		case "elava:managed":
-			tags.ElavaManaged = value == "true"
-		case "elava:blessed":
-			tags.ElavaBlessed = value == "true"
-		case "Environment", "environment", "env":
-			tags.Environment = value
-		case "Team", "team":
-			tags.Team = value
-		case "Name", "name":
-			tags.Name = value
-		case "Project", "project":
-			tags.Project = value
-		case "CostCenter", "cost-center", "costcenter":
-			tags.CostCenter = value
-		}
-	}
-
-	return tags
-}
-
 // listSnapshots discovers EBS snapshots
 func (p *RealAWSProvider) listSnapshots(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
 	var resources []types.Resource
@@ -397,7 +332,7 @@ func (p *RealAWSProvider) listSnapshots(ctx context.Context, filter types.Resour
 		}
 
 		for _, snapshot := range output.Snapshots {
-			tags := p.convertEC2Tags(snapshot.Tags)
+			tags := p.convertTagsToElava(snapshot.Tags)
 
 			// Calculate age
 			age := time.Since(p.safeTimeValue(snapshot.StartTime))
@@ -458,7 +393,7 @@ func (p *RealAWSProvider) listAMIs(ctx context.Context, filter types.ResourceFil
 	}
 
 	for _, image := range output.Images {
-		tags := p.convertEC2Tags(image.Tags)
+		tags := p.convertTagsToElava(image.Tags)
 
 		// Parse creation date
 		creationTime := time.Now()
@@ -544,7 +479,7 @@ func (p *RealAWSProvider) listSecurityGroups(ctx context.Context, filter types.R
 		}
 
 		for _, sg := range output.SecurityGroups {
-			tags := p.convertEC2Tags(sg.Tags)
+			tags := p.convertTagsToElava(sg.Tags)
 
 			// Check if security group is overly permissive
 			hasWideOpen := false
@@ -596,194 +531,6 @@ func (p *RealAWSProvider) listSecurityGroups(ctx context.Context, filter types.R
 	return resources, nil
 }
 
-// Helper functions for tag conversion
-func (p *RealAWSProvider) convertGenericTags(tags map[string]string) types.Tags {
-	result := types.Tags{}
-	for key, value := range tags {
-		switch key {
-		case "elava:owner", "Owner", "owner":
-			result.ElavaOwner = value
-		case "elava:managed":
-			result.ElavaManaged = value == "true"
-		case "elava:blessed":
-			result.ElavaBlessed = value == "true"
-		case "Environment", "environment", "env":
-			result.Environment = value
-		case "Team", "team":
-			result.Team = value
-		case "Name", "name":
-			result.Name = value
-		case "Project", "project":
-			result.Project = value
-		case "CostCenter", "cost-center", "costcenter":
-			result.CostCenter = value
-		}
-	}
-	return result
-}
-
-func (p *RealAWSProvider) convertECSTags(tags []ecstypes.Tag) types.Tags {
-	result := types.Tags{}
-	for _, tag := range tags {
-		key := aws.ToString(tag.Key)
-		value := aws.ToString(tag.Value)
-		switch key {
-		case "elava:owner", "Owner", "owner":
-			result.ElavaOwner = value
-		case "elava:managed":
-			result.ElavaManaged = value == "true"
-		case "elava:blessed":
-			result.ElavaBlessed = value == "true"
-		case "Environment", "environment", "env":
-			result.Environment = value
-		case "Team", "team":
-			result.Team = value
-		case "Name", "name":
-			result.Name = value
-		case "Project", "project":
-			result.Project = value
-		case "CostCenter", "cost-center", "costcenter":
-			result.CostCenter = value
-		}
-	}
-	return result
-}
-
-func (p *RealAWSProvider) convertASGTags(tags []asgtypes.TagDescription) types.Tags {
-	result := types.Tags{}
-	for _, tag := range tags {
-		key := aws.ToString(tag.Key)
-		value := aws.ToString(tag.Value)
-		switch key {
-		case "elava:owner", "Owner", "owner":
-			result.ElavaOwner = value
-		case "elava:managed":
-			result.ElavaManaged = value == "true"
-		case "elava:blessed":
-			result.ElavaBlessed = value == "true"
-		case "Environment", "environment", "env":
-			result.Environment = value
-		case "Team", "team":
-			result.Team = value
-		case "Name", "name":
-			result.Name = value
-		case "Project", "project":
-			result.Project = value
-		case "CostCenter", "cost-center", "costcenter":
-			result.CostCenter = value
-		}
-	}
-	return result
-}
-
-func (p *RealAWSProvider) convertIAMTags(tags []iamtypes.Tag) types.Tags {
-	result := types.Tags{}
-	for _, tag := range tags {
-		key := aws.ToString(tag.Key)
-		value := aws.ToString(tag.Value)
-		switch key {
-		case "elava:owner", "Owner", "owner":
-			result.ElavaOwner = value
-		case "elava:managed":
-			result.ElavaManaged = value == "true"
-		case "elava:blessed":
-			result.ElavaBlessed = value == "true"
-		case "Environment", "environment", "env":
-			result.Environment = value
-		case "Team", "team":
-			result.Team = value
-		case "Name", "name":
-			result.Name = value
-		case "Project", "project":
-			result.Project = value
-		case "CostCenter", "cost-center", "costcenter":
-			result.CostCenter = value
-		}
-	}
-	return result
-}
-
-func (p *RealAWSProvider) convertECRTags(tags []ecrtypes.Tag) types.Tags {
-	result := types.Tags{}
-	for _, tag := range tags {
-		key := aws.ToString(tag.Key)
-		value := aws.ToString(tag.Value)
-		switch key {
-		case "elava:owner", "Owner", "owner":
-			result.ElavaOwner = value
-		case "elava:managed":
-			result.ElavaManaged = value == "true"
-		case "elava:blessed":
-			result.ElavaBlessed = value == "true"
-		case "Environment", "environment", "env":
-			result.Environment = value
-		case "Team", "team":
-			result.Team = value
-		case "Name", "name":
-			result.Name = value
-		case "Project", "project":
-			result.Project = value
-		case "CostCenter", "cost-center", "costcenter":
-			result.CostCenter = value
-		}
-	}
-	return result
-}
-
-func (p *RealAWSProvider) convertRoute53Tags(tags []route53types.Tag) types.Tags {
-	result := types.Tags{}
-	for _, tag := range tags {
-		key := aws.ToString(tag.Key)
-		value := aws.ToString(tag.Value)
-		switch key {
-		case "elava:owner", "Owner", "owner":
-			result.ElavaOwner = value
-		case "elava:managed":
-			result.ElavaManaged = value == "true"
-		case "elava:blessed":
-			result.ElavaBlessed = value == "true"
-		case "Environment", "environment", "env":
-			result.Environment = value
-		case "Team", "team":
-			result.Team = value
-		case "Name", "name":
-			result.Name = value
-		case "Project", "project":
-			result.Project = value
-		case "CostCenter", "cost-center", "costcenter":
-			result.CostCenter = value
-		}
-	}
-	return result
-}
-
-func (p *RealAWSProvider) convertKMSTags(tags []kmstypes.Tag) types.Tags {
-	result := types.Tags{}
-	for _, tag := range tags {
-		key := aws.ToString(tag.TagKey)
-		value := aws.ToString(tag.TagValue)
-		switch key {
-		case "elava:owner", "Owner", "owner":
-			result.ElavaOwner = value
-		case "elava:managed":
-			result.ElavaManaged = value == "true"
-		case "elava:blessed":
-			result.ElavaBlessed = value == "true"
-		case "Environment", "environment", "env":
-			result.Environment = value
-		case "Team", "team":
-			result.Team = value
-		case "Name", "name":
-			result.Name = value
-		case "Project", "project":
-			result.Project = value
-		case "CostCenter", "cost-center", "costcenter":
-			result.CostCenter = value
-		}
-	}
-	return result
-}
-
 // listEKSClusters scans for EKS clusters
 func (p *RealAWSProvider) listEKSClusters(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
 	if filter.Type != "" && filter.Type != "eks" {
@@ -806,7 +553,7 @@ func (p *RealAWSProvider) listEKSClusters(ctx context.Context, filter types.Reso
 		}
 
 		cluster := clusterDetails.Cluster
-		tags := p.convertEKSTags(cluster.Tags)
+		tags := p.convertTagsToElava(cluster.Tags)
 
 		resource := types.Resource{
 			ID:         aws.ToString(cluster.Name),
@@ -857,7 +604,7 @@ func (p *RealAWSProvider) listECSClusters(ctx context.Context, filter types.Reso
 
 	var resources []types.Resource
 	for _, cluster := range details.Clusters {
-		tags := p.convertECSTags(cluster.Tags)
+		tags := p.convertTagsToElava(cluster.Tags)
 
 		resource := types.Resource{
 			ID:         aws.ToString(cluster.ClusterName),
@@ -899,7 +646,7 @@ func (p *RealAWSProvider) listAutoScalingGroups(ctx context.Context, filter type
 		}
 
 		for _, asg := range output.AutoScalingGroups {
-			tags := p.convertASGTags(asg.Tags)
+			tags := p.convertTagsToElava(asg.Tags)
 
 			resource := types.Resource{
 				ID:         aws.ToString(asg.AutoScalingGroupName),
@@ -940,7 +687,7 @@ func (p *RealAWSProvider) listVPCEndpoints(ctx context.Context, filter types.Res
 
 	var resources []types.Resource
 	for _, endpoint := range output.VpcEndpoints {
-		tags := p.convertEC2Tags(endpoint.Tags)
+		tags := p.convertTagsToElava(endpoint.Tags)
 
 		resource := types.Resource{
 			ID:         aws.ToString(endpoint.VpcEndpointId),
@@ -986,7 +733,7 @@ func (p *RealAWSProvider) listRDSSnapshots(ctx context.Context, filter types.Res
 		})
 		var tags types.Tags
 		if err == nil && tagsOutput.TagList != nil {
-			tags = p.convertRDSTags(tagsOutput.TagList)
+			tags = p.convertTagsToElava(tagsOutput.TagList)
 		} else {
 			tags = types.Tags{}
 		}
@@ -1036,7 +783,7 @@ func (p *RealAWSProvider) listIAMRoles(ctx context.Context, filter types.Resourc
 			})
 			var tags types.Tags
 			if err == nil {
-				tags = p.convertIAMTags(tagsOutput.Tags)
+				tags = p.convertTagsToElava(tagsOutput.Tags)
 			} else {
 				tags = types.Tags{}
 			}
@@ -1079,7 +826,7 @@ func (p *RealAWSProvider) listNetworkInterfaces(ctx context.Context, filter type
 
 	var resources []types.Resource
 	for _, eni := range output.NetworkInterfaces {
-		tags := p.convertEC2Tags(eni.TagSet)
+		tags := p.convertTagsToElava(eni.TagSet)
 
 		resource := types.Resource{
 			ID:         aws.ToString(eni.NetworkInterfaceId),
@@ -1124,7 +871,7 @@ func (p *RealAWSProvider) listECRRepositories(ctx context.Context, filter types.
 		})
 		var tags types.Tags
 		if err == nil {
-			tags = p.convertECRTags(tagsOutput.Tags)
+			tags = p.convertTagsToElava(tagsOutput.Tags)
 		} else {
 			tags = types.Tags{}
 		}
@@ -1171,7 +918,7 @@ func (p *RealAWSProvider) listRoute53HostedZones(ctx context.Context, filter typ
 		})
 		var tags types.Tags
 		if err == nil {
-			tags = p.convertRoute53Tags(tagsOutput.ResourceTagSet.Tags)
+			tags = p.convertTagsToElava(tagsOutput.ResourceTagSet.Tags)
 		} else {
 			tags = types.Tags{}
 		}
@@ -1225,7 +972,7 @@ func (p *RealAWSProvider) listKMSKeys(ctx context.Context, filter types.Resource
 		})
 		var tags types.Tags
 		if err == nil {
-			tags = p.convertKMSTags(tagsOutput.Tags)
+			tags = p.convertTagsToElava(tagsOutput.Tags)
 		} else {
 			tags = types.Tags{}
 		}
@@ -1252,30 +999,4 @@ func (p *RealAWSProvider) listKMSKeys(ctx context.Context, filter types.Resource
 	}
 
 	return resources, nil
-}
-
-// convertEKSTags converts EKS tags to Elava tags format
-func (p *RealAWSProvider) convertEKSTags(tags map[string]string) types.Tags {
-	result := types.Tags{}
-	for key, value := range tags {
-		switch key {
-		case "elava:owner", "Owner", "owner":
-			result.ElavaOwner = value
-		case "elava:managed":
-			result.ElavaManaged = value == "true"
-		case "elava:blessed":
-			result.ElavaBlessed = value == "true"
-		case "Environment", "environment", "env":
-			result.Environment = value
-		case "Team", "team":
-			result.Team = value
-		case "Name", "name":
-			result.Name = value
-		case "Project", "project":
-			result.Project = value
-		case "CostCenter", "cost-center", "costcenter":
-			result.CostCenter = value
-		}
-	}
-	return result
 }
