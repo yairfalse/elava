@@ -2,6 +2,7 @@ package policy
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -209,8 +210,18 @@ func (pe *PolicyEngine) evaluatePolicy(ctx context.Context, name string, query r
 
 func (pe *PolicyEngine) parseEvalResults(results rego.ResultSet, result *PolicyResult) {
 	for _, res := range results {
+		// First check bindings (variables)
 		for key, value := range res.Bindings {
 			pe.bindPolicyValue(key, value, result)
+		}
+
+		// Then check expressions (rules)
+		if len(res.Expressions) > 0 {
+			if expr, ok := res.Expressions[0].Value.(map[string]interface{}); ok {
+				for key, value := range expr {
+					pe.bindPolicyValue(key, value, result)
+				}
+			}
 		}
 	}
 }
@@ -248,8 +259,17 @@ func (pe *PolicyEngine) bindStringField(key string, value interface{}, result *P
 
 func (pe *PolicyEngine) bindFloatField(key string, value interface{}, result *PolicyResult) bool {
 	if key == "confidence" {
-		if num, ok := value.(float64); ok {
-			result.Confidence = num
+		switch v := value.(type) {
+		case float64:
+			result.Confidence = v
+			return true
+		case json.Number:
+			if f, err := v.Float64(); err == nil {
+				result.Confidence = f
+				return true
+			}
+		case int:
+			result.Confidence = float64(v)
 			return true
 		}
 	}
@@ -274,6 +294,7 @@ func (pe *PolicyEngine) aggregateResults(results []PolicyResult) PolicyResult {
 		Action:     "ignore",
 		Risk:       "low",
 		Confidence: 0.0,
+		Policies:   []string{},
 		Metadata:   make(map[string]any),
 	}
 
@@ -314,6 +335,9 @@ func (pe *PolicyEngine) aggregateResults(results []PolicyResult) PolicyResult {
 		if result.Reason != "" {
 			reasons = append(reasons, result.Reason)
 		}
+
+		// Aggregate policy names
+		finalResult.Policies = append(finalResult.Policies, result.Policies...)
 	}
 
 	if len(reasons) > 0 {
