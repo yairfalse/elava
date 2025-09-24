@@ -4,19 +4,29 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/yairfalse/elava/providers"
 	"github.com/yairfalse/elava/telemetry"
 	"github.com/yairfalse/elava/types"
 )
 
 // Enforcer executes policy decisions
 type Enforcer struct {
-	logger *telemetry.Logger
+	logger   *telemetry.Logger
+	provider providers.CloudProvider
 }
 
-// NewEnforcer creates a new enforcer
+// NewEnforcer creates a new enforcer without provider (dry-run mode)
 func NewEnforcer() *Enforcer {
 	return &Enforcer{
 		logger: telemetry.NewLogger("policy-enforcer"),
+	}
+}
+
+// NewEnforcerWithProvider creates an enforcer that can tag resources
+func NewEnforcerWithProvider(provider providers.CloudProvider) *Enforcer {
+	return &Enforcer{
+		logger:   telemetry.NewLogger("policy-enforcer"),
+		provider: provider,
 	}
 }
 
@@ -67,6 +77,22 @@ func (e *Enforcer) flag(ctx context.Context, resource types.Resource, decision P
 		Interface("tags", tags).
 		Msg("flagging resource with policy tags")
 
-	// TODO: Future - call provider.TagResource
+	// Apply tags if provider is configured
+	if e.provider != nil {
+		if err := e.provider.TagResource(ctx, resource.ID, tags); err != nil {
+			e.logger.WithContext(ctx).Error().
+				Err(err).
+				Str("resource_id", resource.ID).
+				Msg("failed to tag resource")
+			return fmt.Errorf("failed to tag resource %s: %w", resource.ID, err)
+		}
+		e.logger.WithContext(ctx).Info().
+			Str("resource_id", resource.ID).
+			Msg("successfully tagged resource")
+	} else {
+		e.logger.WithContext(ctx).Debug().
+			Msg("dry-run mode: tags not applied")
+	}
+
 	return nil
 }
