@@ -3,8 +3,10 @@ package policy
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/yairfalse/elava/providers"
+	"github.com/yairfalse/elava/storage"
 	"github.com/yairfalse/elava/telemetry"
 	"github.com/yairfalse/elava/types"
 )
@@ -13,6 +15,7 @@ import (
 type Enforcer struct {
 	logger   *telemetry.Logger
 	provider providers.CloudProvider
+	storage  *storage.MVCCStorage
 }
 
 // NewEnforcer creates a new enforcer without provider (dry-run mode)
@@ -30,6 +33,23 @@ func NewEnforcerWithProvider(provider providers.CloudProvider) *Enforcer {
 	}
 }
 
+// NewEnforcerWithStorage creates an enforcer that stores events
+func NewEnforcerWithStorage(storage *storage.MVCCStorage) *Enforcer {
+	return &Enforcer{
+		logger:  telemetry.NewLogger("policy-enforcer"),
+		storage: storage,
+	}
+}
+
+// NewEnforcerWithStorageAndProvider creates a full enforcer
+func NewEnforcerWithStorageAndProvider(storage *storage.MVCCStorage, provider providers.CloudProvider) *Enforcer {
+	return &Enforcer{
+		logger:   telemetry.NewLogger("policy-enforcer"),
+		storage:  storage,
+		provider: provider,
+	}
+}
+
 // Execute enforces a policy decision on a resource
 func (e *Enforcer) Execute(ctx context.Context, decision PolicyResult, resource types.Resource) error {
 	e.logger.WithContext(ctx).Info().
@@ -39,19 +59,57 @@ func (e *Enforcer) Execute(ctx context.Context, decision PolicyResult, resource 
 		Str("reason", decision.Reason).
 		Msg("executing policy enforcement")
 
+	// Create enforcement event
+	event := types.EnforcementEvent{
+		Timestamp:    time.Now(),
+		ResourceID:   resource.ID,
+		ResourceType: resource.Type,
+		Provider:     resource.Provider,
+		Action:       decision.Action,
+		Decision:     decision.Decision,
+		Reason:       decision.Reason,
+		Success:      true,
+	}
+
+	// Execute the action
+	var err error
 	switch decision.Action {
 	case "ignore":
-		return nil
+		// No action needed
 	case "notify":
-		return e.notify(ctx, resource, decision.Reason)
+		err = e.notify(ctx, resource, decision.Reason)
 	case "flag":
-		return e.flag(ctx, resource, decision)
+		tags := map[string]string{
+			"elava:policy-flag":   decision.Decision,
+			"elava:policy-reason": decision.Reason,
+		}
+		event.Tags = tags
+		err = e.flag(ctx, resource, decision)
 	default:
 		e.logger.WithContext(ctx).Warn().
 			Str("action", decision.Action).
 			Msg("unknown enforcement action")
-		return nil
 	}
+
+	// Record failure if any
+	if err != nil {
+		event.Success = false
+		event.Error = err.Error()
+	}
+
+	// Store event (non-blocking)
+	if e.storage != nil {
+		go func() {
+			if storeErr := e.storage.StoreEnforcement(context.Background(), event); storeErr != nil {
+				e.logger.Error().
+					Err(storeErr).
+					Str("resource_id", resource.ID).
+					Msg("failed to store enforcement event")
+			}
+		}()
+	}
+
+	return err
 }
 
 func (e *Enforcer) notify(ctx context.Context, resource types.Resource, reason string) error {
