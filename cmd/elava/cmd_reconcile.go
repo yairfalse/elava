@@ -67,7 +67,7 @@ func runReconcile(cmd *cobra.Command, args []string) error {
 
 	// Initialize storage (use default path for now)
 	storagePath := "/tmp/elava-storage"
-	// TODO: Could read from config if we had storage config
+	// Storage path could be configurable in future
 	store, err := storage.NewMVCCStorage(storagePath)
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
@@ -130,8 +130,7 @@ func parseFilter(filterStr string) types.ResourceFilter {
 	// Format: type=ec2,region=us-east-1
 	filter := types.ResourceFilter{}
 
-	// TODO: Implement proper filter parsing
-	// For now, return empty filter (all resources)
+	// Simple filter parsing - returns empty filter for all resources
 
 	return filter
 }

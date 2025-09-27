@@ -42,7 +42,7 @@ func init() {
 }
 
 func runTag(cmd *cobra.Command, args []string) error {
-	// TODO: Implement tagging functionality
+	// Tagging functionality coming soon
 	fmt.Println("🏷️  Resource Tagging")
 	fmt.Println()
 	fmt.Println("This feature is coming soon!")

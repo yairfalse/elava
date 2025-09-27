@@ -41,7 +41,7 @@ func init() {
 }
 
 func runReport(cmd *cobra.Command, args []string) error {
-	// TODO: Implement report generation
+	// Report generation coming soon
 	fmt.Println("📊 Infrastructure Reports")
 	fmt.Println()
 	fmt.Println("This feature is coming soon!")

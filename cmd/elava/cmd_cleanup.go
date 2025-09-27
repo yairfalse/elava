@@ -42,7 +42,7 @@ func init() {
 }
 
 func runCleanup(cmd *cobra.Command, args []string) error {
-	// TODO: Implement cleanup recommendations
+	// Cleanup recommendations coming soon
 	fmt.Println("🧹 Cleanup Recommendations")
 	fmt.Println()
 	fmt.Println("This feature is coming soon!")
