@@ -220,7 +220,13 @@ func (pe *PolicyEngine) parseEvalResults(results rego.ResultSet, result *PolicyR
 
 		// Then check expressions (rules)
 		if len(res.Expressions) > 0 {
-			if expr, ok := res.Expressions[0].Value.(OpaExpressionValue); ok {
+			// Handle both OpaExpressionValue and map[string]interface{}
+			switch expr := res.Expressions[0].Value.(type) {
+			case OpaExpressionValue:
+				for key, value := range expr {
+					pe.bindPolicyValue(key, value, result)
+				}
+			case map[string]interface{}:
 				for key, value := range expr {
 					pe.bindPolicyValue(key, value, result)
 				}
