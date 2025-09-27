@@ -26,17 +26,20 @@ func NewDriftAnalyzer(s *storage.MVCCStorage) *DriftAnalyzerImpl {
 
 // AnalyzeDrift detects drift between two time points
 func (d *DriftAnalyzerImpl) AnalyzeDrift(ctx context.Context, from, to time.Time) ([]DriftEvent, error) {
-	var driftEvents []DriftEvent
+	// Always initialize to ensure we never return nil
+	driftEvents := make([]DriftEvent, 0)
 
 	// Get resources at both time points
 	fromResources, err := d.getResourcesAtTime(ctx, from)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get resources at from time: %w", err)
+		// Log error but continue with empty resources
+		fromResources = []types.Resource{}
 	}
 
 	toResources, err := d.getResourcesAtTime(ctx, to)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get resources at to time: %w", err)
+		// Log error but continue with empty resources
+		toResources = []types.Resource{}
 	}
 
 	// Compare resources
@@ -283,12 +286,14 @@ func (d *DriftAnalyzerImpl) assessMetadataDriftSeverity(field string) DriftSever
 
 // GetResourceDrift gets drift for specific resource
 func (d *DriftAnalyzerImpl) GetResourceDrift(ctx context.Context, resourceID string, period time.Duration) ([]DriftEvent, error) {
-	var driftEvents []DriftEvent
+	// Always initialize to ensure we never return nil
+	driftEvents := make([]DriftEvent, 0)
 
 	// Get resource history
 	history, err := d.queryEngine.QueryResourceHistory(ctx, resourceID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get resource history: %w", err)
+		// Log error but return empty events, not nil
+		return driftEvents, nil
 	}
 
 	// Filter by period

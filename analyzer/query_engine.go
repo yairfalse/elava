@@ -158,7 +158,8 @@ func (q *QueryEngineImpl) QueryResourceHistory(ctx context.Context, resourceID s
 	err := q.storage.DB().View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte("observations"))
 		if bucket == nil {
-			return fmt.Errorf("observations bucket not found")
+			// No observations yet - return empty slice, not an error
+			return nil
 		}
 
 		return q.scanResourceHistory(bucket, resourceID, &revisions)
@@ -218,7 +219,8 @@ func (q *QueryEngineImpl) AggregateByTag(ctx context.Context, tag string, period
 	err := q.storage.DB().View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte("observations"))
 		if bucket == nil {
-			return fmt.Errorf("observations bucket not found")
+			// No observations yet - return empty metrics, not an error
+			return nil
 		}
 
 		return q.aggregateResources(bucket, tag, cutoff, metrics)
