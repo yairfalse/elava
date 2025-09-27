@@ -208,8 +208,10 @@ func (d *DriftAnalyzerImpl) compareMetadata(from, to map[string]interface{}) []D
 			OldValue: from["monthly_cost_estimate"],
 			NewValue: to["monthly_cost_estimate"],
 			Severity: DriftHigh,
-			Metadata: map[string]interface{}{
-				"cost_increase": d.calculateCostIncrease(from, to),
+			Metadata: DriftMetadata{
+				Source: "cost_analysis",
+				Reason: fmt.Sprintf("Cost change: %.2f%%", d.calculateCostIncrease(from, to)),
+				Impact: "high",
 			},
 		})
 	}

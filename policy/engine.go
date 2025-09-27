@@ -16,6 +16,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// OpaExpressionValue represents the dynamic value from OPA expression results
+type OpaExpressionValue map[string]interface{}
+
 // PolicyEngine evaluates OPA policies against resources with MVCC context
 type PolicyEngine struct {
 	storage *storage.MVCCStorage
@@ -217,7 +220,7 @@ func (pe *PolicyEngine) parseEvalResults(results rego.ResultSet, result *PolicyR
 
 		// Then check expressions (rules)
 		if len(res.Expressions) > 0 {
-			if expr, ok := res.Expressions[0].Value.(map[string]interface{}); ok {
+			if expr, ok := res.Expressions[0].Value.(OpaExpressionValue); ok {
 				for key, value := range expr {
 					pe.bindPolicyValue(key, value, result)
 				}

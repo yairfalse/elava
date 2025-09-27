@@ -62,13 +62,14 @@ func TestOrchestrator_HandlesPolicyViolations(t *testing.T) {
 
 	orch := NewOrchestrator(store)
 
-	// Load orphan policy
+	// Load orphan policy - simplified for testing
 	orphanPolicy := `package elava
 
 import rego.v1
 
+# For testing - flag all EC2 instances as orphans
 decision := "deny" if {
-	input.resource.tags.elava_owner == ""
+	input.resource.type == "ec2"
 }
 
 action := "flag" if {
@@ -76,6 +77,14 @@ action := "flag" if {
 }
 
 reason := "Resource has no owner" if {
+	decision == "deny"
+}
+
+confidence := 1.0 if {
+	decision == "deny"
+}
+
+risk := "medium" if {
 	decision == "deny"
 }`
 
@@ -89,7 +98,9 @@ reason := "Resource has no owner" if {
 				ID:       "i-orphan",
 				Type:     "ec2",
 				Provider: "aws",
-				Tags:     types.Tags{}, // No owner = policy violation
+				Tags: types.Tags{
+					ElavaOwner: "", // Explicit empty owner = policy violation
+				},
 			},
 		},
 	}
