@@ -307,15 +307,13 @@ func TestEngine_ExecuteSingle_BlessedProtection(t *testing.T) {
 	}
 }
 
-func TestEngine_Execute_Batch(t *testing.T) {
+// setupTestEngine creates a test engine with mock provider
+func setupTestEngine(t *testing.T, opts ExecutorOptions) (*Engine, *MockProvider, func()) {
+	t.Helper()
 	tmpDir := t.TempDir()
 
-	// Setup
 	storage, _ := storage.NewMVCCStorage(tmpDir)
-	defer func() { _ = storage.Close() }()
-
 	walInstance, _ := wal.Open(tmpDir)
-	defer func() { _ = walInstance.Close() }()
 
 	mockProvider := &MockProvider{
 		resources: []types.Resource{
@@ -327,11 +325,23 @@ func TestEngine_Execute_Batch(t *testing.T) {
 		"aws": mockProvider,
 	}
 
-	engine := NewEngine(providers, storage, walInstance, ExecutorOptions{
+	engine := NewEngine(providers, storage, walInstance, opts)
+
+	cleanup := func() {
+		_ = storage.Close()
+		_ = walInstance.Close()
+	}
+
+	return engine, mockProvider, cleanup
+}
+
+func TestEngine_Execute_Batch(t *testing.T) {
+	engine, mockProvider, cleanup := setupTestEngine(t, ExecutorOptions{
 		AllowDestructive:  true,
 		ContinueOnFailure: true,
-		SkipConfirmation:  true, // Skip confirmation for testing
+		SkipConfirmation:  true,
 	})
+	defer cleanup()
 
 	// Multiple decisions
 	decisions := []types.Decision{
@@ -366,29 +376,41 @@ func TestEngine_Execute_Batch(t *testing.T) {
 		t.Fatalf("Execute failed: %v", err)
 	}
 
-	if result.TotalDecisions != 3 {
-		t.Errorf("TotalDecisions = %d, want 3", result.TotalDecisions)
+	validateBatchResult(t, result, 3, 3, false)
+	validateProviderCalls(t, mockProvider, 1, 1, 1)
+}
+
+// validateBatchResult validates batch execution results
+func validateBatchResult(t *testing.T, result *ExecutionResult, total, successful int, partial bool) {
+	t.Helper()
+
+	if result.TotalDecisions != total {
+		t.Errorf("TotalDecisions = %d, want %d", result.TotalDecisions, total)
 	}
 
-	if result.SuccessfulCount != 3 {
-		t.Errorf("SuccessfulCount = %d, want 3", result.SuccessfulCount)
+	if result.SuccessfulCount != successful {
+		t.Errorf("SuccessfulCount = %d, want %d", result.SuccessfulCount, successful)
 	}
 
-	if result.PartialFailure {
-		t.Error("PartialFailure should be false")
+	if result.PartialFailure != partial {
+		t.Errorf("PartialFailure = %v, want %v", result.PartialFailure, partial)
+	}
+}
+
+// validateProviderCalls validates provider method call counts
+func validateProviderCalls(t *testing.T, p *MockProvider, creates, tags, deletes int) {
+	t.Helper()
+
+	if len(p.createCalls) != creates {
+		t.Errorf("Create calls = %d, want %d", len(p.createCalls), creates)
 	}
 
-	// Check individual operations
-	if len(mockProvider.createCalls) != 1 {
-		t.Errorf("Create calls = %d, want 1", len(mockProvider.createCalls))
+	if len(p.tagCalls) != tags {
+		t.Errorf("Tag calls = %d, want %d", len(p.tagCalls), tags)
 	}
 
-	if len(mockProvider.tagCalls) != 1 {
-		t.Errorf("Tag calls = %d, want 1", len(mockProvider.tagCalls))
-	}
-
-	if len(mockProvider.deleteCalls) != 1 {
-		t.Errorf("Delete calls = %d, want 1", len(mockProvider.deleteCalls))
+	if len(p.deleteCalls) != deletes {
+		t.Errorf("Delete calls = %d, want %d", len(p.deleteCalls), deletes)
 	}
 }
 

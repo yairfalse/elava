@@ -6,7 +6,6 @@ import (
 	"github.com/yairfalse/elava/types"
 )
 
-//nolint:gocognit // Test complexity is acceptable for thorough coverage
 func TestSimpleDecisionMaker_Decide(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -142,28 +141,35 @@ func TestSimpleDecisionMaker_Decide(t *testing.T) {
 			dm := NewSimpleDecisionMaker(tt.skipDestructive)
 			decisions, err := dm.Decide(tt.diffs)
 
-			if tt.shouldError {
-				if err == nil {
-					t.Errorf("Decide() expected error but got none")
-				}
-				return
-			}
-
-			if err != nil {
-				t.Fatalf("Decide() error = %v", err)
-			}
-
-			if len(decisions) != len(tt.expectedActions) {
-				t.Errorf("Decide() got %d decisions, want %d", len(decisions), len(tt.expectedActions))
-				return
-			}
-
-			for i, decision := range decisions {
-				if decision.Action != tt.expectedActions[i] {
-					t.Errorf("Decision[%d].Action = %v, want %v", i, decision.Action, tt.expectedActions[i])
-				}
-			}
+			validateDecisions(t, decisions, err, tt.expectedActions, tt.shouldError)
 		})
+	}
+}
+
+// validateDecisions validates decision results
+func validateDecisions(t *testing.T, decisions []types.Decision, err error, expectedActions []string, shouldError bool) {
+	t.Helper()
+
+	if shouldError {
+		if err == nil {
+			t.Errorf("expected error but got none")
+		}
+		return
+	}
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(decisions) != len(expectedActions) {
+		t.Errorf("got %d decisions, want %d", len(decisions), len(expectedActions))
+		return
+	}
+
+	for i, decision := range decisions {
+		if decision.Action != expectedActions[i] {
+			t.Errorf("Decision[%d].Action = %v, want %v", i, decision.Action, expectedActions[i])
+		}
 	}
 }
 
