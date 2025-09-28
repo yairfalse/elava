@@ -31,51 +31,46 @@ func (p *RealAWSProvider) listAuroraClusters(ctx context.Context, filter types.R
 		}
 
 		for _, cluster := range output.DBClusters {
-			tags := p.convertTagsToElava(cluster.TagList)
-
-			// Calculate cost based on instance count and types
-			instanceCount := len(cluster.DBClusterMembers)
-			isServerless := strings.Contains(aws.ToString(cluster.EngineMode), "serverless")
-
-			// Check if cluster is idle (no connections)
-			isIdle := cluster.AllocatedStorage == nil || aws.ToInt32(cluster.AllocatedStorage) == 0
-
-			resource := types.Resource{
-				ID:         aws.ToString(cluster.DBClusterIdentifier),
-				Type:       "aurora",
-				Provider:   "aws",
-				Region:     p.region,
-				AccountID:  p.accountID,
-				Name:       aws.ToString(cluster.DBClusterIdentifier),
-				Status:     aws.ToString(cluster.Status),
-				Tags:       tags,
-				CreatedAt:  p.safeTimeValue(cluster.ClusterCreateTime),
-				LastSeenAt: time.Now(),
-				IsOrphaned: p.isResourceOrphaned(tags) || isIdle,
-				Metadata: map[string]interface{}{
-					"engine":              aws.ToString(cluster.Engine),
-					"engine_version":      aws.ToString(cluster.EngineVersion),
-					"engine_mode":         aws.ToString(cluster.EngineMode),
-					"instance_count":      instanceCount,
-					"is_serverless":       isServerless,
-					"multi_az":            aws.ToBool(cluster.MultiAZ),
-					"deletion_protection": aws.ToBool(cluster.DeletionProtection),
-					"backup_retention":    aws.ToInt32(cluster.BackupRetentionPeriod),
-					"is_idle":             isIdle,
-				},
-			}
-
-			// High cost priority for multi-instance clusters
-			if instanceCount > 1 {
-				resource.Metadata["cost_priority"] = "high"
-				resource.Metadata["monthly_cost_estimate"] = float64(instanceCount) * 150.0
-			}
-
+			resource := p.convertAuroraCluster(cluster)
 			resources = append(resources, resource)
 		}
 	}
 
 	return resources, nil
+}
+
+// convertAuroraCluster converts an Aurora cluster to Resource
+func (p *RealAWSProvider) convertAuroraCluster(cluster rdstypes.DBCluster) types.Resource {
+	tags := p.convertTagsToElava(cluster.TagList)
+
+	instanceCount := len(cluster.DBClusterMembers)
+	isServerless := strings.Contains(aws.ToString(cluster.EngineMode), "serverless")
+	isIdle := cluster.AllocatedStorage == nil || aws.ToInt32(cluster.AllocatedStorage) == 0
+
+	return types.Resource{
+		ID:         aws.ToString(cluster.DBClusterIdentifier),
+		Type:       "aurora",
+		Provider:   "aws",
+		Region:     p.region,
+		AccountID:  p.accountID,
+		Name:       aws.ToString(cluster.DBClusterIdentifier),
+		Status:     aws.ToString(cluster.Status),
+		Tags:       tags,
+		CreatedAt:  p.safeTimeValue(cluster.ClusterCreateTime),
+		LastSeenAt: time.Now(),
+		IsOrphaned: p.isResourceOrphaned(tags) || isIdle,
+		Metadata: types.ResourceMetadata{
+			Engine:           aws.ToString(cluster.Engine),
+			EngineVersion:    aws.ToString(cluster.EngineVersion),
+			NodeCount:        instanceCount,
+			MultiAZ:          aws.ToBool(cluster.MultiAZ),
+			BackupWindow:     aws.ToString(cluster.PreferredBackupWindow),
+			ClusterID:        aws.ToString(cluster.DBClusterIdentifier),
+			IsIdle:           isIdle,
+			State:            aws.ToString(cluster.Status),
+			AllocatedStorage: aws.ToInt32(cluster.AllocatedStorage),
+		},
+	}
 }
 
 // listRedshiftClusters discovers Redshift data warehouse clusters
@@ -106,22 +101,17 @@ func (p *RealAWSProvider) listRedshiftClusters(ctx context.Context, filter types
 			CreatedAt:  p.safeTimeValue(cluster.ClusterCreateTime),
 			LastSeenAt: time.Now(),
 			IsOrphaned: p.isResourceOrphaned(tags) || isPaused,
-			Metadata: map[string]interface{}{
-				"node_type":          aws.ToString(cluster.NodeType),
-				"node_count":         nodeCount,
-				"database_name":      aws.ToString(cluster.DBName),
-				"endpoint":           aws.ToString(cluster.Endpoint.Address),
-				"port":               aws.ToInt32(cluster.Endpoint.Port),
-				"encrypted":          aws.ToBool(cluster.Encrypted),
-				"is_paused":          isPaused,
-				"backup_retention":   cluster.AutomatedSnapshotRetentionPeriod,
-				"maintenance_window": aws.ToString(cluster.PreferredMaintenanceWindow),
+			Metadata: types.ResourceMetadata{
+				NodeCount:    nodeCount,
+				DBName:       aws.ToString(cluster.DBName),
+				Endpoint:     aws.ToString(cluster.Endpoint.Address),
+				Port:         aws.ToInt32(cluster.Endpoint.Port),
+				Encrypted:    aws.ToBool(cluster.Encrypted),
+				IsPaused:     isPaused,
+				BackupWindow: aws.ToString(cluster.PreferredMaintenanceWindow),
+				State:        aws.ToString(cluster.ClusterStatus),
 			},
 		}
-
-		// Redshift is VERY expensive - high priority
-		resource.Metadata["cost_priority"] = "very_high"
-		resource.Metadata["monthly_cost_estimate"] = float64(nodeCount) * 250.0
 
 		resources = append(resources, resource)
 	}

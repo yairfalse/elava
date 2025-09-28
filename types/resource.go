@@ -6,18 +6,18 @@ import (
 
 // Resource represents a cloud resource with Day 2 operations data
 type Resource struct {
-	ID         string                 `json:"id"`
-	Type       string                 `json:"type"`
-	Provider   string                 `json:"provider"`
-	Region     string                 `json:"region"`
-	AccountID  string                 `json:"account_id"`
-	Name       string                 `json:"name"`
-	Status     string                 `json:"status"`
-	Tags       Tags                   `json:"tags"`
-	CreatedAt  time.Time              `json:"created_at"`
-	LastSeenAt time.Time              `json:"last_seen_at"`
-	IsOrphaned bool                   `json:"is_orphaned"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+	ID         string           `json:"id"`
+	Type       string           `json:"type"`
+	Provider   string           `json:"provider"`
+	Region     string           `json:"region"`
+	AccountID  string           `json:"account_id"`
+	Name       string           `json:"name"`
+	Status     string           `json:"status"`
+	Tags       Tags             `json:"tags"`
+	CreatedAt  time.Time        `json:"created_at"`
+	LastSeenAt time.Time        `json:"last_seen_at"`
+	IsOrphaned bool             `json:"is_orphaned"`
+	Metadata   ResourceMetadata `json:"metadata,omitempty"`
 }
 
 // ResourceSpec defines desired resource configuration
