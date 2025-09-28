@@ -380,7 +380,6 @@ func TestEngine_Execute_Batch(t *testing.T) {
 	validateProviderCalls(t, mockProvider, 1, 1, 1)
 }
 
-
 // validateBatchResult validates batch execution results
 func validateBatchResult(t *testing.T, result *ExecutionResult, total, successful int, partial bool) {
 	t.Helper()
