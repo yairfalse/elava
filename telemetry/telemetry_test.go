@@ -122,7 +122,7 @@ func TestNewLogger(t *testing.T) {
 	logger.Info().Msg("test message")
 
 	// Close writer and restore stdout
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	// Read captured output
@@ -308,10 +308,10 @@ func TestLogger_ConvenienceMethods(t *testing.T) {
 func TestConfig_Defaults(t *testing.T) {
 	// Clear environment variables
 	oldEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	defer func() {
 		if oldEndpoint != "" {
-			os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", oldEndpoint)
+			_ = os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", oldEndpoint)
 		}
 	}()
 
@@ -332,8 +332,8 @@ func TestConfig_Defaults(t *testing.T) {
 func TestConfig_EnvironmentVariable(t *testing.T) {
 	// Set environment variable
 	testEndpoint := "test.example.com:4317"
-	os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", testEndpoint)
-	defer os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	_ = os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", testEndpoint)
+	defer func() { _ = os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT") }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
