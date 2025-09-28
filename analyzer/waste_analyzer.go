@@ -10,6 +10,9 @@ import (
 	"github.com/yairfalse/elava/types"
 )
 
+// ResourceMetadata represents resource metadata for analysis
+type ResourceMetadata map[string]interface{}
+
 // WasteAnalyzerImpl identifies wasted resources
 type WasteAnalyzerImpl struct {
 	storage     *storage.MVCCStorage
@@ -318,14 +321,14 @@ func (w *WasteAnalyzerImpl) FindIdleResources(ctx context.Context, idleThreshold
 
 // Helper methods for metadata access
 
-func (w *WasteAnalyzerImpl) checkMetadataBool(meta map[string]interface{}, key string) bool {
+func (w *WasteAnalyzerImpl) checkMetadataBool(meta ResourceMetadata, key string) bool {
 	if val, ok := meta[key].(bool); ok {
 		return val
 	}
 	return false
 }
 
-func (w *WasteAnalyzerImpl) checkMetadataInt(meta map[string]interface{}, key string) int {
+func (w *WasteAnalyzerImpl) checkMetadataInt(meta ResourceMetadata, key string) int {
 	if val, ok := meta[key].(int); ok {
 		return val
 	}
@@ -335,7 +338,7 @@ func (w *WasteAnalyzerImpl) checkMetadataInt(meta map[string]interface{}, key st
 	return 0
 }
 
-func (w *WasteAnalyzerImpl) getMetadataString(meta map[string]interface{}, key string) string {
+func (w *WasteAnalyzerImpl) getMetadataString(meta ResourceMetadata, key string) string {
 	if val, ok := meta[key].(string); ok {
 		return val
 	}

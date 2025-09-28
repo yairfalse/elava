@@ -31,7 +31,8 @@ func (q *QueryEngineImpl) QueryByTimeRange(ctx context.Context, start, end time.
 	err := q.storage.DB().View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte("observations"))
 		if bucket == nil {
-			return fmt.Errorf("observations bucket not found")
+			// No observations yet - return empty slice, not an error
+			return nil
 		}
 
 		return q.scanTimeRange(bucket, start, end, &resources, seen)
@@ -70,7 +71,8 @@ func (q *QueryEngineImpl) QueryChangesSince(ctx context.Context, revision int64)
 	err := q.storage.DB().View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte("observations"))
 		if bucket == nil {
-			return fmt.Errorf("observations bucket not found")
+			// No observations yet - return empty slice, not an error
+			return nil
 		}
 
 		return q.scanChangesSince(bucket, revision, &changes)
@@ -156,7 +158,8 @@ func (q *QueryEngineImpl) QueryResourceHistory(ctx context.Context, resourceID s
 	err := q.storage.DB().View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte("observations"))
 		if bucket == nil {
-			return fmt.Errorf("observations bucket not found")
+			// No observations yet - return empty slice, not an error
+			return nil
 		}
 
 		return q.scanResourceHistory(bucket, resourceID, &revisions)
@@ -216,7 +219,8 @@ func (q *QueryEngineImpl) AggregateByTag(ctx context.Context, tag string, period
 	err := q.storage.DB().View(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte("observations"))
 		if bucket == nil {
-			return fmt.Errorf("observations bucket not found")
+			// No observations yet - return empty metrics, not an error
+			return nil
 		}
 
 		return q.aggregateResources(bucket, tag, cutoff, metrics)

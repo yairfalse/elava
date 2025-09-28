@@ -119,7 +119,7 @@ func (e *Enforcer) notify(ctx context.Context, resource types.Resource, reason s
 		Str("notification", message).
 		Msg("notification sent")
 
-	// TODO: Future - send to Slack/Discord
+	// Print notification to stdout for now
 	fmt.Println(message)
 	return nil
 }

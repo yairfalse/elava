@@ -89,14 +89,22 @@ const (
 
 // DriftEvent represents configuration drift
 type DriftEvent struct {
-	ResourceID string                 `json:"resource_id"`
-	Timestamp  time.Time              `json:"timestamp"`
-	Type       string                 `json:"type"`
-	Field      string                 `json:"field"`
-	OldValue   interface{}            `json:"old_value"`
-	NewValue   interface{}            `json:"new_value"`
-	Severity   DriftSeverity          `json:"severity"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+	ResourceID string        `json:"resource_id"`
+	Timestamp  time.Time     `json:"timestamp"`
+	Type       string        `json:"type"`
+	Field      string        `json:"field"`
+	OldValue   interface{}   `json:"old_value"`
+	NewValue   interface{}   `json:"new_value"`
+	Severity   DriftSeverity `json:"severity"`
+	Metadata   DriftMetadata `json:"metadata,omitempty"`
+}
+
+// DriftMetadata contains additional drift information
+type DriftMetadata struct {
+	Source      string `json:"source,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+	Impact      string `json:"impact,omitempty"`
+	Remediation string `json:"remediation,omitempty"`
 }
 
 // DriftSeverity levels
@@ -115,9 +123,17 @@ type WastePattern struct {
 	ResourceIDs []string  `json:"resource_ids"`
 	Reason      string    `json:"reason"`
 	// Impact field removed - let FinOps tools calculate costs
-	Confidence float64                `json:"confidence"`
-	FirstSeen  time.Time              `json:"first_seen"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+	Confidence float64       `json:"confidence"`
+	FirstSeen  time.Time     `json:"first_seen"`
+	Metadata   WasteMetadata `json:"metadata,omitempty"`
+}
+
+// WasteMetadata contains additional waste pattern information
+type WasteMetadata struct {
+	IdleDurationDays int     `json:"idle_duration_days,omitempty"`
+	LastActivity     *string `json:"last_activity,omitempty"`
+	Utilization      float64 `json:"utilization,omitempty"`
+	RecommendedSize  string  `json:"recommended_size,omitempty"`
 }
 
 // WasteType categories
@@ -134,14 +150,22 @@ const (
 
 // Pattern represents recurring behavior
 type Pattern struct {
-	ID          string                 `json:"id"`
-	Type        PatternType            `json:"type"`
-	Description string                 `json:"description"`
-	Resources   []string               `json:"resources"`
-	Frequency   time.Duration          `json:"frequency"`
-	Confidence  float64                `json:"confidence"`
-	LastSeen    time.Time              `json:"last_seen"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	ID          string          `json:"id"`
+	Type        PatternType     `json:"type"`
+	Description string          `json:"description"`
+	Resources   []string        `json:"resources"`
+	Frequency   time.Duration   `json:"frequency"`
+	Confidence  float64         `json:"confidence"`
+	LastSeen    time.Time       `json:"last_seen"`
+	Metadata    PatternMetadata `json:"metadata,omitempty"`
+}
+
+// PatternMetadata contains additional pattern information
+type PatternMetadata struct {
+	TriggerCondition string  `json:"trigger_condition,omitempty"`
+	AverageResources int     `json:"average_resources,omitempty"`
+	Variance         float64 `json:"variance,omitempty"`
+	Seasonality      string  `json:"seasonality,omitempty"`
 }
 
 // PatternType categories
@@ -158,12 +182,20 @@ const (
 
 // Prediction of future state
 type Prediction struct {
-	ResourceID string                 `json:"resource_id"`
-	Timestamp  time.Time              `json:"timestamp"`
-	State      string                 `json:"state"`
-	Confidence float64                `json:"confidence"`
-	Reasoning  string                 `json:"reasoning"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+	ResourceID string             `json:"resource_id"`
+	Timestamp  time.Time          `json:"timestamp"`
+	State      string             `json:"state"`
+	Confidence float64            `json:"confidence"`
+	Reasoning  string             `json:"reasoning"`
+	Metadata   PredictionMetadata `json:"metadata,omitempty"`
+}
+
+// PredictionMetadata contains additional prediction information
+type PredictionMetadata struct {
+	ModelType         string    `json:"model_type,omitempty"`
+	HistoricalSamples int       `json:"historical_samples,omitempty"`
+	BasedOnPattern    string    `json:"based_on_pattern,omitempty"`
+	ValidUntil        time.Time `json:"valid_until,omitempty"`
 }
 
 // ResourceRevision tracks resource history
@@ -176,8 +208,16 @@ type ResourceRevision struct {
 
 // Metrics for aggregation
 type Metrics struct {
-	Count         int                    `json:"count"`
-	ResourceTypes map[string]int         `json:"resource_types"`
-	Tags          map[string]string      `json:"tags"`
-	Metadata      map[string]interface{} `json:"metadata,omitempty"`
+	Count         int               `json:"count"`
+	ResourceTypes map[string]int    `json:"resource_types"`
+	Tags          map[string]string `json:"tags"`
+	Metadata      MetricsMetadata   `json:"metadata,omitempty"`
+}
+
+// MetricsMetadata contains additional metrics information
+type MetricsMetadata struct {
+	Period       string    `json:"period,omitempty"`
+	LastUpdated  time.Time `json:"last_updated,omitempty"`
+	Source       string    `json:"source,omitempty"`
+	Aggregations []string  `json:"aggregations,omitempty"`
 }

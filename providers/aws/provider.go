@@ -41,6 +41,13 @@ func init() {
 	providers.RegisterProvider("aws", NewAWSProviderFactory)
 }
 
+// ResourceHandler handles listing of a specific resource type
+type ResourceHandler struct {
+	Name     string
+	Critical bool // If true, errors will fail the whole operation
+	Handler  func(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error)
+}
+
 // RealAWSProvider implements CloudProvider using AWS SDK v2
 type RealAWSProvider struct {
 	ec2Client      *ec2.Client
@@ -119,235 +126,68 @@ func (p *RealAWSProvider) Region() string {
 }
 
 // ListResources discovers all resources in the AWS account
+// ListResources lists all AWS resources using the strategy pattern
 func (p *RealAWSProvider) ListResources(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	handlers := p.getResourceHandlers()
+	resources := p.executeHandlers(ctx, handlers, filter)
+	return p.applyFilters(resources, filter), nil
+}
+
+// getResourceHandlers returns all resource handlers
+func (p *RealAWSProvider) getResourceHandlers() []ResourceHandler {
+	return []ResourceHandler{
+		// Critical resources that must succeed
+		{Name: "EC2", Critical: true, Handler: p.listEC2Instances},
+		{Name: "RDS", Critical: true, Handler: p.listRDSInstances},
+		{Name: "ELB", Critical: true, Handler: p.listLoadBalancers},
+
+		// Non-critical resources (continue on error)
+		{Name: "S3", Critical: false, Handler: p.listS3Buckets},
+		{Name: "Lambda", Critical: false, Handler: p.listLambdaFunctions},
+		{Name: "EBS", Critical: false, Handler: p.listEBSVolumes},
+		{Name: "EIP", Critical: false, Handler: p.listElasticIPs},
+		{Name: "NAT", Critical: false, Handler: p.listNATGateways},
+		{Name: "Snapshots", Critical: false, Handler: p.listSnapshots},
+		{Name: "AMI", Critical: false, Handler: p.listAMIs},
+		{Name: "CloudWatchLogs", Critical: false, Handler: p.listCloudWatchLogs},
+		{Name: "SecurityGroups", Critical: false, Handler: p.listSecurityGroups},
+		{Name: "EKS", Critical: false, Handler: p.listEKSClusters},
+		{Name: "ECS", Critical: false, Handler: p.listECSClusters},
+		{Name: "ASG", Critical: false, Handler: p.listAutoScalingGroups},
+		{Name: "VPCEndpoints", Critical: false, Handler: p.listVPCEndpoints},
+		{Name: "RDSSnapshots", Critical: false, Handler: p.listRDSSnapshots},
+		{Name: "IAMRoles", Critical: false, Handler: p.listIAMRoles},
+		{Name: "ENI", Critical: false, Handler: p.listNetworkInterfaces},
+		{Name: "ECR", Critical: false, Handler: p.listECRRepositories},
+		{Name: "Route53", Critical: false, Handler: p.listRoute53HostedZones},
+		{Name: "KMS", Critical: false, Handler: p.listKMSKeys},
+		{Name: "Aurora", Critical: false, Handler: p.listAuroraClusters},
+		{Name: "Redshift", Critical: false, Handler: p.listRedshiftClusters},
+		{Name: "RedshiftSnapshots", Critical: false, Handler: p.listRedshiftSnapshots},
+		{Name: "MemoryDB", Critical: false, Handler: p.listMemoryDBClusters},
+		{Name: "DynamoDB", Critical: false, Handler: p.listDynamoDBTables},
+		{Name: "DynamoDBBackups", Critical: false, Handler: p.listDynamoDBBackups},
+	}
+}
+
+// executeHandlers runs all handlers and collects resources
+func (p *RealAWSProvider) executeHandlers(ctx context.Context, handlers []ResourceHandler, filter types.ResourceFilter) []types.Resource {
 	var resources []types.Resource
 
-	// List EC2 instances
-	ec2Resources, err := p.listEC2Instances(ctx, filter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list EC2 instances: %w", err)
-	}
-	resources = append(resources, ec2Resources...)
-
-	// List RDS instances
-	rdsResources, err := p.listRDSInstances(ctx, filter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list RDS instances: %w", err)
-	}
-	resources = append(resources, rdsResources...)
-
-	// List Load Balancers
-	elbResources, err := p.listLoadBalancers(ctx, filter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list load balancers: %w", err)
-	}
-	resources = append(resources, elbResources...)
-
-	// List S3 Buckets
-	s3Resources, err := p.listS3Buckets(ctx, filter)
-	if err != nil {
-		// Log but don't fail - S3 is global and might have permission issues
-		fmt.Printf("Warning: failed to list S3 buckets: %v\n", err)
-	} else {
-		resources = append(resources, s3Resources...)
+	for _, handler := range handlers {
+		result, err := handler.Handler(ctx, filter)
+		if err != nil {
+			if handler.Critical {
+				fmt.Printf("Critical failure listing %s: %v\n", handler.Name, err)
+				continue
+			}
+			fmt.Printf("Warning: failed to list %s: %v\n", handler.Name, err)
+			continue
+		}
+		resources = append(resources, result...)
 	}
 
-	// List Lambda Functions
-	lambdaResources, err := p.listLambdaFunctions(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list Lambda functions: %v\n", err)
-	} else {
-		resources = append(resources, lambdaResources...)
-	}
-
-	// List EBS Volumes
-	ebsResources, err := p.listEBSVolumes(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list EBS volumes: %v\n", err)
-	} else {
-		resources = append(resources, ebsResources...)
-	}
-
-	// List Elastic IPs
-	eipResources, err := p.listElasticIPs(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list Elastic IPs: %v\n", err)
-	} else {
-		resources = append(resources, eipResources...)
-	}
-
-	// List NAT Gateways - expensive resources!
-	natResources, err := p.listNATGateways(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list NAT Gateways: %v\n", err)
-	} else {
-		resources = append(resources, natResources...)
-	}
-
-	// List EBS Snapshots - often forgotten!
-	snapshotResources, err := p.listSnapshots(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list snapshots: %v\n", err)
-	} else {
-		resources = append(resources, snapshotResources...)
-	}
-
-	// List AMIs - custom images that pile up
-	amiResources, err := p.listAMIs(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list AMIs: %v\n", err)
-	} else {
-		resources = append(resources, amiResources...)
-	}
-
-	// List CloudWatch Log Groups - forgotten infinite retention
-	logResources, err := p.listCloudWatchLogs(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list CloudWatch log groups: %v\n", err)
-	} else {
-		resources = append(resources, logResources...)
-	}
-
-	// HIGH PRIORITY RESOURCES - These accumulate the fastest and cost the most
-
-	// List Security Groups - accumulate the fastest
-	sgResources, err := p.listSecurityGroups(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list security groups: %v\n", err)
-	} else {
-		resources = append(resources, sgResources...)
-	}
-
-	// List EKS Clusters - expensive if forgotten
-	eksResources, err := p.listEKSClusters(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list EKS clusters: %v\n", err)
-	} else {
-		resources = append(resources, eksResources...)
-	}
-
-	// List ECS Clusters - expensive if forgotten
-	ecsResources, err := p.listECSClusters(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list ECS clusters: %v\n", err)
-	} else {
-		resources = append(resources, ecsResources...)
-	}
-
-	// List Auto Scaling Groups - can spawn resources
-	asgResources, err := p.listAutoScalingGroups(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list auto scaling groups: %v\n", err)
-	} else {
-		resources = append(resources, asgResources...)
-	}
-
-	// List VPC Endpoints - often forgotten, accumulate
-	vpcEndpointResources, err := p.listVPCEndpoints(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list VPC endpoints: %v\n", err)
-	} else {
-		resources = append(resources, vpcEndpointResources...)
-	}
-
-	// List RDS Snapshots - storage accumulation
-	rdsSnapshotResources, err := p.listRDSSnapshots(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list RDS snapshots: %v\n", err)
-	} else {
-		resources = append(resources, rdsSnapshotResources...)
-	}
-
-	// List IAM Roles - security debt
-	iamRoleResources, err := p.listIAMRoles(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list IAM roles: %v\n", err)
-	} else {
-		resources = append(resources, iamRoleResources...)
-	}
-
-	// List Network Interfaces (ENIs) - get stuck
-	eniResources, err := p.listNetworkInterfaces(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list network interfaces: %v\n", err)
-	} else {
-		resources = append(resources, eniResources...)
-	}
-
-	// List ECR Repositories - container storage
-	ecrResources, err := p.listECRRepositories(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list ECR repositories: %v\n", err)
-	} else {
-		resources = append(resources, ecrResources...)
-	}
-
-	// List Route53 Hosted Zones - DNS costs
-	route53Resources, err := p.listRoute53HostedZones(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list Route53 hosted zones: %v\n", err)
-	} else {
-		resources = append(resources, route53Resources...)
-	}
-
-	// List KMS Keys - encryption keys
-	kmsResources, err := p.listKMSKeys(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list KMS keys: %v\n", err)
-	} else {
-		resources = append(resources, kmsResources...)
-	}
-
-	// List Aurora Clusters - expensive RDS clusters
-	auroraResources, err := p.listAuroraClusters(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list Aurora clusters: %v\n", err)
-	} else {
-		resources = append(resources, auroraResources...)
-	}
-
-	// List Redshift Clusters - data warehouse clusters
-	redshiftResources, err := p.listRedshiftClusters(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list Redshift clusters: %v\n", err)
-	} else {
-		resources = append(resources, redshiftResources...)
-	}
-
-	// List Redshift Snapshots - data warehouse backups
-	redshiftSnapshotResources, err := p.listRedshiftSnapshots(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list Redshift snapshots: %v\n", err)
-	} else {
-		resources = append(resources, redshiftSnapshotResources...)
-	}
-
-	// List MemoryDB Clusters - in-memory Redis clusters
-	memorydbResources, err := p.listMemoryDBClusters(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list MemoryDB clusters: %v\n", err)
-	} else {
-		resources = append(resources, memorydbResources...)
-	}
-
-	// List DynamoDB Tables - NoSQL tables
-	dynamodbResources, err := p.listDynamoDBTables(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list DynamoDB tables: %v\n", err)
-	} else {
-		resources = append(resources, dynamodbResources...)
-	}
-
-	// List DynamoDB Backups - NoSQL backups
-	dynamodbBackupResources, err := p.listDynamoDBBackups(ctx, filter)
-	if err != nil {
-		fmt.Printf("Warning: failed to list DynamoDB backups: %v\n", err)
-	} else {
-		resources = append(resources, dynamodbBackupResources...)
-	}
-
-	// Apply filters
-	return p.applyFilters(resources, filter), nil
+	return resources
 }
 
 // listEC2Instances discovers EC2 instances

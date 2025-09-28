@@ -152,17 +152,10 @@ func (s *Service) EnrichDriftEvent(
 	}
 
 	// Add attribution to drift metadata
-	if drift.Metadata == nil {
-		drift.Metadata = make(map[string]interface{})
-	}
-
 	if attribution != nil {
-		drift.Metadata["attribution"] = map[string]interface{}{
-			"actor":      attribution.Actor,
-			"action":     attribution.Action,
-			"timestamp":  attribution.Timestamp,
-			"confidence": attribution.Confidence,
-		}
+		drift.Metadata.Source = attribution.Actor
+		drift.Metadata.Reason = fmt.Sprintf("%s: %.2f confidence", attribution.Action, attribution.Confidence)
+		drift.Metadata.Impact = "user_action"
 	}
 
 	return &drift, nil

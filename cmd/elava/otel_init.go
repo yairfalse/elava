@@ -20,7 +20,7 @@ func initTelemetry(ctx context.Context) func() {
 	// Configure OTEL
 	cfg := telemetry.Config{
 		ServiceName:    "elava",
-		ServiceVersion: "0.1.0", // TODO: Get from build
+		ServiceVersion: "0.1.0", // Version will be set from build
 		Environment:    os.Getenv("ELAVA_ENVIRONMENT"),
 		OTELEndpoint:   os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		Insecure:       true, // For local development

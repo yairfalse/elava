@@ -37,64 +37,106 @@ type scanInfra struct {
 // Run executes the scan command
 func (cmd *ScanCommand) Run() error {
 	ctx := context.Background()
-
 	fmt.Printf("Scanning AWS region %s for untracked resources...\n\n", cmd.Region)
 
-	// Initialize storage and WAL
+	// Setup infrastructure
+	infra, err := cmd.setupInfrastructure(ctx)
+	if err != nil {
+		return err
+	}
+	defer cmd.cleanupInfrastructure(infra)
+
+	// Perform the scan
+	resources, err := cmd.performScan(ctx, infra)
+	if err != nil {
+		return err
+	}
+
+	// Process and display results
+	return cmd.processResults(ctx, infra, resources)
+}
+
+// setupInfrastructure initializes storage, WAL, and provider
+func (cmd *ScanCommand) setupInfrastructure(ctx context.Context) (*scanInfra, error) {
 	tmpDir := os.TempDir() + "/elava-scan"
 	_ = os.MkdirAll(tmpDir, 0750)
 
 	storage, err := storage.NewMVCCStorage(tmpDir)
 	if err != nil {
-		return fmt.Errorf("failed to create storage: %w", err)
+		return nil, fmt.Errorf("failed to create storage: %w", err)
 	}
-	defer func() { _ = storage.Close() }()
 
 	walInstance, err := wal.Open(tmpDir)
 	if err != nil {
-		return fmt.Errorf("failed to create WAL: %w", err)
+		storage.Close()
+		return nil, fmt.Errorf("failed to create WAL: %w", err)
 	}
-	defer func() { _ = walInstance.Close() }()
 
-	// Create AWS provider
 	providerConfig := providers.ProviderConfig{
 		Type:   "aws",
 		Region: cmd.Region,
 	}
 	provider, err := providers.GetProvider(ctx, "aws", providerConfig)
 	if err != nil {
-		return fmt.Errorf("failed to create AWS provider: %w", err)
+		storage.Close()
+		walInstance.Close()
+		return nil, fmt.Errorf("failed to create AWS provider: %w", err)
 	}
 
-	// Create scan infrastructure
-	infra := &scanInfra{
+	return &scanInfra{
 		provider: provider,
 		storage:  storage,
 		wal:      walInstance,
-	}
+	}, nil
+}
 
-	// Check if we should use tiered scanning
-	var resources []types.Resource
+// cleanupInfrastructure closes storage and WAL
+func (cmd *ScanCommand) cleanupInfrastructure(infra *scanInfra) {
+	if infra == nil {
+		return
+	}
+	if infra.storage != nil {
+		_ = infra.storage.Close()
+	}
+	if infra.wal != nil {
+		_ = infra.wal.Close()
+	}
+}
+
+// performScan executes the resource scan
+func (cmd *ScanCommand) performScan(ctx context.Context, infra *scanInfra) ([]types.Resource, error) {
 	if cmd.Tiers != "" || cmd.ShowTierStatus {
-		resources, err = cmd.runTieredScan(ctx, infra)
-		if err != nil {
-			return fmt.Errorf("failed to run tiered scan: %w", err)
-		}
-	} else {
-		resources, err = cmd.scanResources(ctx, provider)
-		if err != nil {
-			return fmt.Errorf("failed to scan resources: %w", err)
-		}
+		return cmd.runTieredScan(ctx, infra)
+	}
+	return cmd.scanResources(ctx, infra.provider)
+}
+
+// processResults handles scan results, storage, and output
+func (cmd *ScanCommand) processResults(ctx context.Context, infra *scanInfra, resources []types.Resource) error {
+	// Log scan operation
+	cmd.logScanOperation(infra.wal, resources)
+
+	// Handle state changes and storage
+	_ = cmd.handleStateChanges(infra.storage, resources)
+
+	// Find untracked resources
+	untracked := scanner.ScanForUntracked(ctx, resources)
+	if cmd.RiskOnly {
+		untracked = filterHighRisk(untracked)
 	}
 
-	// Build filter for WAL logging
+	// Display results
+	return cmd.displayResults(resources, untracked)
+}
+
+// logScanOperation records the scan in WAL
+func (cmd *ScanCommand) logScanOperation(walInstance *wal.WAL, resources []types.Resource) {
 	filter := types.ResourceFilter{}
 	if cmd.Filter != "" {
 		filter.Type = cmd.Filter
 	}
 
-	// Record observation in WAL
-	err = walInstance.Append(wal.EntryObserved, "", ScanOperation{
+	err := walInstance.Append(wal.EntryObserved, "", ScanOperation{
 		Timestamp:     time.Now(),
 		Region:        cmd.Region,
 		ResourceCount: len(resources),
@@ -103,16 +145,16 @@ func (cmd *ScanCommand) Run() error {
 	if err != nil {
 		fmt.Printf("Warning: failed to log scan operation: %v\n", err)
 	}
+}
 
-	// Get previous state from storage
+// handleStateChanges manages storage and change detection
+func (cmd *ScanCommand) handleStateChanges(storage *storage.MVCCStorage, resources []types.Resource) ChangeSet {
 	previousResources, err := getPreviousState(storage)
 	if err != nil {
-		// First scan, no previous state
 		previousResources = []types.Resource{}
 		fmt.Printf("First scan - establishing baseline\n\n")
 	}
 
-	// Store current observations in storage
 	revision, err := storeObservations(storage, resources)
 	if err != nil {
 		fmt.Printf("Warning: failed to store observations: %v\n", err)
@@ -120,34 +162,33 @@ func (cmd *ScanCommand) Run() error {
 		fmt.Printf("Stored observations at revision %d\n", revision)
 	}
 
-	// Detect changes if we have previous state
 	var changes ChangeSet
 	if len(previousResources) > 0 {
 		changes = detectChanges(resources, previousResources)
-		if len(changes.New) > 0 || len(changes.Modified) > 0 || len(changes.Disappeared) > 0 {
-			fmt.Printf("\nChanges detected:\n")
-			if len(changes.New) > 0 {
-				fmt.Printf("   New resources: %d\n", len(changes.New))
-			}
-			if len(changes.Modified) > 0 {
-				fmt.Printf("   Modified resources: %d\n", len(changes.Modified))
-			}
-			if len(changes.Disappeared) > 0 {
-				fmt.Printf("   Disappeared resources: %d\n", len(changes.Disappeared))
-			}
-			fmt.Printf("\n")
+		cmd.reportChanges(changes)
+	}
+	return changes
+}
+
+// reportChanges displays detected changes
+func (cmd *ScanCommand) reportChanges(changes ChangeSet) {
+	if len(changes.New) > 0 || len(changes.Modified) > 0 || len(changes.Disappeared) > 0 {
+		fmt.Printf("\nChanges detected:\n")
+		if len(changes.New) > 0 {
+			fmt.Printf("   New resources: %d\n", len(changes.New))
 		}
+		if len(changes.Modified) > 0 {
+			fmt.Printf("   Modified resources: %d\n", len(changes.Modified))
+		}
+		if len(changes.Disappeared) > 0 {
+			fmt.Printf("   Disappeared resources: %d\n", len(changes.Disappeared))
+		}
+		fmt.Printf("\n")
 	}
+}
 
-	// Find untracked resources
-	untracked := scanner.ScanForUntracked(ctx, resources)
-
-	// Apply risk filter if requested
-	if cmd.RiskOnly {
-		untracked = filterHighRisk(untracked)
-	}
-
-	// Display results
+// displayResults handles output formatting
+func (cmd *ScanCommand) displayResults(resources []types.Resource, untracked []scanner.UntrackedResource) error {
 	switch cmd.Output {
 	case "json":
 		return cmd.outputJSON(untracked)
