@@ -4,6 +4,8 @@ import (
 	"reflect"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 	"github.com/yairfalse/elava/types"
 )
 
@@ -129,4 +131,14 @@ func applyTagToResult(result *types.Tags, key, value string) {
 			result.CostCenter = value
 		}
 	}
+}
+
+// convertEC2TagsToElava converts EC2 tags to Elava tags
+func (p *RealAWSProvider) convertEC2TagsToElava(tags []ec2types.Tag) types.Tags {
+	return p.convertTagsToElava(tags)
+}
+
+// convertRDSTagsToElava converts RDS tags to Elava tags
+func (p *RealAWSProvider) convertRDSTagsToElava(tags []rdstypes.Tag) types.Tags {
+	return p.convertTagsToElava(tags)
 }
