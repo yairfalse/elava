@@ -1,6 +1,6 @@
-# Elava - Infrastructure Reconciliation Engine
+# Elava - Living Infrastructure Engine
 
-Infrastructure reconciliation without state files. Elava continuously observes your cloud resources, detects drift, and explains changes through attribution.
+Infrastructure reconciliation without state files. Your cloud IS the state. Elava continuously observes resources, detects drift, and makes intelligent decisions through temporal awareness.
 
 ```
     Cloud Infrastructure              Elava Engine                     Intelligence
@@ -16,14 +16,13 @@ Infrastructure reconciliation without state files. Elava continuously observes y
 ## What Elava Does
 
 ### 🔍 Resource Discovery
-Scans 15+ AWS resource types with full tag analysis:
-- EC2 instances, Auto Scaling Groups, Load Balancers
-- RDS databases (including Aurora clusters)
-- S3 buckets, Lambda functions
-- EBS volumes, Snapshots, AMIs
-- VPCs, Subnets, Security Groups
-- EKS clusters, ECR repositories
-- KMS keys, Route53 zones
+Scans 20+ AWS resource types with full tag analysis:
+- **Compute**: EC2, Lambda, EKS, ECS, Auto Scaling Groups
+- **Storage**: S3, EBS volumes, Snapshots, AMIs
+- **Database**: RDS instances, Aurora clusters, DynamoDB, ElastiCache
+- **Network**: VPCs, Subnets, Security Groups, NAT Gateways, EIPs
+- **Identity**: IAM roles, KMS keys, ECR repositories
+- **DNS**: Route53 zones
 
 ### 🕵️ Drift Attribution
 Explains WHO changed WHAT and WHY through CloudTrail integration:
@@ -45,6 +44,15 @@ Uses Open Policy Agent (OPA) for Day-2 operations:
 - Block non-compliant resources
 - Auto-remediate violations
 - Custom policy definitions
+
+## Core Philosophy
+
+**"Storage is the brain, everything else is I/O"**
+
+- **No State Files**: AWS/GCP is your source of truth
+- **Living Infrastructure**: Continuous reconciliation loop
+- **Temporal Awareness**: Not just "what is" but "what was, when, and why"
+- **Friendly Operations**: Notifies before destroying, explains decisions
 
 ## Architecture
 
@@ -84,14 +92,17 @@ Uses Open Policy Agent (OPA) for Day-2 operations:
 # Build
 go build ./cmd/elava
 
-# Basic scan
+# Basic scan (discovers all resource types)
 ./elava scan
 
 # Scan specific region
 ./elava scan --region us-west-2
 
-# Filter resource types
-./elava scan --filter ec2
+# Show only high-risk untracked resources
+./elava scan --risk-only
+
+# Tiered scanning for large environments
+./elava scan --tiers critical,production
 ```
 
 ## Core Components
@@ -215,7 +226,7 @@ deny[msg] {
 
 ## Development
 
-## Project Structure
+### Project Structure
 
 ```
 elava/
@@ -224,14 +235,31 @@ elava/
 ├── cmd/elava/        # CLI commands
 ├── config/           # Configuration management
 ├── executor/         # Action execution with safety
+├── orchestrator/     # Integration flow coordination
 ├── policy/           # OPA policy engine
 ├── providers/        # Cloud provider implementations
-│   └── aws/         # AWS-specific code
+│   └── aws/         # AWS provider (modular design)
+│       ├── compute.go    # Lambda, EKS, ECS, ASG
+│       ├── storage.go    # S3 buckets
+│       ├── network.go    # VPC, SG, EIPs, NAT
+│       ├── volumes.go    # EBS, snapshots, AMIs
+│       ├── identity.go   # IAM, KMS, Route53
+│       └── databases.go  # RDS, Aurora, DynamoDB
 ├── reconciler/       # Reconciliation engine
+├── scanner/          # Tiered resource scanning
 ├── storage/          # MVCC storage engine
 ├── telemetry/        # OpenTelemetry integration
-└── types/           # Core type definitions
+├── types/            # Core type definitions
+└── wal/             # Write-ahead logging
 ```
+
+### Design Principles
+
+- **Small Functions**: Max 50 lines per function
+- **Clear Interfaces**: Provider-agnostic core logic
+- **Pluggable Everything**: Easy to add new providers
+- **Storage First**: Every feature considers temporal data
+- **Test Driven**: Tests before implementation
 
 ## Contributing
 
