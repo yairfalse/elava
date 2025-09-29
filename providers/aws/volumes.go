@@ -59,14 +59,24 @@ func (p *RealAWSProvider) processEBSVolume(volume ec2types.Volume) types.Resourc
 		CreatedAt:  p.safeTimeValue(volume.CreateTime),
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"size_gb":     aws.ToInt32(volume.Size),
-			"volume_type": string(volume.VolumeType),
-			"iops":        aws.ToInt32(volume.Iops),
-			"encrypted":   aws.ToBool(volume.Encrypted),
-			"attached_to": p.getVolumeAttachments(volume.Attachments),
+		Metadata: types.ResourceMetadata{
+			Size:       int64(aws.ToInt32(volume.Size)) * 1024 * 1024 * 1024, // Convert GB to bytes
+			VolumeType: string(volume.VolumeType),
+			IOPS:       aws.ToInt32(volume.Iops),
+			Encrypted:  aws.ToBool(volume.Encrypted),
+			IsAttached: len(volume.Attachments) > 0,
+			AttachedTo: p.getFirstAttachment(volume.Attachments),
+			State:      string(volume.State),
 		},
 	}
+}
+
+// getFirstAttachment gets the first attached instance ID
+func (p *RealAWSProvider) getFirstAttachment(attachments []ec2types.VolumeAttachment) string {
+	if len(attachments) > 0 {
+		return aws.ToString(attachments[0].InstanceId)
+	}
+	return ""
 }
 
 // getVolumeAttachments extracts attachment info
@@ -127,13 +137,13 @@ func (p *RealAWSProvider) processSnapshot(snapshot ec2types.Snapshot) types.Reso
 		CreatedAt:  p.safeTimeValue(snapshot.StartTime),
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"volume_id":   aws.ToString(snapshot.VolumeId),
-			"size_gb":     aws.ToInt32(snapshot.VolumeSize),
-			"encrypted":   aws.ToBool(snapshot.Encrypted),
-			"description": aws.ToString(snapshot.Description),
-			"progress":    aws.ToString(snapshot.Progress),
-			"is_old":      isOld,
+		Metadata: types.ResourceMetadata{
+			SourceVolumeID: aws.ToString(snapshot.VolumeId),
+			Size:           int64(aws.ToInt32(snapshot.VolumeSize)) * 1024 * 1024 * 1024, // GB to bytes
+			Encrypted:      aws.ToBool(snapshot.Encrypted),
+			SnapshotID:     aws.ToString(snapshot.SnapshotId),
+			IsOld:          isOld,
+			State:          string(snapshot.State),
 		},
 	}
 }
@@ -186,14 +196,14 @@ func (p *RealAWSProvider) processAMI(image ec2types.Image) types.Resource {
 		CreatedAt:  creationTime,
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"architecture":   string(image.Architecture),
-			"platform":       string(image.Platform),
-			"virtualization": string(image.VirtualizationType),
-			"root_device":    string(image.RootDeviceType),
-			"is_public":      aws.ToBool(image.Public),
-			"is_old":         isOld,
-			"is_deprecated":  isDeprecated,
+		Metadata: types.ResourceMetadata{
+			Architecture:       string(image.Architecture),
+			VirtualizationType: string(image.VirtualizationType),
+			RootDeviceType:     string(image.RootDeviceType),
+			PubliclyAccessible: aws.ToBool(image.Public),
+			IsOld:              isOld,
+			SourceImageID:      aws.ToString(image.ImageId),
+			State:              string(image.State),
 		},
 	}
 }
@@ -265,12 +275,12 @@ func (p *RealAWSProvider) processRDSSnapshot(snapshot rdstypes.DBSnapshot) types
 		CreatedAt:  p.safeTimeValue(snapshot.SnapshotCreateTime),
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"engine":         aws.ToString(snapshot.Engine),
-			"engine_version": aws.ToString(snapshot.EngineVersion),
-			"storage_gb":     aws.ToInt32(snapshot.AllocatedStorage),
-			"encrypted":      aws.ToBool(snapshot.Encrypted),
-			"is_old":         isOld,
+		Metadata: types.ResourceMetadata{
+			Engine:        aws.ToString(snapshot.Engine),
+			EngineVersion: aws.ToString(snapshot.EngineVersion),
+			StorageGB:     int(aws.ToInt32(snapshot.AllocatedStorage)),
+			Encrypted:     aws.ToBool(snapshot.Encrypted),
+			IsOld:         isOld,
 		},
 	}
 }
@@ -295,12 +305,12 @@ func (p *RealAWSProvider) processRDSClusterSnapshot(snapshot rdstypes.DBClusterS
 		CreatedAt:  p.safeTimeValue(snapshot.SnapshotCreateTime),
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"engine":         aws.ToString(snapshot.Engine),
-			"engine_version": aws.ToString(snapshot.EngineVersion),
-			"storage_gb":     aws.ToInt32(snapshot.AllocatedStorage),
-			"encrypted":      aws.ToBool(snapshot.StorageEncrypted),
-			"is_old":         isOld,
+		Metadata: types.ResourceMetadata{
+			Engine:        aws.ToString(snapshot.Engine),
+			EngineVersion: aws.ToString(snapshot.EngineVersion),
+			StorageGB:     int(aws.ToInt32(snapshot.AllocatedStorage)),
+			Encrypted:     aws.ToBool(snapshot.StorageEncrypted),
+			IsOld:         isOld,
 		},
 	}
 }

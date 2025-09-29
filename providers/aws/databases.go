@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -12,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/memorydb"
 	memorydbtypes "github.com/aws/aws-sdk-go-v2/service/memorydb/types"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
+	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 	"github.com/aws/aws-sdk-go-v2/service/redshift"
 	redshifttypes "github.com/aws/aws-sdk-go-v2/service/redshift/types"
 
@@ -31,51 +31,45 @@ func (p *RealAWSProvider) listAuroraClusters(ctx context.Context, filter types.R
 		}
 
 		for _, cluster := range output.DBClusters {
-			tags := p.convertTagsToElava(cluster.TagList)
-
-			// Calculate cost based on instance count and types
-			instanceCount := len(cluster.DBClusterMembers)
-			isServerless := strings.Contains(aws.ToString(cluster.EngineMode), "serverless")
-
-			// Check if cluster is idle (no connections)
-			isIdle := cluster.AllocatedStorage == nil || aws.ToInt32(cluster.AllocatedStorage) == 0
-
-			resource := types.Resource{
-				ID:         aws.ToString(cluster.DBClusterIdentifier),
-				Type:       "aurora",
-				Provider:   "aws",
-				Region:     p.region,
-				AccountID:  p.accountID,
-				Name:       aws.ToString(cluster.DBClusterIdentifier),
-				Status:     aws.ToString(cluster.Status),
-				Tags:       tags,
-				CreatedAt:  p.safeTimeValue(cluster.ClusterCreateTime),
-				LastSeenAt: time.Now(),
-				IsOrphaned: p.isResourceOrphaned(tags) || isIdle,
-				Metadata: map[string]interface{}{
-					"engine":              aws.ToString(cluster.Engine),
-					"engine_version":      aws.ToString(cluster.EngineVersion),
-					"engine_mode":         aws.ToString(cluster.EngineMode),
-					"instance_count":      instanceCount,
-					"is_serverless":       isServerless,
-					"multi_az":            aws.ToBool(cluster.MultiAZ),
-					"deletion_protection": aws.ToBool(cluster.DeletionProtection),
-					"backup_retention":    aws.ToInt32(cluster.BackupRetentionPeriod),
-					"is_idle":             isIdle,
-				},
-			}
-
-			// High cost priority for multi-instance clusters
-			if instanceCount > 1 {
-				resource.Metadata["cost_priority"] = "high"
-				resource.Metadata["monthly_cost_estimate"] = float64(instanceCount) * 150.0
-			}
-
+			resource := p.convertAuroraCluster(cluster)
 			resources = append(resources, resource)
 		}
 	}
 
 	return resources, nil
+}
+
+// convertAuroraCluster converts an Aurora cluster to Resource
+func (p *RealAWSProvider) convertAuroraCluster(cluster rdstypes.DBCluster) types.Resource {
+	tags := p.convertTagsToElava(cluster.TagList)
+
+	instanceCount := len(cluster.DBClusterMembers)
+	isIdle := cluster.AllocatedStorage == nil || aws.ToInt32(cluster.AllocatedStorage) == 0
+
+	return types.Resource{
+		ID:         aws.ToString(cluster.DBClusterIdentifier),
+		Type:       "aurora",
+		Provider:   "aws",
+		Region:     p.region,
+		AccountID:  p.accountID,
+		Name:       aws.ToString(cluster.DBClusterIdentifier),
+		Status:     aws.ToString(cluster.Status),
+		Tags:       tags,
+		CreatedAt:  p.safeTimeValue(cluster.ClusterCreateTime),
+		LastSeenAt: time.Now(),
+		IsOrphaned: p.isResourceOrphaned(tags) || isIdle,
+		Metadata: types.ResourceMetadata{
+			Engine:           aws.ToString(cluster.Engine),
+			EngineVersion:    aws.ToString(cluster.EngineVersion),
+			NodeCount:        instanceCount,
+			MultiAZ:          aws.ToBool(cluster.MultiAZ),
+			BackupWindow:     aws.ToString(cluster.PreferredBackupWindow),
+			ClusterID:        aws.ToString(cluster.DBClusterIdentifier),
+			IsIdle:           isIdle,
+			State:            aws.ToString(cluster.Status),
+			AllocatedStorage: aws.ToInt32(cluster.AllocatedStorage),
+		},
+	}
 }
 
 // listRedshiftClusters discovers Redshift data warehouse clusters
@@ -106,22 +100,17 @@ func (p *RealAWSProvider) listRedshiftClusters(ctx context.Context, filter types
 			CreatedAt:  p.safeTimeValue(cluster.ClusterCreateTime),
 			LastSeenAt: time.Now(),
 			IsOrphaned: p.isResourceOrphaned(tags) || isPaused,
-			Metadata: map[string]interface{}{
-				"node_type":          aws.ToString(cluster.NodeType),
-				"node_count":         nodeCount,
-				"database_name":      aws.ToString(cluster.DBName),
-				"endpoint":           aws.ToString(cluster.Endpoint.Address),
-				"port":               aws.ToInt32(cluster.Endpoint.Port),
-				"encrypted":          aws.ToBool(cluster.Encrypted),
-				"is_paused":          isPaused,
-				"backup_retention":   cluster.AutomatedSnapshotRetentionPeriod,
-				"maintenance_window": aws.ToString(cluster.PreferredMaintenanceWindow),
+			Metadata: types.ResourceMetadata{
+				NodeCount:    int(nodeCount),
+				DBName:       aws.ToString(cluster.DBName),
+				Endpoint:     aws.ToString(cluster.Endpoint.Address),
+				Port:         aws.ToInt32(cluster.Endpoint.Port),
+				Encrypted:    aws.ToBool(cluster.Encrypted),
+				IsPaused:     isPaused,
+				BackupWindow: aws.ToString(cluster.PreferredMaintenanceWindow),
+				State:        aws.ToString(cluster.ClusterStatus),
 			},
 		}
-
-		// Redshift is VERY expensive - high priority
-		resource.Metadata["cost_priority"] = "very_high"
-		resource.Metadata["monthly_cost_estimate"] = float64(nodeCount) * 250.0
 
 		resources = append(resources, resource)
 	}
@@ -160,15 +149,15 @@ func (p *RealAWSProvider) listRedshiftSnapshots(ctx context.Context, filter type
 			CreatedAt:  p.safeTimeValue(snapshot.SnapshotCreateTime),
 			LastSeenAt: time.Now(),
 			IsOrphaned: p.isResourceOrphaned(tags) || isOld,
-			Metadata: map[string]interface{}{
-				"cluster_identifier": aws.ToString(snapshot.ClusterIdentifier),
-				"snapshot_type":      aws.ToString(snapshot.SnapshotType),
-				"node_count":         aws.ToInt32(snapshot.NumberOfNodes),
-				"backup_size_mb":     aws.ToFloat64(snapshot.TotalBackupSizeInMegaBytes),
-				"actual_size_mb":     aws.ToFloat64(snapshot.ActualIncrementalBackupSizeInMegaBytes),
-				"age_days":           ageInDays,
-				"is_old":             isOld,
-				"encrypted":          aws.ToBool(snapshot.Encrypted),
+			Metadata: types.ResourceMetadata{
+				ClusterID:  aws.ToString(snapshot.ClusterIdentifier),
+				SnapshotID: aws.ToString(snapshot.SnapshotIdentifier),
+				NodeCount:  int(aws.ToInt32(snapshot.NumberOfNodes)),
+				Size:       int64(aws.ToFloat64(snapshot.TotalBackupSizeInMegaBytes) * 1024 * 1024), // Convert MB to bytes
+				AgeDays:    ageInDays,
+				IsOld:      isOld,
+				Encrypted:  aws.ToBool(snapshot.Encrypted),
+				State:      aws.ToString(snapshot.Status),
 			},
 		}
 
@@ -216,21 +205,15 @@ func (p *RealAWSProvider) listMemoryDBClusters(ctx context.Context, filter types
 			CreatedAt:  time.Now(), // MemoryDB doesn't provide creation time
 			LastSeenAt: time.Now(),
 			IsOrphaned: p.isResourceOrphaned(tags),
-			Metadata: map[string]interface{}{
-				"node_type":          aws.ToString(cluster.NodeType),
-				"shard_count":        len(cluster.Shards),
-				"total_nodes":        totalNodes,
-				"engine_version":     aws.ToString(cluster.EngineVersion),
-				"tls_enabled":        aws.ToBool(cluster.TLSEnabled),
-				"snapshot_retention": aws.ToInt32(cluster.SnapshotRetentionLimit),
-				"maintenance_window": aws.ToString(cluster.MaintenanceWindow),
-				"parameter_group":    aws.ToString(cluster.ParameterGroupName),
+			Metadata: types.ResourceMetadata{
+				InstanceType:  aws.ToString(cluster.NodeType),
+				NodeCount:     totalNodes,
+				EngineVersion: aws.ToString(cluster.EngineVersion),
+				Encrypted:     aws.ToBool(cluster.TLSEnabled), // TLS is encryption in transit
+				BackupWindow:  aws.ToString(cluster.MaintenanceWindow),
+				State:         aws.ToString(cluster.Status),
 			},
 		}
-
-		// MemoryDB is expensive for in-memory workloads
-		resource.Metadata["cost_priority"] = "high"
-		resource.Metadata["monthly_cost_estimate"] = float64(totalNodes) * 120.0
 
 		resources = append(resources, resource)
 	}
@@ -274,16 +257,8 @@ func (p *RealAWSProvider) listDynamoDBTables(ctx context.Context, filter types.R
 			tags = p.convertDynamoDBTagList(tagsOutput.Tags)
 		}
 
-		// Check billing mode
-		isOnDemand := table.BillingModeSummary != nil &&
-			table.BillingModeSummary.BillingMode == dynamodbtypes.BillingModePayPerRequest
-
-		// Calculate provisioned capacity costs
-		var readCapacity, writeCapacity int64
-		if table.ProvisionedThroughput != nil {
-			readCapacity = aws.ToInt64(table.ProvisionedThroughput.ReadCapacityUnits)
-			writeCapacity = aws.ToInt64(table.ProvisionedThroughput.WriteCapacityUnits)
-		}
+		// Note: Capacity and billing mode information could be added to metadata if needed
+		// but for now we're focusing on essential fields
 
 		resource := types.Resource{
 			ID:         aws.ToString(table.TableName),
@@ -297,27 +272,11 @@ func (p *RealAWSProvider) listDynamoDBTables(ctx context.Context, filter types.R
 			CreatedAt:  p.safeTimeValue(table.CreationDateTime),
 			LastSeenAt: time.Now(),
 			IsOrphaned: p.isResourceOrphaned(tags),
-			Metadata: map[string]interface{}{
-				"table_size_bytes":         aws.ToInt64(table.TableSizeBytes),
-				"item_count":               aws.ToInt64(table.ItemCount),
-				"is_on_demand":             isOnDemand,
-				"read_capacity":            readCapacity,
-				"write_capacity":           writeCapacity,
-				"global_secondary_indexes": len(table.GlobalSecondaryIndexes),
-				"local_secondary_indexes":  len(table.LocalSecondaryIndexes),
-				"stream_enabled":           table.StreamSpecification != nil && aws.ToBool(table.StreamSpecification.StreamEnabled),
-				"encryption_type":          string(table.SSEDescription.SSEType),
+			Metadata: types.ResourceMetadata{
+				Size:      aws.ToInt64(table.TableSizeBytes),
+				Encrypted: table.SSEDescription != nil && table.SSEDescription.SSEType != "",
+				State:     string(table.TableStatus),
 			},
-		}
-
-		// Calculate estimated monthly cost
-		if isOnDemand {
-			resource.Metadata["billing_mode"] = "on_demand"
-		} else {
-			resource.Metadata["billing_mode"] = "provisioned"
-			// Rough estimate: $0.00065 per RCU hour, $0.00325 per WCU hour
-			monthlyCost := float64(readCapacity)*0.47 + float64(writeCapacity)*2.35
-			resource.Metadata["monthly_cost_estimate"] = monthlyCost
 		}
 
 		resources = append(resources, resource)
@@ -366,20 +325,20 @@ func (p *RealAWSProvider) listDynamoDBBackups(ctx context.Context, filter types.
 			CreatedAt:  p.safeTimeValue(backup.BackupCreationDateTime),
 			LastSeenAt: time.Now(),
 			IsOrphaned: isOld, // Backups without tags are considered orphaned if old
-			Metadata: map[string]interface{}{
-				"table_name":        aws.ToString(backup.TableName),
-				"backup_size_bytes": aws.ToInt64(backup.BackupSizeBytes),
-				"backup_type":       string(backup.BackupType),
-				"age_days":          ageInDays,
-				"is_old":            isOld,
-				"expires_at":        p.safeTimeValue(backup.BackupExpiryDateTime),
+			Metadata: types.ResourceMetadata{
+				TableName:       aws.ToString(backup.TableName),
+				BackupSizeBytes: aws.ToInt64(backup.BackupSizeBytes),
+				BackupType:      string(backup.BackupType),
+				AgeDays:         ageInDays,
+				IsOld:           isOld,
+				ExpiresAt:       p.safeTimeValue(backup.BackupExpiryDateTime),
 			},
 		}
 
 		// Add source table info if available
 		if desc.SourceTableDetails != nil {
-			resource.Metadata["source_table_size"] = aws.ToInt64(desc.SourceTableDetails.TableSizeBytes)
-			resource.Metadata["source_item_count"] = aws.ToInt64(desc.SourceTableDetails.ItemCount)
+			resource.Metadata.Size = aws.ToInt64(desc.SourceTableDetails.TableSizeBytes)
+			resource.Metadata.ItemCount = aws.ToInt64(desc.SourceTableDetails.ItemCount)
 		}
 
 		resources = append(resources, resource)

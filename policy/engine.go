@@ -17,6 +17,8 @@ import (
 )
 
 // OpaExpressionValue represents the dynamic value from OPA expression results
+// This is intentionally a map[string]interface{} because OPA can return arbitrary
+// JSON structures that vary based on policy rules. The shape is not known at compile time.
 type OpaExpressionValue map[string]interface{}
 
 // PolicyEngine evaluates OPA policies against resources with MVCC context
@@ -50,13 +52,16 @@ type PolicyContext struct {
 
 // PolicyResult contains the result of policy evaluation
 type PolicyResult struct {
-	Decision   string         `json:"decision"` // "allow", "deny", "require_approval", "flag"
-	Action     string         `json:"action"`   // "delete", "tag", "notify", "ignore"
-	Reason     string         `json:"reason"`
-	Confidence float64        `json:"confidence"`
-	Policies   []string       `json:"policies"` // Which policies matched
-	Risk       string         `json:"risk"`     // "high", "medium", "low"
-	Metadata   map[string]any `json:"metadata"`
+	Decision   string   `json:"decision"` // "allow", "deny", "require_approval", "flag"
+	Action     string   `json:"action"`   // "delete", "tag", "notify", "ignore"
+	Reason     string   `json:"reason"`
+	Confidence float64  `json:"confidence"`
+	Policies   []string `json:"policies"` // Which policies matched
+	Risk       string   `json:"risk"`     // "high", "medium", "low"
+	// Metadata stores dynamic policy-specific data from OPA evaluation
+	// This is intentionally a map because policies can attach arbitrary
+	// context that varies by policy type and cannot be predetermined
+	Metadata map[string]any `json:"metadata"`
 }
 
 // NewPolicyEngine creates a new policy engine

@@ -283,13 +283,14 @@ func (p *RealAWSProvider) convertEC2Instance(instance ec2types.Instance) types.R
 		Tags:       tags,
 		CreatedAt:  p.safeTimeValue(instance.LaunchTime),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"instance_type":     string(instance.InstanceType),
-			"availability_zone": aws.ToString(instance.Placement.AvailabilityZone),
-			"private_ip":        aws.ToString(instance.PrivateIpAddress),
-			"public_ip":         aws.ToString(instance.PublicIpAddress),
-			"vpc_id":            aws.ToString(instance.VpcId),
-			"subnet_id":         aws.ToString(instance.SubnetId),
+		Metadata: types.ResourceMetadata{
+			InstanceType:     string(instance.InstanceType),
+			AvailabilityZone: aws.ToString(instance.Placement.AvailabilityZone),
+			PrivateIP:        aws.ToString(instance.PrivateIpAddress),
+			PublicIP:         aws.ToString(instance.PublicIpAddress),
+			VpcID:            aws.ToString(instance.VpcId),
+			SubnetID:         aws.ToString(instance.SubnetId),
+			State:            string(instance.State.Name),
 		},
 	}
 }
@@ -298,6 +299,14 @@ func (p *RealAWSProvider) convertEC2Instance(instance ec2types.Instance) types.R
 func (p *RealAWSProvider) convertRDSInstance(instance rdstypes.DBInstance) types.Resource {
 	tags := p.convertTagsToElava(instance.TagList)
 	isOrphaned := p.isResourceOrphaned(tags)
+
+	// Handle endpoint safely
+	var endpoint string
+	var port int32
+	if instance.Endpoint != nil {
+		endpoint = aws.ToString(instance.Endpoint.Address)
+		port = aws.ToInt32(instance.Endpoint.Port)
+	}
 
 	return types.Resource{
 		ID:         aws.ToString(instance.DBInstanceIdentifier),
@@ -309,14 +318,15 @@ func (p *RealAWSProvider) convertRDSInstance(instance rdstypes.DBInstance) types
 		Tags:       tags,
 		CreatedAt:  p.safeTimeValue(instance.InstanceCreateTime),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"engine":            aws.ToString(instance.Engine),
-			"engine_version":    aws.ToString(instance.EngineVersion),
-			"instance_class":    aws.ToString(instance.DBInstanceClass),
-			"allocated_storage": aws.ToInt32(instance.AllocatedStorage),
-			"db_name":           aws.ToString(instance.DBName),
-			"endpoint":          aws.ToString(instance.Endpoint.Address),
-			"port":              aws.ToInt32(instance.Endpoint.Port),
+		Metadata: types.ResourceMetadata{
+			Engine:           aws.ToString(instance.Engine),
+			EngineVersion:    aws.ToString(instance.EngineVersion),
+			InstanceClass:    aws.ToString(instance.DBInstanceClass),
+			AllocatedStorage: aws.ToInt32(instance.AllocatedStorage),
+			DBName:           aws.ToString(instance.DBName),
+			Endpoint:         endpoint,
+			Port:             port,
+			State:            aws.ToString(instance.DBInstanceStatus),
 		},
 	}
 }
@@ -336,11 +346,12 @@ func (p *RealAWSProvider) convertLoadBalancer(lb elbv2types.LoadBalancer) types.
 		Tags:       tags,
 		CreatedAt:  p.safeTimeValue(lb.CreatedTime),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"type":     string(lb.Type),
-			"scheme":   string(lb.Scheme),
-			"vpc_id":   aws.ToString(lb.VpcId),
-			"dns_name": aws.ToString(lb.DNSName),
+		Metadata: types.ResourceMetadata{
+			LoadBalancerType: string(lb.Type),
+			Scheme:           string(lb.Scheme),
+			VpcID:            aws.ToString(lb.VpcId),
+			DNSName:          aws.ToString(lb.DNSName),
+			State:            string(lb.State.Code),
 		},
 	}
 }

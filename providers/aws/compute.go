@@ -43,6 +43,12 @@ func (p *RealAWSProvider) processLambdaFunction(ctx context.Context, function la
 	lastInvoke := p.getLambdaLastInvoke(ctx, function.FunctionName)
 	isOrphaned := p.isLambdaOrphaned(tags, lastInvoke)
 
+	// Handle lastInvoke time safely
+	var lastAccessTime time.Time
+	if lastInvoke != nil {
+		lastAccessTime = *lastInvoke
+	}
+
 	return types.Resource{
 		ID:         aws.ToString(function.FunctionArn),
 		Type:       "lambda",
@@ -54,11 +60,13 @@ func (p *RealAWSProvider) processLambdaFunction(ctx context.Context, function la
 		Tags:       tags,
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"runtime":      string(function.Runtime),
-			"last_invoked": lastInvoke,
-			"memory_size":  aws.ToInt32(function.MemorySize),
-			"timeout":      aws.ToInt32(function.Timeout),
+		Metadata: types.ResourceMetadata{
+			Runtime:        string(function.Runtime),
+			LastAccessTime: &lastAccessTime,
+			MemorySize:     aws.ToInt32(function.MemorySize),
+			Timeout:        aws.ToInt32(function.Timeout),
+			FunctionName:   aws.ToString(function.FunctionName),
+			State:          string(function.State),
 		},
 	}
 }
@@ -142,11 +150,11 @@ func (p *RealAWSProvider) describeEKSCluster(ctx context.Context, clusterName st
 		CreatedAt:  p.safeTimeValue(cluster.CreatedAt),
 		LastSeenAt: time.Now(),
 		IsOrphaned: p.isResourceOrphaned(tags),
-		Metadata: map[string]interface{}{
-			"version":     aws.ToString(cluster.Version),
-			"platform":    aws.ToString(cluster.PlatformVersion),
-			"endpoint":    aws.ToString(cluster.Endpoint),
-			"node_groups": p.getNodeGroupCount(ctx, clusterName),
+		Metadata: types.ResourceMetadata{
+			ClusterVersion: aws.ToString(cluster.Version),
+			Endpoint:       aws.ToString(cluster.Endpoint),
+			NodeGroupCount: p.getNodeGroupCount(ctx, clusterName),
+			State:          string(cluster.Status),
 		},
 	}
 }
@@ -233,11 +241,10 @@ func (p *RealAWSProvider) processECSCluster(cluster ecstypes.Cluster) types.Reso
 		Tags:       tags,
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"running_tasks":        runningTasks,
-			"pending_tasks":        pendingTasks,
-			"active_services":      cluster.ActiveServicesCount,
-			"registered_instances": cluster.RegisteredContainerInstancesCount,
+		Metadata: types.ResourceMetadata{
+			Services:        int(cluster.ActiveServicesCount),
+			State:           aws.ToString(cluster.Status),
+			TaskDefinitions: int(runningTasks + pendingTasks), // Total tasks as approximation
 		},
 	}
 }
@@ -291,11 +298,11 @@ func (p *RealAWSProvider) processAutoScalingGroup(asg asgtypes.AutoScalingGroup)
 		CreatedAt:  p.safeTimeValue(asg.CreatedTime),
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"desired_capacity": aws.ToInt32(asg.DesiredCapacity),
-			"min_size":         aws.ToInt32(asg.MinSize),
-			"max_size":         aws.ToInt32(asg.MaxSize),
-			"instances":        len(asg.Instances),
+		Metadata: types.ResourceMetadata{
+			DesiredCapacity: aws.ToInt32(asg.DesiredCapacity),
+			MinSize:         aws.ToInt32(asg.MinSize),
+			MaxSize:         aws.ToInt32(asg.MaxSize),
+			State:           status,
 		},
 	}
 }

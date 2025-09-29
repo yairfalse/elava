@@ -10,6 +10,13 @@ import (
 	"github.com/yairfalse/elava/wal"
 )
 
+// ObservationData represents data logged during observation
+type ObservationData struct {
+	Provider       string `json:"provider"`
+	Region         string `json:"region"`
+	ResourcesFound int    `json:"resources_found"`
+}
+
 // Engine implements the main reconciliation logic
 type Engine struct {
 	observer      Observer
@@ -115,10 +122,10 @@ func (e *Engine) observeCurrentState(ctx context.Context, config Config) ([]type
 	}
 
 	// Log observation
-	observationData := map[string]interface{}{
-		"provider":        config.Provider,
-		"region":          config.Region,
-		"resources_found": len(resources),
+	observationData := ObservationData{
+		Provider:       config.Provider,
+		Region:         config.Region,
+		ResourcesFound: len(resources),
 	}
 
 	if err := e.wal.Append(wal.EntryObserved, "", observationData); err != nil {
