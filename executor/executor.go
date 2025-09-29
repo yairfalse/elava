@@ -52,81 +52,142 @@ func NewEngine(
 
 // Execute executes a batch of decisions with comprehensive error handling
 func (e *Engine) Execute(ctx context.Context, decisions []types.Decision) (*ExecutionResult, error) {
-	startTime := time.Now()
+	result := e.initializeExecutionResult(decisions)
 
-	result := &ExecutionResult{
-		StartTime:      startTime,
+	if err := e.logExecutionStart(result); err != nil {
+		return nil, err
+	}
+
+	e.executeDecisions(ctx, decisions, result)
+	e.finalizeExecutionResult(result)
+
+	if err := e.logExecutionCompletion(result); err != nil {
+		return result, err
+	}
+
+	return result, nil
+}
+
+// initializeExecutionResult creates the initial batch execution result
+func (e *Engine) initializeExecutionResult(decisions []types.Decision) *ExecutionResult {
+	return &ExecutionResult{
+		StartTime:      time.Now(),
 		TotalDecisions: len(decisions),
 		Results:        make([]SingleExecutionResult, 0, len(decisions)),
 	}
+}
 
-	// Log execution start
+// logExecutionStart logs the start of batch execution
+func (e *Engine) logExecutionStart(result *ExecutionResult) error {
 	if err := e.wal.Append(wal.EntryExecuting, "", ExecutionStart{
-		DecisionCount: len(decisions),
-		StartTime:     startTime,
+		DecisionCount: result.TotalDecisions,
+		StartTime:     result.StartTime,
 		Options:       e.options,
 	}); err != nil {
-		return nil, fmt.Errorf("failed to log execution start: %w", err)
+		return fmt.Errorf("failed to log execution start: %w", err)
 	}
+	return nil
+}
 
-	// Execute decisions
+// executeDecisions executes all decisions in the batch
+func (e *Engine) executeDecisions(ctx context.Context, decisions []types.Decision, result *ExecutionResult) {
 	for _, decision := range decisions {
-		singleResult, err := e.ExecuteSingle(ctx, decision)
-		if err != nil {
-			// Log the error but continue with other decisions if configured
-			singleResult = &SingleExecutionResult{
-				Decision:  decision,
-				Status:    StatusFailed,
-				StartTime: time.Now(),
-				EndTime:   time.Now(),
-				Error:     err.Error(),
-			}
-		}
-
+		singleResult := e.executeSingleDecision(ctx, decision)
 		result.Results = append(result.Results, *singleResult)
 		e.updateResultCounts(result, *singleResult)
 
-		// Check if we should stop on failure
-		if singleResult.Status == StatusFailed && !e.options.ContinueOnFailure {
-			result.PartialFailure = true
+		if e.shouldStopExecution(singleResult, result) {
 			break
 		}
 	}
+}
 
+// executeSingleDecision executes a single decision and handles errors
+func (e *Engine) executeSingleDecision(ctx context.Context, decision types.Decision) *SingleExecutionResult {
+	singleResult, err := e.ExecuteSingle(ctx, decision)
+	if err != nil {
+		return &SingleExecutionResult{
+			Decision:  decision,
+			Status:    StatusFailed,
+			StartTime: time.Now(),
+			EndTime:   time.Now(),
+			Error:     err.Error(),
+		}
+	}
+	return singleResult
+}
+
+// shouldStopExecution checks if execution should stop after a result
+func (e *Engine) shouldStopExecution(singleResult *SingleExecutionResult, result *ExecutionResult) bool {
+	if singleResult.Status == StatusFailed && !e.options.ContinueOnFailure {
+		result.PartialFailure = true
+		return true
+	}
+	return false
+}
+
+// finalizeExecutionResult sets final fields on the result
+func (e *Engine) finalizeExecutionResult(result *ExecutionResult) {
 	result.EndTime = time.Now()
 	result.Duration = result.EndTime.Sub(result.StartTime)
 	result.PartialFailure = result.FailedCount > 0
 	result.RollbackRequired = result.PartialFailure && e.options.RollbackOnPartialFail
+}
 
-	// Log execution completion
+// logExecutionCompletion logs the completion of batch execution
+func (e *Engine) logExecutionCompletion(result *ExecutionResult) error {
 	if err := e.wal.Append(wal.EntryExecuted, "", result); err != nil {
-		return result, fmt.Errorf("failed to log execution result: %w", err)
+		return fmt.Errorf("failed to log execution result: %w", err)
 	}
-
-	return result, nil
+	return nil
 }
 
 // ExecuteSingle executes a single decision with full safety checks
 //
 //nolint:gocyclo // This function coordinates many necessary steps for safe execution
 func (e *Engine) ExecuteSingle(ctx context.Context, decision types.Decision) (*SingleExecutionResult, error) {
-	startTime := time.Now()
+	result := e.initializeResult(decision)
 
-	result := &SingleExecutionResult{
-		Decision:  decision,
-		Status:    StatusPending,
-		StartTime: startTime,
+	// Validate and prepare
+	provider, err := e.prepareExecution(ctx, decision, result)
+	if err != nil || result.Status == StatusSkipped {
+		return result, err
 	}
 
+	// Execute the decision
+	resourceID, err := e.performExecution(ctx, decision, provider, result)
+	if err != nil {
+		return result, nil
+	}
+
+	// Post-execution handling
+	e.handleExecutionSuccess(ctx, decision, resourceID, result)
+
+	return result, nil
+}
+
+// initializeResult creates the initial execution result
+func (e *Engine) initializeResult(decision types.Decision) *SingleExecutionResult {
+	return &SingleExecutionResult{
+		Decision:  decision,
+		Status:    StatusPending,
+		StartTime: time.Now(),
+	}
+}
+
+// prepareExecution validates and prepares for execution
+func (e *Engine) prepareExecution(ctx context.Context, decision types.Decision, result *SingleExecutionResult) (providers.CloudProvider, error) {
 	// Validate decision
 	if err := decision.Validate(); err != nil {
-		return e.failResult(result, "invalid decision", err), nil
+		e.failResult(result, "invalid decision", err)
+		return nil, nil
 	}
 
 	// Get provider
 	provider, err := e.getProviderForDecision(decision)
 	if err != nil {
-		return e.failResult(result, "provider error", err), nil
+		e.failResult(result, "provider error", err)
+		return nil, nil
 	}
 
 	result.ProviderInfo = ProviderInfo{
@@ -134,46 +195,66 @@ func (e *Engine) ExecuteSingle(ctx context.Context, decision types.Decision) (*S
 		Region:   provider.Region(),
 	}
 
+	// Check if we should skip
+	if shouldSkip := e.checkSkipConditions(ctx, decision, provider, result); shouldSkip {
+		return nil, nil
+	}
+
+	return provider, nil
+}
+
+// checkSkipConditions checks if execution should be skipped
+func (e *Engine) checkSkipConditions(ctx context.Context, decision types.Decision, provider providers.CloudProvider, result *SingleExecutionResult) bool {
 	// Pre-execution safety checks
 	if shouldSkip, reason := e.shouldSkipDecision(ctx, decision, provider); shouldSkip {
-		result.Status = StatusSkipped
-		result.SkipReason = reason
-		result.EndTime = time.Now()
-		result.Duration = result.EndTime.Sub(result.StartTime)
-		return result, nil
+		e.skipResult(result, reason)
+		return true
 	}
 
 	// Request confirmation if needed
 	if decision.RequiresConfirmation() && !e.options.SkipConfirmation {
 		if confirmed, err := e.requestConfirmation(ctx, decision); err != nil {
-			return e.failResult(result, "confirmation error", err), nil
+			e.failResult(result, "confirmation error", err)
+			return true
 		} else if !confirmed {
-			result.Status = StatusSkipped
-			result.SkipReason = "user declined confirmation"
-			result.EndTime = time.Now()
-			result.Duration = result.EndTime.Sub(result.StartTime)
-			return result, nil
+			e.skipResult(result, "user declined confirmation")
+			return true
 		}
 	}
 
-	// Execute the decision
+	return false
+}
+
+// performExecution executes the decision and handles errors
+func (e *Engine) performExecution(ctx context.Context, decision types.Decision, provider providers.CloudProvider, result *SingleExecutionResult) (string, error) {
 	result.Status = StatusExecuting
 
 	// Log execution start
 	if err := e.wal.Append(wal.EntryExecuting, decision.ResourceID, decision); err != nil {
-		return e.failResult(result, "failed to log execution start", err), nil
+		e.failResult(result, "failed to log execution start", err)
+		return "", nil
 	}
 
 	resourceID, err := e.executeDecision(ctx, decision, provider)
 	if err != nil {
-		// Log failure
-		if walErr := e.wal.AppendError(wal.EntryFailed, decision.ResourceID, decision, err); walErr != nil {
-			return e.failResult(result, "execution failed and WAL error", fmt.Errorf("execution: %w, wal: %w", err, walErr)), nil
-		}
-		return e.failResult(result, "execution failed", err), nil
+		e.handleExecutionError(decision, result, err)
+		return "", nil
 	}
 
-	// Success
+	return resourceID, nil
+}
+
+// handleExecutionError handles execution failures
+func (e *Engine) handleExecutionError(decision types.Decision, result *SingleExecutionResult, err error) {
+	if walErr := e.wal.AppendError(wal.EntryFailed, decision.ResourceID, decision, err); walErr != nil {
+		e.failResult(result, "execution failed and WAL error", fmt.Errorf("execution: %w, wal: %w", err, walErr))
+	} else {
+		e.failResult(result, "execution failed", err)
+	}
+}
+
+// handleExecutionSuccess handles successful execution
+func (e *Engine) handleExecutionSuccess(ctx context.Context, decision types.Decision, resourceID string, result *SingleExecutionResult) {
 	result.Status = StatusSuccess
 	result.ResourceID = resourceID
 	result.EndTime = time.Now()
@@ -181,20 +262,23 @@ func (e *Engine) ExecuteSingle(ctx context.Context, decision types.Decision) (*S
 
 	// Log success
 	if err := e.wal.Append(wal.EntryExecuted, decision.ResourceID, result); err != nil {
-		// Decision executed successfully but WAL failed - still return success
-		// but log the WAL error separately
 		fmt.Printf("Warning: execution succeeded but WAL logging failed: %v\n", err)
 	}
 
 	// Record for potential rollback
 	if e.options.EnableRollback {
 		if err := e.recordForRollback(ctx, decision, resourceID); err != nil {
-			// Don't fail the execution for rollback recording errors
 			fmt.Printf("Warning: failed to record rollback entry: %v\n", err)
 		}
 	}
+}
 
-	return result, nil
+// skipResult marks result as skipped
+func (e *Engine) skipResult(result *SingleExecutionResult, reason string) {
+	result.Status = StatusSkipped
+	result.SkipReason = reason
+	result.EndTime = time.Now()
+	result.Duration = result.EndTime.Sub(result.StartTime)
 }
 
 // DryRun simulates execution without making changes
