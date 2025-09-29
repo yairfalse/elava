@@ -27,8 +27,11 @@ type ProviderConfig struct {
 	AccessKeyID     string
 	SecretAccessKey string
 	SessionToken    string
-	ProjectID       string                 // For GCP
-	Config          map[string]interface{} `json:"config"` // Provider-specific config
+	ProjectID       string // For GCP
+	// Config stores provider-specific configuration that varies by cloud provider
+	// This is intentionally a map because each provider (AWS, GCP, Azure) has
+	// different config requirements that cannot be predetermined at compile time
+	Config map[string]interface{} `json:"config"` // Provider-specific config
 }
 
 // ProviderFactory creates a provider instance

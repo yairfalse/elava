@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -207,12 +206,12 @@ func (p *RealAWSProvider) listMemoryDBClusters(ctx context.Context, filter types
 			LastSeenAt: time.Now(),
 			IsOrphaned: p.isResourceOrphaned(tags),
 			Metadata: types.ResourceMetadata{
-				InstanceType:   aws.ToString(cluster.NodeType),
-				NodeCount:      totalNodes,
-				EngineVersion:  aws.ToString(cluster.EngineVersion),
-				Encrypted:      aws.ToBool(cluster.TLSEnabled), // TLS is encryption in transit
-				BackupWindow:   aws.ToString(cluster.MaintenanceWindow),
-				State:          aws.ToString(cluster.Status),
+				InstanceType:  aws.ToString(cluster.NodeType),
+				NodeCount:     totalNodes,
+				EngineVersion: aws.ToString(cluster.EngineVersion),
+				Encrypted:     aws.ToBool(cluster.TLSEnabled), // TLS is encryption in transit
+				BackupWindow:  aws.ToString(cluster.MaintenanceWindow),
+				State:         aws.ToString(cluster.Status),
 			},
 		}
 
@@ -258,16 +257,8 @@ func (p *RealAWSProvider) listDynamoDBTables(ctx context.Context, filter types.R
 			tags = p.convertDynamoDBTagList(tagsOutput.Tags)
 		}
 
-		// Check billing mode
-		isOnDemand := table.BillingModeSummary != nil &&
-			table.BillingModeSummary.BillingMode == dynamodbtypes.BillingModePayPerRequest
-
-		// Calculate provisioned capacity costs
-		var readCapacity, writeCapacity int64
-		if table.ProvisionedThroughput != nil {
-			readCapacity = aws.ToInt64(table.ProvisionedThroughput.ReadCapacityUnits)
-			writeCapacity = aws.ToInt64(table.ProvisionedThroughput.WriteCapacityUnits)
-		}
+		// Note: Capacity and billing mode information could be added to metadata if needed
+		// but for now we're focusing on essential fields
 
 		resource := types.Resource{
 			ID:         aws.ToString(table.TableName),
@@ -334,20 +325,20 @@ func (p *RealAWSProvider) listDynamoDBBackups(ctx context.Context, filter types.
 			CreatedAt:  p.safeTimeValue(backup.BackupCreationDateTime),
 			LastSeenAt: time.Now(),
 			IsOrphaned: isOld, // Backups without tags are considered orphaned if old
-			Metadata: map[string]interface{}{
-				"table_name":        aws.ToString(backup.TableName),
-				"backup_size_bytes": aws.ToInt64(backup.BackupSizeBytes),
-				"backup_type":       string(backup.BackupType),
-				"age_days":          ageInDays,
-				"is_old":            isOld,
-				"expires_at":        p.safeTimeValue(backup.BackupExpiryDateTime),
+			Metadata: types.ResourceMetadata{
+				TableName:       aws.ToString(backup.TableName),
+				BackupSizeBytes: aws.ToInt64(backup.BackupSizeBytes),
+				BackupType:      string(backup.BackupType),
+				AgeDays:         ageInDays,
+				IsOld:           isOld,
+				ExpiresAt:       p.safeTimeValue(backup.BackupExpiryDateTime),
 			},
 		}
 
 		// Add source table info if available
 		if desc.SourceTableDetails != nil {
-			resource.Metadata["source_table_size"] = aws.ToInt64(desc.SourceTableDetails.TableSizeBytes)
-			resource.Metadata["source_item_count"] = aws.ToInt64(desc.SourceTableDetails.ItemCount)
+			resource.Metadata.Size = aws.ToInt64(desc.SourceTableDetails.TableSizeBytes)
+			resource.Metadata.ItemCount = aws.ToInt64(desc.SourceTableDetails.ItemCount)
 		}
 
 		resources = append(resources, resource)

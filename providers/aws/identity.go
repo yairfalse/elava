@@ -63,11 +63,10 @@ func (p *RealAWSProvider) processIAMRole(ctx context.Context, role iamtypes.Role
 		CreatedAt:  p.safeTimeValue(role.CreateDate),
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"path":              aws.ToString(role.Path),
-			"is_service_linked": isServiceLinked,
-			"last_used":         lastUsedTime,
-			"is_unused":         isUnused,
+		Metadata: types.ResourceMetadata{
+			RoleName:       aws.ToString(role.RoleName),
+			LastAccessTime: lastUsedTime,
+			State:          "active",
 		},
 	}
 }
@@ -147,10 +146,10 @@ func (p *RealAWSProvider) processECRRepository(ctx context.Context, repo ecrtype
 		CreatedAt:  p.safeTimeValue(repo.CreatedAt),
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"repository_uri": aws.ToString(repo.RepositoryUri),
-			"image_count":    imageCount,
-			"is_empty":       isEmpty,
+		Metadata: types.ResourceMetadata{
+			RepositoryURI: aws.ToString(repo.RepositoryUri),
+			ImageCount:    imageCount,
+			IsEmpty:       isEmpty,
 		},
 	}
 }
@@ -212,11 +211,11 @@ func (p *RealAWSProvider) processRoute53Zone(ctx context.Context, zone route53ty
 		Tags:       tags,
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"private_zone": zone.Config.PrivateZone,
-			"record_count": recordCount,
-			"comment":      aws.ToString(zone.Config.Comment),
-			"is_empty":     isEmpty,
+		Metadata: types.ResourceMetadata{
+			IsPrivateZone: zone.Config.PrivateZone,
+			RecordCount:   recordCount,
+			Comment:       aws.ToString(zone.Config.Comment),
+			IsEmpty:       isEmpty,
 		},
 	}
 }
@@ -311,11 +310,11 @@ func (p *RealAWSProvider) processKMSKey(ctx context.Context, key kmstypes.KeyLis
 		CreatedAt:  p.safeTimeValue(metadata.CreationDate),
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"key_usage":           string(metadata.KeyUsage),
-			"key_spec":            string(metadata.KeySpec),
-			"is_pending_deletion": isPendingDeletion,
-			"is_disabled":         isDisabled,
+		Metadata: types.ResourceMetadata{
+			KeyUsage:          string(metadata.KeyUsage),
+			KeySpec:           string(metadata.KeySpec),
+			IsPendingDeletion: isPendingDeletion,
+			IsDisabled:        isDisabled,
 		},
 	}
 }

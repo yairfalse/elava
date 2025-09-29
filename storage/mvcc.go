@@ -56,6 +56,13 @@ type ResourceState struct {
 	Exists         bool
 }
 
+// Tombstone represents a deleted resource marker
+type Tombstone struct {
+	ID        string    `json:"id"`
+	Tombstone bool      `json:"tombstone"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // For btree ordering
 func (r *ResourceState) Less(than *ResourceState) bool {
 	return r.ResourceID < than.ResourceID
@@ -214,10 +221,10 @@ func (s *MVCCStorage) RecordDisappearance(resourceID string) (int64, error) {
 
 		// Store a tombstone marker
 		key := makeObservationKey(rev, resourceID)
-		tombstone := map[string]interface{}{
-			"id":        resourceID,
-			"tombstone": true,
-			"timestamp": time.Now(),
+		tombstone := Tombstone{
+			ID:        resourceID,
+			Tombstone: true,
+			Timestamp: time.Now(),
 		}
 		value, err := json.Marshal(tombstone)
 		if err != nil {
@@ -286,9 +293,9 @@ func (s *MVCCStorage) GetStateAtRevision(resourceID string, revision int64) (*Re
 				}
 
 				// Check if it's a tombstone
-				var data map[string]interface{}
+				var data Tombstone
 				if err := json.Unmarshal(v, &data); err == nil {
-					if tombstone, ok := data["tombstone"].(bool); ok && tombstone {
+					if data.Tombstone {
 						result.Exists = false
 						result.DisappearedRev = rev
 					}

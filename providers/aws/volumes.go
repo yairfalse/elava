@@ -275,12 +275,12 @@ func (p *RealAWSProvider) processRDSSnapshot(snapshot rdstypes.DBSnapshot) types
 		CreatedAt:  p.safeTimeValue(snapshot.SnapshotCreateTime),
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"engine":         aws.ToString(snapshot.Engine),
-			"engine_version": aws.ToString(snapshot.EngineVersion),
-			"storage_gb":     aws.ToInt32(snapshot.AllocatedStorage),
-			"encrypted":      aws.ToBool(snapshot.Encrypted),
-			"is_old":         isOld,
+		Metadata: types.ResourceMetadata{
+			Engine:        aws.ToString(snapshot.Engine),
+			EngineVersion: aws.ToString(snapshot.EngineVersion),
+			StorageGB:     int(aws.ToInt32(snapshot.AllocatedStorage)),
+			Encrypted:     aws.ToBool(snapshot.Encrypted),
+			IsOld:         isOld,
 		},
 	}
 }
@@ -305,12 +305,12 @@ func (p *RealAWSProvider) processRDSClusterSnapshot(snapshot rdstypes.DBClusterS
 		CreatedAt:  p.safeTimeValue(snapshot.SnapshotCreateTime),
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"engine":         aws.ToString(snapshot.Engine),
-			"engine_version": aws.ToString(snapshot.EngineVersion),
-			"storage_gb":     aws.ToInt32(snapshot.AllocatedStorage),
-			"encrypted":      aws.ToBool(snapshot.StorageEncrypted),
-			"is_old":         isOld,
+		Metadata: types.ResourceMetadata{
+			Engine:        aws.ToString(snapshot.Engine),
+			EngineVersion: aws.ToString(snapshot.EngineVersion),
+			StorageGB:     int(aws.ToInt32(snapshot.AllocatedStorage)),
+			Encrypted:     aws.ToBool(snapshot.StorageEncrypted),
+			IsOld:         isOld,
 		},
 	}
 }

@@ -66,9 +66,9 @@ func (p *RealAWSProvider) processS3Bucket(ctx context.Context, bucket s3types.Bu
 		CreatedAt:  p.safeTimeValue(bucket.CreationDate),
 		LastSeenAt: time.Now(),
 		IsOrphaned: p.isResourceOrphaned(tags) || isEmpty,
-		Metadata: map[string]interface{}{
-			"is_empty":      isEmpty,
-			"creation_date": bucket.CreationDate,
+		Metadata: types.ResourceMetadata{
+			BucketName: aws.ToString(bucket.Name),
+			State:      "active",
 		},
 	}
 }

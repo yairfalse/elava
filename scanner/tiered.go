@@ -115,12 +115,8 @@ func (ts *TieredScanner) getInstanceType(resource types.Resource) string {
 		return instanceType
 	}
 
-	if metadata, ok := resource.Metadata["instance_type"]; ok {
-		if instanceTypeStr, ok := metadata.(string); ok {
-			return instanceTypeStr
-		}
-	}
-	return ""
+	// Metadata is now a struct, so access InstanceType directly
+	return resource.Metadata.InstanceType
 }
 
 func (ts *TieredScanner) hasAnyPattern(pattern config.TierPattern) bool {

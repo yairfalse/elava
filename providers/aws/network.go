@@ -50,11 +50,11 @@ func (p *RealAWSProvider) processElasticIP(eip ec2types.Address) types.Resource 
 		Tags:       tags,
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned || p.isResourceOrphaned(tags),
-		Metadata: map[string]interface{}{
-			"public_ip":      aws.ToString(eip.PublicIp),
-			"instance_id":    aws.ToString(eip.InstanceId),
-			"association_id": aws.ToString(eip.AssociationId),
-			"domain":         string(eip.Domain),
+		Metadata: types.ResourceMetadata{
+			PublicIP:      aws.ToString(eip.PublicIp),
+			AssociationID: aws.ToString(eip.AssociationId),
+			IsAssociated:  aws.ToString(eip.InstanceId) != "",
+			State:         status,
 		},
 	}
 }
@@ -104,10 +104,11 @@ func (p *RealAWSProvider) processNATGateway(nat ec2types.NatGateway) types.Resou
 		CreatedAt:  p.safeTimeValue(nat.CreateTime),
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"vpc_id":    aws.ToString(nat.VpcId),
-			"subnet_id": aws.ToString(nat.SubnetId),
-			"state":     string(nat.State),
+		Metadata: types.ResourceMetadata{
+			VpcID:        aws.ToString(nat.VpcId),
+			SubnetID:     aws.ToString(nat.SubnetId),
+			NatGatewayID: aws.ToString(nat.NatGatewayId),
+			State:        string(nat.State),
 		},
 	}
 }
@@ -156,12 +157,10 @@ func (p *RealAWSProvider) processSecurityGroup(sg ec2types.SecurityGroup) types.
 		Tags:       tags,
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"vpc_id":      aws.ToString(sg.VpcId),
-			"description": aws.ToString(sg.Description),
-			"rules_count": len(sg.IpPermissions) + len(sg.IpPermissionsEgress),
-			"is_default":  isDefault,
-			"is_in_use":   isInUse,
+		Metadata: types.ResourceMetadata{
+			VpcID:     aws.ToString(sg.VpcId),
+			GroupName: aws.ToString(sg.GroupName),
+			State:     "active",
 		},
 	}
 }
@@ -218,11 +217,9 @@ func (p *RealAWSProvider) processVPCEndpoint(endpoint ec2types.VpcEndpoint) type
 		CreatedAt:  p.safeTimeValue(endpoint.CreationTimestamp),
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"vpc_id":        aws.ToString(endpoint.VpcId),
-			"service_name":  aws.ToString(endpoint.ServiceName),
-			"endpoint_type": string(endpoint.VpcEndpointType),
-			"state":         string(endpoint.State),
+		Metadata: types.ResourceMetadata{
+			VpcID: aws.ToString(endpoint.VpcId),
+			State: string(endpoint.State),
 		},
 	}
 }
@@ -269,13 +266,13 @@ func (p *RealAWSProvider) processNetworkInterface(ni ec2types.NetworkInterface) 
 		Tags:       tags,
 		LastSeenAt: time.Now(),
 		IsOrphaned: isOrphaned,
-		Metadata: map[string]interface{}{
-			"vpc_id":         aws.ToString(ni.VpcId),
-			"subnet_id":      aws.ToString(ni.SubnetId),
-			"interface_type": string(ni.InterfaceType),
-			"is_attached":    isAttached,
-			"is_managed":     isManaged,
-			"private_ip":     aws.ToString(ni.PrivateIpAddress),
+		Metadata: types.ResourceMetadata{
+			VpcID:              aws.ToString(ni.VpcId),
+			SubnetID:           aws.ToString(ni.SubnetId),
+			NetworkInterfaceID: aws.ToString(ni.NetworkInterfaceId),
+			PrivateIP:          aws.ToString(ni.PrivateIpAddress),
+			IsAttached:         isAttached,
+			State:              status,
 		},
 	}
 }

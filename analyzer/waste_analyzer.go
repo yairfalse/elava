@@ -10,9 +10,6 @@ import (
 	"github.com/yairfalse/elava/types"
 )
 
-// ResourceMetadata represents resource metadata for analysis
-type ResourceMetadata map[string]interface{}
-
 // WasteAnalyzerImpl identifies wasted resources
 type WasteAnalyzerImpl struct {
 	storage     *storage.MVCCStorage
@@ -80,9 +77,7 @@ func (w *WasteAnalyzerImpl) detectOrphaned(resources []types.Resource) WastePatt
 	for _, r := range resources {
 		if w.isOrphaned(r) {
 			pattern.ResourceIDs = append(pattern.ResourceIDs, r.ID)
-			if cost, ok := r.Metadata["monthly_cost_estimate"].(float64); ok {
-				totalCost += cost
-			}
+			totalCost += r.Metadata.MonthlyCostEstimate
 		}
 	}
 
@@ -124,9 +119,7 @@ func (w *WasteAnalyzerImpl) detectIdle(resources []types.Resource) WastePattern 
 	for _, r := range resources {
 		if w.isIdle(r) {
 			pattern.ResourceIDs = append(pattern.ResourceIDs, r.ID)
-			if cost, ok := r.Metadata["monthly_cost_estimate"].(float64); ok {
-				totalCost += cost
-			}
+			totalCost += r.Metadata.MonthlyCostEstimate
 		}
 	}
 
@@ -141,11 +134,11 @@ func (w *WasteAnalyzerImpl) isIdle(r types.Resource) bool {
 	case "ec2":
 		return r.Status == "stopped"
 	case "rds", "aurora":
-		return w.checkMetadataBool(r.Metadata, "is_idle")
+		return r.Metadata.IsIdle
 	case "redshift":
-		return w.checkMetadataBool(r.Metadata, "is_paused")
+		return r.Metadata.IsPaused
 	case "lambda":
-		return w.checkMetadataInt(r.Metadata, "days_since_modified") > 30
+		return r.Metadata.DaysSinceModified > 30
 	case "nat_gateway":
 		// NAT gateways cost money even when idle
 		return r.Status != "available"
@@ -167,9 +160,7 @@ func (w *WasteAnalyzerImpl) detectOversized(resources []types.Resource) WastePat
 	for _, r := range resources {
 		if w.isOversized(r) {
 			pattern.ResourceIDs = append(pattern.ResourceIDs, r.ID)
-			if cost, ok := r.Metadata["monthly_cost_estimate"].(float64); ok {
-				totalCost += cost * 0.3 // Estimate 30% waste
-			}
+			totalCost += r.Metadata.MonthlyCostEstimate * 0.3 // Estimate 30% waste
 		}
 	}
 
@@ -183,18 +174,16 @@ func (w *WasteAnalyzerImpl) isOversized(r types.Resource) bool {
 	case "ec2":
 		// Large instances in dev/test environments
 		if r.Tags.Environment == "dev" || r.Tags.Environment == "test" {
-			instanceType := w.getMetadataString(r.Metadata, "instance_type")
-			return w.isLargeInstance(instanceType)
+			return w.isLargeInstance(r.Metadata.InstanceType)
 		}
 	case "rds", "aurora":
 		// Multi-AZ in non-prod
 		if r.Tags.Environment != "prod" && r.Tags.Environment != "production" {
-			return w.checkMetadataBool(r.Metadata, "multi_az")
+			return r.Metadata.MultiAZ
 		}
 	case "redshift":
 		// Large clusters with few nodes
-		nodeCount := w.checkMetadataInt(r.Metadata, "node_count")
-		return nodeCount > 4 && r.Tags.Environment != "prod"
+		return r.Metadata.NodeCount > 4 && r.Tags.Environment != "prod"
 	}
 	return false
 }
@@ -224,9 +213,7 @@ func (w *WasteAnalyzerImpl) detectUnattached(resources []types.Resource) WastePa
 	for _, r := range resources {
 		if w.isUnattached(r) {
 			pattern.ResourceIDs = append(pattern.ResourceIDs, r.ID)
-			if cost, ok := r.Metadata["monthly_cost_estimate"].(float64); ok {
-				totalCost += cost
-			}
+			totalCost += r.Metadata.MonthlyCostEstimate
 		}
 	}
 
@@ -238,11 +225,11 @@ func (w *WasteAnalyzerImpl) detectUnattached(resources []types.Resource) WastePa
 func (w *WasteAnalyzerImpl) isUnattached(r types.Resource) bool {
 	switch r.Type {
 	case "ebs":
-		return r.Status == "unattached" || !w.checkMetadataBool(r.Metadata, "is_attached")
+		return r.Status == "unattached" || !r.Metadata.IsAttached
 	case "elastic_ip":
-		return r.Status == "unassociated" || !w.checkMetadataBool(r.Metadata, "is_associated")
+		return r.Status == "unassociated" || !r.Metadata.IsAssociated
 	case "network_interface":
-		return r.Metadata["attachment"] == nil
+		return !r.Metadata.IsAttached
 	}
 	return false
 }
@@ -261,9 +248,7 @@ func (w *WasteAnalyzerImpl) detectObsolete(resources []types.Resource) WastePatt
 	for _, r := range resources {
 		if w.isObsolete(r) {
 			pattern.ResourceIDs = append(pattern.ResourceIDs, r.ID)
-			if cost, ok := r.Metadata["monthly_cost_estimate"].(float64); ok {
-				totalCost += cost
-			}
+			totalCost += r.Metadata.MonthlyCostEstimate
 		}
 	}
 
@@ -275,12 +260,8 @@ func (w *WasteAnalyzerImpl) detectObsolete(resources []types.Resource) WastePatt
 func (w *WasteAnalyzerImpl) isObsolete(r types.Resource) bool {
 	switch r.Type {
 	case "snapshot", "ami", "rds_snapshot", "redshift_snapshot", "dynamodb_backup":
-		ageDays := w.checkMetadataInt(r.Metadata, "age_days")
-		isOld := w.checkMetadataBool(r.Metadata, "is_old")
-		isTemp := w.checkMetadataBool(r.Metadata, "is_temp")
-
 		// Old backups or temp resources
-		return ageDays > 30 || isOld || isTemp
+		return r.Metadata.AgeDays > 30 || r.Metadata.IsOld || r.Metadata.IsTemp
 	}
 	return false
 }
@@ -317,30 +298,4 @@ func (w *WasteAnalyzerImpl) FindIdleResources(ctx context.Context, idleThreshold
 	}
 
 	return idle, nil
-}
-
-// Helper methods for metadata access
-
-func (w *WasteAnalyzerImpl) checkMetadataBool(meta ResourceMetadata, key string) bool {
-	if val, ok := meta[key].(bool); ok {
-		return val
-	}
-	return false
-}
-
-func (w *WasteAnalyzerImpl) checkMetadataInt(meta ResourceMetadata, key string) int {
-	if val, ok := meta[key].(int); ok {
-		return val
-	}
-	if val, ok := meta[key].(float64); ok {
-		return int(val)
-	}
-	return 0
-}
-
-func (w *WasteAnalyzerImpl) getMetadataString(meta ResourceMetadata, key string) string {
-	if val, ok := meta[key].(string); ok {
-		return val
-	}
-	return ""
 }

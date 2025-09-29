@@ -35,6 +35,7 @@ type ResourceMetadata struct {
 	// Storage specific
 	BucketName         string `json:"bucket_name,omitempty"`
 	StorageClass       string `json:"storage_class,omitempty"`
+	StorageGB          int    `json:"storage_gb,omitempty"`
 	Versioning         bool   `json:"versioning,omitempty"`
 	IsAttached         bool   `json:"is_attached,omitempty"`
 	AttachedTo         string `json:"attached_to,omitempty"`
@@ -79,30 +80,46 @@ type ResourceMetadata struct {
 	TargetCapacity  int32  `json:"target_capacity,omitempty"`
 
 	// Identity/Security specific
-	RoleName         string   `json:"role_name,omitempty"`
-	AssumeRolePolicy string   `json:"assume_role_policy,omitempty"`
-	AttachedPolicies []string `json:"attached_policies,omitempty"`
-	KeyID            string   `json:"key_id,omitempty"`
-	KeyState         string   `json:"key_state,omitempty"`
-	KeyUsage         string   `json:"key_usage,omitempty"`
-	RepositoryURI    string   `json:"repository_uri,omitempty"`
-	ImageCount       int      `json:"image_count,omitempty"`
-	ZoneID           string   `json:"zone_id,omitempty"`
-	ZoneName         string   `json:"zone_name,omitempty"`
-	RecordCount      int      `json:"record_count,omitempty"`
+	RoleName          string   `json:"role_name,omitempty"`
+	AssumeRolePolicy  string   `json:"assume_role_policy,omitempty"`
+	AttachedPolicies  []string `json:"attached_policies,omitempty"`
+	KeyID             string   `json:"key_id,omitempty"`
+	KeyState          string   `json:"key_state,omitempty"`
+	KeyUsage          string   `json:"key_usage,omitempty"`
+	KeySpec           string   `json:"key_spec,omitempty"`
+	IsPendingDeletion bool     `json:"is_pending_deletion,omitempty"`
+	IsDisabled        bool     `json:"is_disabled,omitempty"`
+	RepositoryURI     string   `json:"repository_uri,omitempty"`
+	ImageCount        int      `json:"image_count,omitempty"`
+	ZoneID            string   `json:"zone_id,omitempty"`
+	ZoneName          string   `json:"zone_name,omitempty"`
+	RecordCount       int      `json:"record_count,omitempty"`
+	IsPrivateZone     bool     `json:"is_private_zone,omitempty"`
+	Comment           string   `json:"comment,omitempty"`
 
 	// Operational metadata
-	IsIdle            bool      `json:"is_idle,omitempty"`
-	IsPaused          bool      `json:"is_paused,omitempty"`
-	IsOld             bool      `json:"is_old,omitempty"`
-	IsTemp            bool      `json:"is_temp,omitempty"`
-	AgeDays           int       `json:"age_days,omitempty"`
-	DaysSinceModified int       `json:"days_since_modified,omitempty"`
-	LastAccessTime    time.Time `json:"last_access_time,omitempty"`
+	IsIdle                bool       `json:"is_idle,omitempty"`
+	IsPaused              bool       `json:"is_paused,omitempty"`
+	IsOld                 bool       `json:"is_old,omitempty"`
+	IsTemp                bool       `json:"is_temp,omitempty"`
+	IsEmpty               bool       `json:"is_empty,omitempty"`
+	AgeDays               int        `json:"age_days,omitempty"`
+	DaysSinceModified     int        `json:"days_since_modified,omitempty"`
+	LastAccessTime        *time.Time `json:"last_access_time,omitempty"`
+	DeletionProtection    bool       `json:"deletion_protection,omitempty"`
+	BackupRetentionPeriod int        `json:"backup_retention_period,omitempty"`
 
 	// Cost/Usage hints (not calculated, just metadata)
-	InstanceFamily  string  `json:"instance_family,omitempty"`
-	NormalizedUnits float64 `json:"normalized_units,omitempty"`
+	InstanceFamily      string  `json:"instance_family,omitempty"`
+	NormalizedUnits     float64 `json:"normalized_units,omitempty"`
+	MonthlyCostEstimate float64 `json:"monthly_cost_estimate,omitempty"`
+
+	// DynamoDB backup specific
+	TableName       string    `json:"table_name,omitempty"`
+	BackupSizeBytes int64     `json:"backup_size_bytes,omitempty"`
+	BackupType      string    `json:"backup_type,omitempty"`
+	ExpiresAt       time.Time `json:"expires_at,omitempty"`
+	ItemCount       int64     `json:"item_count,omitempty"`
 }
 
 // HasCompute returns true if metadata contains compute-related fields

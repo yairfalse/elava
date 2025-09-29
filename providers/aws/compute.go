@@ -62,7 +62,7 @@ func (p *RealAWSProvider) processLambdaFunction(ctx context.Context, function la
 		IsOrphaned: isOrphaned,
 		Metadata: types.ResourceMetadata{
 			Runtime:        string(function.Runtime),
-			LastAccessTime: lastAccessTime,
+			LastAccessTime: &lastAccessTime,
 			MemorySize:     aws.ToInt32(function.MemorySize),
 			Timeout:        aws.ToInt32(function.Timeout),
 			FunctionName:   aws.ToString(function.FunctionName),

@@ -3,7 +3,6 @@ package analyzer
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	"github.com/yairfalse/elava/storage"
@@ -184,36 +183,79 @@ func (d *DriftAnalyzerImpl) compareTagDrift(from, to types.Tags) []DriftEvent {
 }
 
 // compareMetadata compares metadata changes
-func (d *DriftAnalyzerImpl) compareMetadata(from, to map[string]interface{}) []DriftEvent {
+func (d *DriftAnalyzerImpl) compareMetadata(from, to types.ResourceMetadata) []DriftEvent {
 	var events []DriftEvent
 
-	// Check for important metadata changes
-	importantFields := []string{
-		"instance_type", "node_count", "is_encrypted",
-		"public_ip", "deletion_protection", "backup_retention",
+	// Check instance type changes
+	if from.InstanceType != to.InstanceType {
+		events = append(events, DriftEvent{
+			Field:    "metadata.instance_type",
+			OldValue: from.InstanceType,
+			NewValue: to.InstanceType,
+			Severity: DriftHigh,
+		})
 	}
 
-	for _, field := range importantFields {
-		if d.metadataChanged(from, to, field) {
-			events = append(events, DriftEvent{
-				Field:    fmt.Sprintf("metadata.%s", field),
-				OldValue: from[field],
-				NewValue: to[field],
-				Severity: d.assessMetadataDriftSeverity(field),
-			})
-		}
+	// Check node count changes
+	if from.NodeCount != to.NodeCount {
+		events = append(events, DriftEvent{
+			Field:    "metadata.node_count",
+			OldValue: from.NodeCount,
+			NewValue: to.NodeCount,
+			Severity: DriftHigh,
+		})
+	}
+
+	// Check encryption changes
+	if from.Encrypted != to.Encrypted {
+		events = append(events, DriftEvent{
+			Field:    "metadata.is_encrypted",
+			OldValue: from.Encrypted,
+			NewValue: to.Encrypted,
+			Severity: DriftCritical,
+		})
+	}
+
+	// Check public IP changes
+	if from.PublicIP != to.PublicIP {
+		events = append(events, DriftEvent{
+			Field:    "metadata.public_ip",
+			OldValue: from.PublicIP,
+			NewValue: to.PublicIP,
+			Severity: DriftCritical,
+		})
+	}
+
+	// Check deletion protection changes
+	if from.DeletionProtection != to.DeletionProtection {
+		events = append(events, DriftEvent{
+			Field:    "metadata.deletion_protection",
+			OldValue: from.DeletionProtection,
+			NewValue: to.DeletionProtection,
+			Severity: DriftCritical,
+		})
+	}
+
+	// Check backup retention changes
+	if from.BackupRetentionPeriod != to.BackupRetentionPeriod {
+		events = append(events, DriftEvent{
+			Field:    "metadata.backup_retention",
+			OldValue: from.BackupRetentionPeriod,
+			NewValue: to.BackupRetentionPeriod,
+			Severity: DriftHigh,
+		})
 	}
 
 	// Check cost changes
-	if d.costChanged(from, to) {
+	if d.costChangedStruct(from, to) {
 		events = append(events, DriftEvent{
 			Field:    "metadata.monthly_cost_estimate",
-			OldValue: from["monthly_cost_estimate"],
-			NewValue: to["monthly_cost_estimate"],
+			OldValue: from.MonthlyCostEstimate,
+			NewValue: to.MonthlyCostEstimate,
 			Severity: DriftHigh,
 			Metadata: DriftMetadata{
 				Source: "cost_analysis",
-				Reason: fmt.Sprintf("Cost change: %.2f%%", d.calculateCostIncrease(from, to)),
+				Reason: fmt.Sprintf("Cost change: %.2f%%", d.calculateCostIncreaseStruct(from, to)),
 				Impact: "high",
 			},
 		})
@@ -222,25 +264,10 @@ func (d *DriftAnalyzerImpl) compareMetadata(from, to map[string]interface{}) []D
 	return events
 }
 
-// metadataChanged checks if metadata field changed
-func (d *DriftAnalyzerImpl) metadataChanged(from, to map[string]interface{}, field string) bool {
-	fromVal, fromOk := from[field]
-	toVal, toOk := to[field]
-
-	if fromOk != toOk {
-		return true
-	}
-	if !fromOk {
-		return false
-	}
-
-	return !reflect.DeepEqual(fromVal, toVal)
-}
-
-// costChanged checks if cost changed significantly
-func (d *DriftAnalyzerImpl) costChanged(from, to map[string]interface{}) bool {
-	fromCost, _ := from["monthly_cost_estimate"].(float64)
-	toCost, _ := to["monthly_cost_estimate"].(float64)
+// costChangedStruct checks if cost changed significantly
+func (d *DriftAnalyzerImpl) costChangedStruct(from, to types.ResourceMetadata) bool {
+	fromCost := from.MonthlyCostEstimate
+	toCost := to.MonthlyCostEstimate
 
 	// Consider >10% change significant
 	if fromCost == 0 {
@@ -250,10 +277,10 @@ func (d *DriftAnalyzerImpl) costChanged(from, to map[string]interface{}) bool {
 	return change > 0.1 || change < -0.1
 }
 
-// calculateCostIncrease calculates percentage cost increase
-func (d *DriftAnalyzerImpl) calculateCostIncrease(from, to map[string]interface{}) float64 {
-	fromCost, _ := from["monthly_cost_estimate"].(float64)
-	toCost, _ := to["monthly_cost_estimate"].(float64)
+// calculateCostIncreaseStruct calculates percentage cost increase
+func (d *DriftAnalyzerImpl) calculateCostIncreaseStruct(from, to types.ResourceMetadata) float64 {
+	fromCost := from.MonthlyCostEstimate
+	toCost := to.MonthlyCostEstimate
 
 	if fromCost == 0 {
 		return 100.0
