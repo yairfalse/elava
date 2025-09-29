@@ -186,7 +186,24 @@ func (d *DriftAnalyzerImpl) compareTagDrift(from, to types.Tags) []DriftEvent {
 func (d *DriftAnalyzerImpl) compareMetadata(from, to types.ResourceMetadata) []DriftEvent {
 	var events []DriftEvent
 
-	// Check instance type changes
+	// Check infrastructure changes
+	events = append(events, d.checkInfrastructureChanges(from, to)...)
+
+	// Check security changes
+	events = append(events, d.checkSecurityChanges(from, to)...)
+
+	// Check cost changes
+	if event := d.checkCostChanges(from, to); event != nil {
+		events = append(events, *event)
+	}
+
+	return events
+}
+
+// checkInfrastructureChanges checks for infrastructure-related drift
+func (d *DriftAnalyzerImpl) checkInfrastructureChanges(from, to types.ResourceMetadata) []DriftEvent {
+	var events []DriftEvent
+
 	if from.InstanceType != to.InstanceType {
 		events = append(events, DriftEvent{
 			Field:    "metadata.instance_type",
@@ -196,7 +213,6 @@ func (d *DriftAnalyzerImpl) compareMetadata(from, to types.ResourceMetadata) []D
 		})
 	}
 
-	// Check node count changes
 	if from.NodeCount != to.NodeCount {
 		events = append(events, DriftEvent{
 			Field:    "metadata.node_count",
@@ -206,37 +222,6 @@ func (d *DriftAnalyzerImpl) compareMetadata(from, to types.ResourceMetadata) []D
 		})
 	}
 
-	// Check encryption changes
-	if from.Encrypted != to.Encrypted {
-		events = append(events, DriftEvent{
-			Field:    "metadata.is_encrypted",
-			OldValue: from.Encrypted,
-			NewValue: to.Encrypted,
-			Severity: DriftCritical,
-		})
-	}
-
-	// Check public IP changes
-	if from.PublicIP != to.PublicIP {
-		events = append(events, DriftEvent{
-			Field:    "metadata.public_ip",
-			OldValue: from.PublicIP,
-			NewValue: to.PublicIP,
-			Severity: DriftCritical,
-		})
-	}
-
-	// Check deletion protection changes
-	if from.DeletionProtection != to.DeletionProtection {
-		events = append(events, DriftEvent{
-			Field:    "metadata.deletion_protection",
-			OldValue: from.DeletionProtection,
-			NewValue: to.DeletionProtection,
-			Severity: DriftCritical,
-		})
-	}
-
-	// Check backup retention changes
 	if from.BackupRetentionPeriod != to.BackupRetentionPeriod {
 		events = append(events, DriftEvent{
 			Field:    "metadata.backup_retention",
@@ -246,22 +231,60 @@ func (d *DriftAnalyzerImpl) compareMetadata(from, to types.ResourceMetadata) []D
 		})
 	}
 
-	// Check cost changes
-	if d.costChangedStruct(from, to) {
+	return events
+}
+
+// checkSecurityChanges checks for security-related drift
+func (d *DriftAnalyzerImpl) checkSecurityChanges(from, to types.ResourceMetadata) []DriftEvent {
+	var events []DriftEvent
+
+	if from.Encrypted != to.Encrypted {
 		events = append(events, DriftEvent{
-			Field:    "metadata.monthly_cost_estimate",
-			OldValue: from.MonthlyCostEstimate,
-			NewValue: to.MonthlyCostEstimate,
-			Severity: DriftHigh,
-			Metadata: DriftMetadata{
-				Source: "cost_analysis",
-				Reason: fmt.Sprintf("Cost change: %.2f%%", d.calculateCostIncreaseStruct(from, to)),
-				Impact: "high",
-			},
+			Field:    "metadata.is_encrypted",
+			OldValue: from.Encrypted,
+			NewValue: to.Encrypted,
+			Severity: DriftCritical,
+		})
+	}
+
+	if from.PublicIP != to.PublicIP {
+		events = append(events, DriftEvent{
+			Field:    "metadata.public_ip",
+			OldValue: from.PublicIP,
+			NewValue: to.PublicIP,
+			Severity: DriftCritical,
+		})
+	}
+
+	if from.DeletionProtection != to.DeletionProtection {
+		events = append(events, DriftEvent{
+			Field:    "metadata.deletion_protection",
+			OldValue: from.DeletionProtection,
+			NewValue: to.DeletionProtection,
+			Severity: DriftCritical,
 		})
 	}
 
 	return events
+}
+
+// checkCostChanges checks for cost-related drift
+func (d *DriftAnalyzerImpl) checkCostChanges(from, to types.ResourceMetadata) *DriftEvent {
+	if !d.costChangedStruct(from, to) {
+		return nil
+	}
+
+	return &DriftEvent{
+		Field:    "metadata.monthly_cost_estimate",
+		OldValue: from.MonthlyCostEstimate,
+		NewValue: to.MonthlyCostEstimate,
+		Severity: DriftHigh,
+		Metadata: DriftMetadata{
+			Source: "cost_analysis",
+			Reason: fmt.Sprintf("Cost change: %.2f%%", d.calculateCostIncreaseStruct(from, to)),
+			Impact: "high",
+		},
+	}
 }
 
 // costChangedStruct checks if cost changed significantly
