@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -213,60 +214,72 @@ func (cmd *ScanCommand) scanResources(ctx context.Context, provider providers.Cl
 
 // outputTable displays results in a nice table format
 func (cmd *ScanCommand) outputTable(allResources []types.Resource, untracked []scanner.UntrackedResource) error {
-	totalResources := len(allResources)
-	untrackedCount := len(untracked)
-	trackedCount := totalResources - untrackedCount
-
-	// Summary
-	fmt.Printf("Scan Summary:\n")
-	fmt.Printf("   Total resources: %d\n", totalResources)
-	fmt.Printf("   Tracked: %d (%.1f%%)\n", trackedCount, float64(trackedCount)/float64(totalResources)*100)
-	fmt.Printf("   Untracked: %d (%.1f%%)\n", untrackedCount, float64(untrackedCount)/float64(totalResources)*100)
-	fmt.Printf("\n")
+	cmd.printScanSummary(allResources, untracked)
 
 	if len(untracked) == 0 {
 		fmt.Println("All resources are properly tracked!")
 		return nil
 	}
 
-	// Sort by risk (high first)
+	sortUntrackedByRisk(untracked)
+	cmd.printUntrackedTable(untracked)
+	cmd.printActionSummary(untracked)
+
+	return nil
+}
+
+// printScanSummary prints the scan summary statistics
+func (cmd *ScanCommand) printScanSummary(allResources []types.Resource, untracked []scanner.UntrackedResource) {
+	totalResources := len(allResources)
+	untrackedCount := len(untracked)
+	trackedCount := totalResources - untrackedCount
+
+	fmt.Printf("Scan Summary:\n")
+	fmt.Printf("   Total resources: %d\n", totalResources)
+	fmt.Printf("   Tracked: %d (%.1f%%)\n", trackedCount, float64(trackedCount)/float64(totalResources)*100)
+	fmt.Printf("   Untracked: %d (%.1f%%)\n", untrackedCount, float64(untrackedCount)/float64(totalResources)*100)
+	fmt.Printf("\n")
+}
+
+// sortUntrackedByRisk sorts untracked resources by risk level
+func sortUntrackedByRisk(untracked []scanner.UntrackedResource) {
 	sort.Slice(untracked, func(i, j int) bool {
 		riskOrder := map[string]int{"high": 3, "medium": 2, "low": 1}
 		return riskOrder[untracked[i].Risk] > riskOrder[untracked[j].Risk]
 	})
+}
 
+// printUntrackedTable prints the table of untracked resources
+func (cmd *ScanCommand) printUntrackedTable(untracked []scanner.UntrackedResource) {
 	fmt.Printf("Untracked Resources:\n")
 
-	// Create table writer
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "RESOURCE\tTYPE\tSTATUS\tRISK\tISSUES\tACTION")
 	_, _ = fmt.Fprintln(w, "--------\t----\t------\t----\t------\t------")
 
 	for _, item := range untracked {
-		resource := item.Resource
-		resourceID := truncate(resource.ID, 20)
-		issues := strings.Join(item.Issues, ", ")
-		issues = truncate(issues, 40)
-
-		riskDisplay := item.Risk
-
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-			resourceID,
-			resource.Type,
-			resource.Status,
-			riskDisplay,
-			issues,
-			item.Action,
-		)
+		cmd.writeUntrackedRow(w, item)
 	}
 
 	_ = w.Flush()
 	fmt.Printf("\n")
+}
 
-	// Action recommendations
-	cmd.printActionSummary(untracked)
+// writeUntrackedRow writes a single row to the untracked table
+func (cmd *ScanCommand) writeUntrackedRow(w io.Writer, item scanner.UntrackedResource) {
+	resource := item.Resource
+	resourceID := truncate(resource.ID, 20)
+	issues := strings.Join(item.Issues, ", ")
+	issues = truncate(issues, 40)
 
-	return nil
+	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+		resourceID,
+		resource.Type,
+		resource.Status,
+		item.Risk,
+		issues,
+		item.Action,
+	)
 }
 
 // printActionSummary shows recommended next steps
