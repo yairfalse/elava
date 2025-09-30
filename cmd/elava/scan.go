@@ -66,25 +66,11 @@ func (cmd *ScanCommand) Run() error {
 		return fmt.Errorf("failed to create AWS provider: %w", err)
 	}
 
-	// Create scan infrastructure
-	infra := &scanInfra{
-		provider: provider,
-		storage:  storage,
-		wal:      walInstance,
-	}
-
-	// Check if we should use tiered scanning
+	// Scan resources (tiered scanning not yet implemented)
 	var resources []types.Resource
-	if cmd.Tiers != "" || cmd.ShowTierStatus {
-		resources, err = cmd.runTieredScan(ctx, infra)
-		if err != nil {
-			return fmt.Errorf("failed to run tiered scan: %w", err)
-		}
-	} else {
-		resources, err = cmd.scanResources(ctx, provider)
-		if err != nil {
-			return fmt.Errorf("failed to scan resources: %w", err)
-		}
+	resources, err = cmd.scanResources(ctx, provider)
+	if err != nil {
+		return fmt.Errorf("failed to scan resources: %w", err)
 	}
 
 	// Build filter for WAL logging
