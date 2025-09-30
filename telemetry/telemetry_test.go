@@ -20,7 +20,23 @@ import (
 )
 
 func TestOTELHook_Run(t *testing.T) {
-	tests := []struct {
+	tests := getOTELHookTestCases()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runOTELHookTest(t, tt)
+		})
+	}
+}
+
+// getOTELHookTestCases returns test cases for OTEL hook
+func getOTELHookTestCases() []struct {
+	name        string
+	setupCtx    func() context.Context
+	expectTrace bool
+	expectSpan  bool
+} {
+	return []struct {
 		name        string
 		setupCtx    func() context.Context
 		expectTrace bool
@@ -45,43 +61,56 @@ func TestOTELHook_Run(t *testing.T) {
 		{
 			name: "context with valid span",
 			setupCtx: func() context.Context {
-				exporter := tracetest.NewInMemoryExporter()
-				provider := trace.NewTracerProvider(
-					trace.WithSyncer(exporter),
-				)
-				tracer := provider.Tracer("test")
-				ctx, _ := tracer.Start(context.Background(), "test-span")
-				return ctx
+				return createContextWithSpan()
 			},
 			expectTrace: true,
 			expectSpan:  true,
 		},
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var buf bytes.Buffer
-			logger := zerolog.New(&buf)
+// createContextWithSpan creates a context with tracing span
+func createContextWithSpan() context.Context {
+	exporter := tracetest.NewInMemoryExporter()
+	provider := trace.NewTracerProvider(
+		trace.WithSyncer(exporter),
+	)
+	tracer := provider.Tracer("test")
+	ctx, _ := tracer.Start(context.Background(), "test-span")
+	return ctx
+}
 
-			hook := OTELHook{}
-			event := logger.Info().Ctx(tt.setupCtx())
+// runOTELHookTest executes a single OTEL hook test
+func runOTELHookTest(t *testing.T, tt struct {
+	name        string
+	setupCtx    func() context.Context
+	expectTrace bool
+	expectSpan  bool
+}) {
+	var buf bytes.Buffer
+	logger := zerolog.New(&buf)
 
-			hook.Run(event, zerolog.InfoLevel, "test message")
-			event.Msg("test")
+	hook := OTELHook{}
+	event := logger.Info().Ctx(tt.setupCtx())
 
-			output := buf.String()
-			if tt.expectTrace {
-				assert.Contains(t, output, "trace_id")
-			} else {
-				assert.NotContains(t, output, "trace_id")
-			}
+	hook.Run(event, zerolog.InfoLevel, "test message")
+	event.Msg("test")
 
-			if tt.expectSpan {
-				assert.Contains(t, output, "span_id")
-			} else {
-				assert.NotContains(t, output, "span_id")
-			}
-		})
+	verifyOTELOutput(t, buf.String(), tt.expectTrace, tt.expectSpan)
+}
+
+// verifyOTELOutput checks if output contains expected trace/span IDs
+func verifyOTELOutput(t *testing.T, output string, expectTrace, expectSpan bool) {
+	if expectTrace {
+		assert.Contains(t, output, "trace_id")
+	} else {
+		assert.NotContains(t, output, "trace_id")
+	}
+
+	if expectSpan {
+		assert.Contains(t, output, "span_id")
+	} else {
+		assert.NotContains(t, output, "span_id")
 	}
 }
 

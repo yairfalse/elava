@@ -311,29 +311,6 @@ func (d *DriftAnalyzerImpl) calculateCostIncreaseStruct(from, to types.ResourceM
 	return ((toCost - fromCost) / fromCost) * 100
 }
 
-// assessMetadataDriftSeverity determines metadata drift severity
-func (d *DriftAnalyzerImpl) assessMetadataDriftSeverity(field string) DriftSeverity {
-	criticalFields := map[string]bool{
-		"deletion_protection": true,
-		"is_encrypted":        true,
-		"public_ip":           true,
-	}
-
-	highFields := map[string]bool{
-		"instance_type":    true,
-		"node_count":       true,
-		"backup_retention": true,
-	}
-
-	if criticalFields[field] {
-		return DriftCritical
-	}
-	if highFields[field] {
-		return DriftHigh
-	}
-	return DriftMedium
-}
-
 // GetResourceDrift gets drift for specific resource
 func (d *DriftAnalyzerImpl) GetResourceDrift(ctx context.Context, resourceID string, period time.Duration) ([]DriftEvent, error) {
 	// Always initialize to ensure we never return nil

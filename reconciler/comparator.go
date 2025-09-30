@@ -20,56 +20,83 @@ func (c *SimpleComparator) Compare(current, desired []types.Resource) ([]Diff, e
 	currentMap := buildResourceMap(current)
 	desiredMap := buildResourceMap(desired)
 
-	// Find missing resources (desired but not current)
+	// Find missing resources
+	missing := c.findMissingResources(currentMap, desiredMap)
+	diffs = append(diffs, missing...)
+
+	// Find unwanted resources
+	unwanted := c.findUnwantedResources(currentMap, desiredMap)
+	diffs = append(diffs, unwanted...)
+
+	// Find drifted resources
+	drifted := c.findDriftedResources(currentMap, desiredMap)
+	diffs = append(diffs, drifted...)
+
+	return diffs, nil
+}
+
+// findMissingResources finds resources that are desired but not current
+func (c *SimpleComparator) findMissingResources(currentMap, desiredMap map[string]types.Resource) []Diff {
+	var diffs []Diff
 	for id, desiredResource := range desiredMap {
 		if _, exists := currentMap[id]; !exists {
+			desiredCopy := desiredResource
 			diffs = append(diffs, Diff{
 				Type:       DiffMissing,
 				ResourceID: id,
-				Desired:    &desiredResource,
+				Desired:    &desiredCopy,
 				Reason:     "Resource specified in config but not found in cloud",
 			})
 		}
 	}
+	return diffs
+}
 
-	// Find unwanted resources (current but not desired)
+// findUnwantedResources finds resources that exist but are not desired
+func (c *SimpleComparator) findUnwantedResources(currentMap, desiredMap map[string]types.Resource) []Diff {
+	var diffs []Diff
 	for id, currentResource := range currentMap {
 		if _, exists := desiredMap[id]; !exists {
-			// Check if it's managed by Elava
+			currentCopy := currentResource
 			if currentResource.IsManaged() {
 				diffs = append(diffs, Diff{
 					Type:       DiffUnwanted,
 					ResourceID: id,
-					Current:    &currentResource,
+					Current:    &currentCopy,
 					Reason:     "Resource managed by Elava but not in current config",
 				})
 			} else {
 				diffs = append(diffs, Diff{
 					Type:       DiffUnmanaged,
 					ResourceID: id,
-					Current:    &currentResource,
+					Current:    &currentCopy,
 					Reason:     "Resource exists but not managed by Elava",
 				})
 			}
 		}
 	}
+	return diffs
+}
 
-	// Find drifted resources (exist in both but differ)
+// findDriftedResources finds resources that exist in both but differ
+func (c *SimpleComparator) findDriftedResources(currentMap, desiredMap map[string]types.Resource) []Diff {
+	var diffs []Diff
 	for id, desiredResource := range desiredMap {
 		if currentResource, exists := currentMap[id]; exists {
 			if isDrifted(currentResource, desiredResource) {
+				currentCopy := currentResource
+				desiredCopy := desiredResource
 				diffs = append(diffs, Diff{
 					Type:       DiffDrifted,
 					ResourceID: id,
-					Current:    &currentResource,
-					Desired:    &desiredResource,
+					Current:    &currentCopy,
+					Desired:    &desiredCopy,
 					Reason:     "Resource configuration differs from desired state",
 				})
 			}
 		}
 	}
-
-	return diffs, nil
+	return diffs
 }
 
 // buildResourceMap creates a map of resources keyed by ID
