@@ -125,69 +125,17 @@ func (p *RealAWSProvider) Region() string {
 	return p.region
 }
 
-// ListResources discovers all resources in the AWS account
-// ListResources lists all AWS resources using the strategy pattern
+// ListResources discovers all resources in the AWS account using the registry pattern
 func (p *RealAWSProvider) ListResources(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
-	handlers := p.getResourceHandlers()
-	resources := p.executeHandlers(ctx, handlers, filter)
+	registry := NewResourceListerRegistry()
+	resources, err := registry.ListAll(ctx, p, filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list resources: %w", err)
+	}
+
+	// Apply additional filters
 	return p.applyFilters(resources, filter), nil
-}
 
-// getResourceHandlers returns all resource handlers
-func (p *RealAWSProvider) getResourceHandlers() []ResourceHandler {
-	return []ResourceHandler{
-		// Critical resources that must succeed
-		{Name: "EC2", Critical: true, Handler: p.listEC2Instances},
-		{Name: "RDS", Critical: true, Handler: p.listRDSInstances},
-		{Name: "ELB", Critical: true, Handler: p.listLoadBalancers},
-
-		// Non-critical resources (continue on error)
-		{Name: "S3", Critical: false, Handler: p.listS3Buckets},
-		{Name: "Lambda", Critical: false, Handler: p.listLambdaFunctions},
-		{Name: "EBS", Critical: false, Handler: p.listEBSVolumes},
-		{Name: "EIP", Critical: false, Handler: p.listElasticIPs},
-		{Name: "NAT", Critical: false, Handler: p.listNATGateways},
-		{Name: "Snapshots", Critical: false, Handler: p.listSnapshots},
-		{Name: "AMI", Critical: false, Handler: p.listAMIs},
-		{Name: "CloudWatchLogs", Critical: false, Handler: p.listCloudWatchLogs},
-		{Name: "SecurityGroups", Critical: false, Handler: p.listSecurityGroups},
-		{Name: "EKS", Critical: false, Handler: p.listEKSClusters},
-		{Name: "ECS", Critical: false, Handler: p.listECSClusters},
-		{Name: "ASG", Critical: false, Handler: p.listAutoScalingGroups},
-		{Name: "VPCEndpoints", Critical: false, Handler: p.listVPCEndpoints},
-		{Name: "RDSSnapshots", Critical: false, Handler: p.listRDSSnapshots},
-		{Name: "IAMRoles", Critical: false, Handler: p.listIAMRoles},
-		{Name: "ENI", Critical: false, Handler: p.listNetworkInterfaces},
-		{Name: "ECR", Critical: false, Handler: p.listECRRepositories},
-		{Name: "Route53", Critical: false, Handler: p.listRoute53HostedZones},
-		{Name: "KMS", Critical: false, Handler: p.listKMSKeys},
-		{Name: "Aurora", Critical: false, Handler: p.listAuroraClusters},
-		{Name: "Redshift", Critical: false, Handler: p.listRedshiftClusters},
-		{Name: "RedshiftSnapshots", Critical: false, Handler: p.listRedshiftSnapshots},
-		{Name: "MemoryDB", Critical: false, Handler: p.listMemoryDBClusters},
-		{Name: "DynamoDB", Critical: false, Handler: p.listDynamoDBTables},
-		{Name: "DynamoDBBackups", Critical: false, Handler: p.listDynamoDBBackups},
-	}
-}
-
-// executeHandlers runs all handlers and collects resources
-func (p *RealAWSProvider) executeHandlers(ctx context.Context, handlers []ResourceHandler, filter types.ResourceFilter) []types.Resource {
-	var resources []types.Resource
-
-	for _, handler := range handlers {
-		result, err := handler.Handler(ctx, filter)
-		if err != nil {
-			if handler.Critical {
-				fmt.Printf("Critical failure listing %s: %v\n", handler.Name, err)
-				continue
-			}
-			fmt.Printf("Warning: failed to list %s: %v\n", handler.Name, err)
-			continue
-		}
-		resources = append(resources, result...)
-	}
-
-	return resources
 }
 
 // listEC2Instances discovers EC2 instances

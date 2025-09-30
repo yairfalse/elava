@@ -84,46 +84,12 @@ func (cmd *ScanCommand) setupInfrastructure(ctx context.Context) (*scanInfra, er
 		return nil, fmt.Errorf("failed to create AWS provider: %w", err)
 	}
 
-	return &scanInfra{
-		provider: provider,
-		storage:  storage,
-		wal:      walInstance,
-	}, nil
-}
+	// Scan resources (tiered scanning not yet implemented)
+	var resources []types.Resource
+	resources, err = cmd.scanResources(ctx, provider)
+	if err != nil {
+		return fmt.Errorf("failed to scan resources: %w", err)
 
-// cleanupInfrastructure closes storage and WAL
-func (cmd *ScanCommand) cleanupInfrastructure(infra *scanInfra) {
-	if infra == nil {
-		return
-	}
-	if infra.storage != nil {
-		_ = infra.storage.Close()
-	}
-	if infra.wal != nil {
-		_ = infra.wal.Close()
-	}
-}
-
-// performScan executes the resource scan
-func (cmd *ScanCommand) performScan(ctx context.Context, infra *scanInfra) ([]types.Resource, error) {
-	if cmd.Tiers != "" || cmd.ShowTierStatus {
-		return cmd.runTieredScan(ctx, infra)
-	}
-	return cmd.scanResources(ctx, infra.provider)
-}
-
-// processResults handles scan results, storage, and output
-func (cmd *ScanCommand) processResults(ctx context.Context, infra *scanInfra, resources []types.Resource) error {
-	// Log scan operation
-	cmd.logScanOperation(infra.wal, resources)
-
-	// Handle state changes and storage
-	_ = cmd.handleStateChanges(infra.storage, resources)
-
-	// Find untracked resources
-	untracked := scanner.ScanForUntracked(ctx, resources)
-	if cmd.RiskOnly {
-		untracked = filterHighRisk(untracked)
 	}
 
 	// Display results

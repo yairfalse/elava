@@ -28,10 +28,38 @@ type ProviderConfig struct {
 	SecretAccessKey string
 	SessionToken    string
 	ProjectID       string // For GCP
-	// Config stores provider-specific configuration that varies by cloud provider
-	// This is intentionally a map because each provider (AWS, GCP, Azure) has
-	// different config requirements that cannot be predetermined at compile time
-	Config map[string]interface{} `json:"config"` // Provider-specific config
+	// Provider-specific extended configuration
+	AWSConfig   *AWSConfig   `json:"aws_config,omitempty"`
+	GCPConfig   *GCPConfig   `json:"gcp_config,omitempty"`
+	AzureConfig *AzureConfig `json:"azure_config,omitempty"`
+}
+
+// AWSConfig holds AWS-specific configuration
+type AWSConfig struct {
+	AssumeRoleARN        string `json:"assume_role_arn,omitempty"`
+	ExternalID           string `json:"external_id,omitempty"`
+	Profile              string `json:"profile,omitempty"`
+	EndpointURL          string `json:"endpoint_url,omitempty"` // For testing
+	MaxRetries           int    `json:"max_retries,omitempty"`
+	STSRegionalEndpoints string `json:"sts_regional_endpoints,omitempty"`
+}
+
+// GCPConfig holds GCP-specific configuration
+type GCPConfig struct {
+	ServiceAccountJSON        string   `json:"service_account_json,omitempty"`
+	ImpersonateServiceAccount string   `json:"impersonate_service_account,omitempty"`
+	Quota                     int      `json:"quota,omitempty"`
+	Scopes                    []string `json:"scopes,omitempty"`
+}
+
+// AzureConfig holds Azure-specific configuration
+type AzureConfig struct {
+	SubscriptionID string `json:"subscription_id,omitempty"`
+	TenantID       string `json:"tenant_id,omitempty"`
+	ClientID       string `json:"client_id,omitempty"`
+	ClientSecret   string `json:"client_secret,omitempty"`
+	Environment    string `json:"environment,omitempty"` // AzurePublicCloud, AzureUSGovernment, etc.
+
 }
 
 // ProviderFactory creates a provider instance
