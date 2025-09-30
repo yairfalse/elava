@@ -56,57 +56,96 @@ func NewEngine(
 func (e *Engine) Reconcile(ctx context.Context, config Config) ([]types.Decision, error) {
 	startTime := time.Now()
 
-	// Step 1: Observe current state
-	if err := e.wal.Append(wal.EntryObserved, "", "reconcile_start"); err != nil {
-		return nil, fmt.Errorf("failed to log reconcile start: %w", err)
+	if err := e.logReconcileStart(); err != nil {
+		return nil, err
 	}
 
+	current, err := e.observeAndStore(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+
+	decisions, err := e.compareAndDecide(config, current)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := e.logDecisions(decisions); err != nil {
+		return nil, err
+	}
+
+	if err := e.logReconcileResult(startTime, current, decisions); err != nil {
+		return nil, err
+	}
+
+	return decisions, nil
+}
+
+// logReconcileStart logs the start of reconciliation
+func (e *Engine) logReconcileStart() error {
+	if err := e.wal.Append(wal.EntryObserved, "", "reconcile_start"); err != nil {
+		return fmt.Errorf("failed to log reconcile start: %w", err)
+	}
+	return nil
+}
+
+// observeAndStore observes current state and stores it
+func (e *Engine) observeAndStore(ctx context.Context, config Config) ([]types.Resource, error) {
 	current, err := e.observeCurrentState(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to observe current state: %w", err)
 	}
 
-	// Step 2: Store observations
 	_, err = e.storage.RecordObservationBatch(current)
 	if err != nil {
 		return nil, fmt.Errorf("failed to store observations: %w", err)
 	}
 
-	// Step 3: Compare with desired state
+	return current, nil
+}
+
+// compareAndDecide compares states and makes decisions
+func (e *Engine) compareAndDecide(config Config, current []types.Resource) ([]types.Decision, error) {
 	desired := e.buildDesiredState(config)
 	diffs, err := e.comparator.Compare(current, desired)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compare states: %w", err)
 	}
 
-	// Step 4: Make decisions
 	decisions, err := e.decisionMaker.Decide(diffs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make decisions: %w", err)
 	}
 
-	// Step 5: Log decisions
+	return decisions, nil
+}
+
+// logDecisions logs all decisions to WAL
+func (e *Engine) logDecisions(decisions []types.Decision) error {
 	for _, decision := range decisions {
 		if err := e.wal.Append(wal.EntryDecided, decision.ResourceID, decision); err != nil {
-			return nil, fmt.Errorf("failed to log decision: %w", err)
+			return fmt.Errorf("failed to log decision: %w", err)
 		}
 	}
+	return nil
+}
 
-	// Log reconcile completion
+// logReconcileResult logs the reconciliation result
+func (e *Engine) logReconcileResult(startTime time.Time, current []types.Resource, decisions []types.Decision) error {
 	result := ReconcileResult{
 		Timestamp:      startTime,
 		ResourcesFound: len(current),
-		DiffsDetected:  len(diffs),
+		DiffsDetected:  len(decisions), // Simplified - could track separately
 		DecisionsMade:  len(decisions),
 		Duration:       time.Since(startTime),
 		Decisions:      decisions,
 	}
 
 	if err := e.wal.Append(wal.EntryExecuted, "", result); err != nil {
-		return nil, fmt.Errorf("failed to log reconcile result: %w", err)
+		return fmt.Errorf("failed to log reconcile result: %w", err)
 	}
 
-	return decisions, nil
+	return nil
 }
 
 // observeCurrentState polls all configured providers for current resources

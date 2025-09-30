@@ -36,8 +36,8 @@ func TestTieredScanner_ClassifyResource(t *testing.T) {
 			name: "large EC2 should be critical",
 			resource: types.Resource{
 				Type: "ec2",
-				Metadata: map[string]interface{}{
-					"instance_type": "m5.xlarge",
+				Metadata: types.ResourceMetadata{
+					InstanceType: "m5.xlarge",
 				},
 			},
 			want: "critical",
@@ -47,8 +47,8 @@ func TestTieredScanner_ClassifyResource(t *testing.T) {
 			resource: types.Resource{
 				Type: "ec2",
 				Tags: types.Tags{Environment: "production"},
-				Metadata: map[string]interface{}{
-					"instance_type": "t3.micro",
+				Metadata: types.ResourceMetadata{
+					InstanceType: "t3.micro",
 				},
 			},
 			want: "production",

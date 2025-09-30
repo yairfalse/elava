@@ -135,7 +135,7 @@ func TestWasteAnalyzer_IsIdle(t *testing.T) {
 			name: "idle RDS",
 			resource: types.Resource{
 				Type:     "rds",
-				Metadata: map[string]interface{}{"is_idle": true},
+				Metadata: types.ResourceMetadata{IsIdle: true},
 			},
 			expected: true,
 		},
@@ -143,7 +143,7 @@ func TestWasteAnalyzer_IsIdle(t *testing.T) {
 			name: "active RDS",
 			resource: types.Resource{
 				Type:     "rds",
-				Metadata: map[string]interface{}{"is_idle": false},
+				Metadata: types.ResourceMetadata{IsIdle: false},
 			},
 			expected: false,
 		},
@@ -151,7 +151,7 @@ func TestWasteAnalyzer_IsIdle(t *testing.T) {
 			name: "paused Redshift",
 			resource: types.Resource{
 				Type:     "redshift",
-				Metadata: map[string]interface{}{"is_paused": true},
+				Metadata: types.ResourceMetadata{IsPaused: true},
 			},
 			expected: true,
 		},
@@ -159,7 +159,7 @@ func TestWasteAnalyzer_IsIdle(t *testing.T) {
 			name: "old Lambda function",
 			resource: types.Resource{
 				Type:     "lambda",
-				Metadata: map[string]interface{}{"days_since_modified": 45},
+				Metadata: types.ResourceMetadata{DaysSinceModified: 45},
 			},
 			expected: true,
 		},
@@ -167,7 +167,7 @@ func TestWasteAnalyzer_IsIdle(t *testing.T) {
 			name: "recently modified Lambda",
 			resource: types.Resource{
 				Type:     "lambda",
-				Metadata: map[string]interface{}{"days_since_modified": 10},
+				Metadata: types.ResourceMetadata{DaysSinceModified: 10},
 			},
 			expected: false,
 		},
@@ -202,7 +202,7 @@ func TestWasteAnalyzer_IsOversized(t *testing.T) {
 			resource: types.Resource{
 				Type:     "ec2",
 				Tags:     types.Tags{Environment: "dev"},
-				Metadata: map[string]interface{}{"instance_type": "m5.2xlarge"},
+				Metadata: types.ResourceMetadata{InstanceType: "m5.2xlarge"},
 			},
 			expected: true,
 		},
@@ -211,7 +211,7 @@ func TestWasteAnalyzer_IsOversized(t *testing.T) {
 			resource: types.Resource{
 				Type:     "ec2",
 				Tags:     types.Tags{Environment: "prod"},
-				Metadata: map[string]interface{}{"instance_type": "m5.2xlarge"},
+				Metadata: types.ResourceMetadata{InstanceType: "m5.2xlarge"},
 			},
 			expected: false,
 		},
@@ -220,7 +220,7 @@ func TestWasteAnalyzer_IsOversized(t *testing.T) {
 			resource: types.Resource{
 				Type:     "ec2",
 				Tags:     types.Tags{Environment: "dev"},
-				Metadata: map[string]interface{}{"instance_type": "t3.micro"},
+				Metadata: types.ResourceMetadata{InstanceType: "t3.micro"},
 			},
 			expected: false,
 		},
@@ -229,7 +229,7 @@ func TestWasteAnalyzer_IsOversized(t *testing.T) {
 			resource: types.Resource{
 				Type:     "rds",
 				Tags:     types.Tags{Environment: "test"},
-				Metadata: map[string]interface{}{"multi_az": true},
+				Metadata: types.ResourceMetadata{MultiAZ: true},
 			},
 			expected: true,
 		},
@@ -238,7 +238,7 @@ func TestWasteAnalyzer_IsOversized(t *testing.T) {
 			resource: types.Resource{
 				Type:     "rds",
 				Tags:     types.Tags{Environment: "production"},
-				Metadata: map[string]interface{}{"multi_az": true},
+				Metadata: types.ResourceMetadata{MultiAZ: true},
 			},
 			expected: false,
 		},
@@ -247,7 +247,7 @@ func TestWasteAnalyzer_IsOversized(t *testing.T) {
 			resource: types.Resource{
 				Type:     "redshift",
 				Tags:     types.Tags{Environment: "dev"},
-				Metadata: map[string]interface{}{"node_count": 6},
+				Metadata: types.ResourceMetadata{NodeCount: 6},
 			},
 			expected: true,
 		},
@@ -308,7 +308,7 @@ func TestWasteAnalyzer_IsUnattached(t *testing.T) {
 			resource: types.Resource{
 				Type:     "ebs",
 				Status:   "attached",
-				Metadata: map[string]interface{}{"is_attached": true},
+				Metadata: types.ResourceMetadata{IsAttached: true},
 			},
 			expected: false,
 		},
@@ -325,7 +325,7 @@ func TestWasteAnalyzer_IsUnattached(t *testing.T) {
 			resource: types.Resource{
 				Type:     "elastic_ip",
 				Status:   "associated",
-				Metadata: map[string]interface{}{"is_associated": true},
+				Metadata: types.ResourceMetadata{IsAssociated: true},
 			},
 			expected: false,
 		},
@@ -333,7 +333,7 @@ func TestWasteAnalyzer_IsUnattached(t *testing.T) {
 			name: "unattached network interface",
 			resource: types.Resource{
 				Type:     "network_interface",
-				Metadata: map[string]interface{}{"attachment": nil},
+				Metadata: types.ResourceMetadata{IsAttached: false},
 			},
 			expected: true,
 		},
@@ -341,7 +341,7 @@ func TestWasteAnalyzer_IsUnattached(t *testing.T) {
 			name: "attached network interface",
 			resource: types.Resource{
 				Type:     "network_interface",
-				Metadata: map[string]interface{}{"attachment": map[string]interface{}{"instance_id": "i-123"}},
+				Metadata: types.ResourceMetadata{IsAttached: true, AttachedTo: "i-123"},
 			},
 			expected: false,
 		},
@@ -367,7 +367,7 @@ func TestWasteAnalyzer_IsObsolete(t *testing.T) {
 			name: "old snapshot",
 			resource: types.Resource{
 				Type:     "snapshot",
-				Metadata: map[string]interface{}{"age_days": 45},
+				Metadata: types.ResourceMetadata{AgeDays: 45},
 			},
 			expected: true,
 		},
@@ -375,7 +375,7 @@ func TestWasteAnalyzer_IsObsolete(t *testing.T) {
 			name: "recent snapshot",
 			resource: types.Resource{
 				Type:     "snapshot",
-				Metadata: map[string]interface{}{"age_days": 15},
+				Metadata: types.ResourceMetadata{AgeDays: 15},
 			},
 			expected: false,
 		},
@@ -383,7 +383,7 @@ func TestWasteAnalyzer_IsObsolete(t *testing.T) {
 			name: "marked as old",
 			resource: types.Resource{
 				Type:     "ami",
-				Metadata: map[string]interface{}{"is_old": true},
+				Metadata: types.ResourceMetadata{IsOld: true},
 			},
 			expected: true,
 		},
@@ -391,7 +391,7 @@ func TestWasteAnalyzer_IsObsolete(t *testing.T) {
 			name: "temporary backup",
 			resource: types.Resource{
 				Type:     "rds_snapshot",
-				Metadata: map[string]interface{}{"is_temp": true},
+				Metadata: types.ResourceMetadata{IsTemp: true},
 			},
 			expected: true,
 		},
@@ -399,7 +399,7 @@ func TestWasteAnalyzer_IsObsolete(t *testing.T) {
 			name: "current AMI",
 			resource: types.Resource{
 				Type:     "ami",
-				Metadata: map[string]interface{}{"age_days": 10, "is_old": false},
+				Metadata: types.ResourceMetadata{AgeDays: 10, IsOld: false},
 			},
 			expected: false,
 		},
@@ -407,7 +407,7 @@ func TestWasteAnalyzer_IsObsolete(t *testing.T) {
 			name: "non-snapshot resource",
 			resource: types.Resource{
 				Type:     "ec2",
-				Metadata: map[string]interface{}{"age_days": 100},
+				Metadata: types.ResourceMetadata{AgeDays: 100},
 			},
 			expected: false,
 		},
@@ -479,8 +479,8 @@ func createOrphanedResource() types.Resource {
 		Name:     "orphaned-instance",
 		Status:   "running",
 		Tags:     types.Tags{}, // No owner
-		Metadata: map[string]interface{}{
-			"monthly_cost_estimate": 100.0,
+		Metadata: types.ResourceMetadata{
+			MonthlyCostEstimate: 100.0,
 		},
 		CreatedAt:  time.Now().Add(-7 * 24 * time.Hour),
 		LastSeenAt: time.Now(),
@@ -497,8 +497,8 @@ func createIdleResource() types.Resource {
 		Tags: types.Tags{
 			ElavaOwner: "team-dev",
 		},
-		Metadata: map[string]interface{}{
-			"monthly_cost_estimate": 50.0,
+		Metadata: types.ResourceMetadata{
+			MonthlyCostEstimate: 50.0,
 		},
 		CreatedAt:  time.Now().Add(-3 * 24 * time.Hour),
 		LastSeenAt: time.Now(),
@@ -516,9 +516,9 @@ func createOversizedResource() types.Resource {
 			ElavaOwner:  "team-test",
 			Environment: "dev", // Dev environment with large instance
 		},
-		Metadata: map[string]interface{}{
-			"instance_type":         "m5.4xlarge", // Large instance
-			"monthly_cost_estimate": 300.0,
+		Metadata: types.ResourceMetadata{
+			InstanceType:        "m5.4xlarge", // Large instance
+			MonthlyCostEstimate: 300.0,
 		},
 		CreatedAt:  time.Now().Add(-1 * 24 * time.Hour),
 		LastSeenAt: time.Now(),
@@ -535,9 +535,9 @@ func createUnattachedResource() types.Resource {
 		Tags: types.Tags{
 			ElavaOwner: "team-storage",
 		},
-		Metadata: map[string]interface{}{
-			"is_attached":           false,
-			"monthly_cost_estimate": 20.0,
+		Metadata: types.ResourceMetadata{
+			IsAttached:          false,
+			MonthlyCostEstimate: 20.0,
 		},
 		CreatedAt:  time.Now().Add(-5 * 24 * time.Hour),
 		LastSeenAt: time.Now(),
@@ -554,9 +554,9 @@ func createObsoleteResource() types.Resource {
 		Tags: types.Tags{
 			ElavaOwner: "team-backup",
 		},
-		Metadata: map[string]interface{}{
-			"age_days":              45, // Old snapshot
-			"monthly_cost_estimate": 5.0,
+		Metadata: types.ResourceMetadata{
+			AgeDays:             45, // Old snapshot
+			MonthlyCostEstimate: 5.0,
 		},
 		CreatedAt:  time.Now().Add(-45 * 24 * time.Hour),
 		LastSeenAt: time.Now(),
@@ -574,9 +574,9 @@ func createNormalResource() types.Resource {
 			ElavaOwner:  "team-prod",
 			Environment: "production",
 		},
-		Metadata: map[string]interface{}{
-			"instance_type":         "t3.medium", // Appropriately sized
-			"monthly_cost_estimate": 30.0,
+		Metadata: types.ResourceMetadata{
+			InstanceType:        "t3.medium", // Appropriately sized
+			MonthlyCostEstimate: 30.0,
 		},
 		CreatedAt:  time.Now().Add(-10 * 24 * time.Hour),
 		LastSeenAt: time.Now(),

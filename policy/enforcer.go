@@ -52,15 +52,30 @@ func NewEnforcerWithStorageAndProvider(storage *storage.MVCCStorage, provider pr
 
 // Execute enforces a policy decision on a resource
 func (e *Enforcer) Execute(ctx context.Context, decision PolicyResult, resource types.Resource) error {
+	e.logEnforcementStart(ctx, decision, resource)
+
+	event := e.createEnforcementEvent(decision, resource)
+	err := e.executeAction(ctx, decision, resource, &event)
+
+	e.handleEnforcementResult(&event, err)
+	e.storeEnforcementAsync(event)
+
+	return err
+}
+
+// logEnforcementStart logs the start of enforcement
+func (e *Enforcer) logEnforcementStart(ctx context.Context, decision PolicyResult, resource types.Resource) {
 	e.logger.WithContext(ctx).Info().
 		Str("resource_id", resource.ID).
 		Str("resource_type", resource.Type).
 		Str("action", decision.Action).
 		Str("reason", decision.Reason).
 		Msg("executing policy enforcement")
+}
 
-	// Create enforcement event
-	event := types.EnforcementEvent{
+// createEnforcementEvent creates an enforcement event
+func (e *Enforcer) createEnforcementEvent(decision PolicyResult, resource types.Resource) types.EnforcementEvent {
+	return types.EnforcementEvent{
 		Timestamp:    time.Now(),
 		ResourceID:   resource.ID,
 		ResourceType: resource.Type,
@@ -70,46 +85,50 @@ func (e *Enforcer) Execute(ctx context.Context, decision PolicyResult, resource 
 		Reason:       decision.Reason,
 		Success:      true,
 	}
+}
 
-	// Execute the action
-	var err error
+// executeAction executes the enforcement action
+func (e *Enforcer) executeAction(ctx context.Context, decision PolicyResult, resource types.Resource, event *types.EnforcementEvent) error {
 	switch decision.Action {
 	case "ignore":
-		// No action needed
+		return nil
 	case "notify":
-		err = e.notify(ctx, resource, decision.Reason)
+		return e.notify(ctx, resource, decision.Reason)
 	case "flag":
 		tags := map[string]string{
 			"elava:policy-flag":   decision.Decision,
 			"elava:policy-reason": decision.Reason,
 		}
 		event.Tags = tags
-		err = e.flag(ctx, resource, decision)
+		return e.flag(ctx, resource, decision)
 	default:
 		e.logger.WithContext(ctx).Warn().
 			Str("action", decision.Action).
 			Msg("unknown enforcement action")
+		return nil
 	}
+}
 
-	// Record failure if any
+// handleEnforcementResult updates event based on result
+func (e *Enforcer) handleEnforcementResult(event *types.EnforcementEvent, err error) {
 	if err != nil {
 		event.Success = false
 		event.Error = err.Error()
 	}
+}
 
-	// Store event (non-blocking)
+// storeEnforcementAsync stores event asynchronously
+func (e *Enforcer) storeEnforcementAsync(event types.EnforcementEvent) {
 	if e.storage != nil {
 		go func() {
 			if storeErr := e.storage.StoreEnforcement(context.Background(), event); storeErr != nil {
 				e.logger.Error().
 					Err(storeErr).
-					Str("resource_id", resource.ID).
+					Str("resource_id", event.ResourceID).
 					Msg("failed to store enforcement event")
 			}
 		}()
 	}
-
-	return err
 }
 
 func (e *Enforcer) notify(ctx context.Context, resource types.Resource, reason string) error {
