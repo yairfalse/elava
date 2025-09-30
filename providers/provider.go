@@ -59,6 +59,7 @@ type AzureConfig struct {
 	ClientID       string `json:"client_id,omitempty"`
 	ClientSecret   string `json:"client_secret,omitempty"`
 	Environment    string `json:"environment,omitempty"` // AzurePublicCloud, AzureUSGovernment, etc.
+
 }
 
 // ProviderFactory creates a provider instance

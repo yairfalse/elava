@@ -6,7 +6,6 @@ import (
 	"github.com/yairfalse/elava/types"
 )
 
-//nolint:gocognit // Test complexity is acceptable for thorough coverage
 func TestSimpleComparator_Compare(t *testing.T) {
 	comparator := NewSimpleComparator()
 
@@ -134,24 +133,31 @@ func TestSimpleComparator_Compare(t *testing.T) {
 				t.Fatalf("Compare() error = %v", err)
 			}
 
-			if len(diffs) != len(tt.expected) {
-				t.Errorf("Compare() got %d diffs, want %d", len(diffs), len(tt.expected))
-				return
-			}
-
-			for i, diff := range diffs {
-				expected := tt.expected[i]
-				if diff.Type != expected.Type {
-					t.Errorf("Diff[%d].Type = %v, want %v", i, diff.Type, expected.Type)
-				}
-				if diff.ResourceID != expected.ResourceID {
-					t.Errorf("Diff[%d].ResourceID = %v, want %v", i, diff.ResourceID, expected.ResourceID)
-				}
-				if diff.Reason != expected.Reason {
-					t.Errorf("Diff[%d].Reason = %v, want %v", i, diff.Reason, expected.Reason)
-				}
-			}
+			validateDiffs(t, diffs, tt.expected)
 		})
+	}
+}
+
+// validateDiffs validates that actual diffs match expected diffs
+func validateDiffs(t *testing.T, actual, expected []Diff) {
+	t.Helper()
+
+	if len(actual) != len(expected) {
+		t.Errorf("got %d diffs, want %d", len(actual), len(expected))
+		return
+	}
+
+	for i, diff := range actual {
+		exp := expected[i]
+		if diff.Type != exp.Type {
+			t.Errorf("Diff[%d].Type = %v, want %v", i, diff.Type, exp.Type)
+		}
+		if diff.ResourceID != exp.ResourceID {
+			t.Errorf("Diff[%d].ResourceID = %v, want %v", i, diff.ResourceID, exp.ResourceID)
+		}
+		if diff.Reason != exp.Reason {
+			t.Errorf("Diff[%d].Reason = %v, want %v", i, diff.Reason, exp.Reason)
+		}
 	}
 }
 

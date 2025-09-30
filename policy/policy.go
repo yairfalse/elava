@@ -55,13 +55,10 @@ func (e *Engine) EvaluateWithOPA(ctx context.Context, resource types.Resource) (
 		return e.Evaluate(ctx, resource)
 	}
 
-	input := map[string]interface{}{
-		"resource": map[string]interface{}{
-			"id":   resource.ID,
-			"type": resource.Type,
-			"tags": map[string]interface{}{
-				"owner": resource.Tags.ElavaOwner,
-			},
+	input := PolicyInput{
+		Resource: resource,
+		Context: PolicyContext{
+			Environment: "unknown",
 		},
 	}
 

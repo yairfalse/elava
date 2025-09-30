@@ -72,11 +72,17 @@ func TestDecision_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.decision.Validate()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
-			}
+			validateDecision(t, tt.decision, tt.wantErr)
 		})
+	}
+}
+
+// validateDecision validates a decision and checks error expectation
+func validateDecision(t *testing.T, decision Decision, wantErr bool) {
+	t.Helper()
+	err := decision.Validate()
+	if (err != nil) != wantErr {
+		t.Errorf("Validate() error = %v, wantErr %v", err, wantErr)
 	}
 }
 

@@ -92,16 +92,7 @@ func TestResource_IsBlessed(t *testing.T) {
 }
 
 func TestResource_Matches(t *testing.T) {
-	testResource := Resource{
-		ID:       "i-123456",
-		Type:     "ec2",
-		Provider: "aws",
-		Region:   "us-east-1",
-		Tags: Tags{
-			Environment: "prod",
-			Team:        "platform",
-		},
-	}
+	testResource := createTestResource()
 
 	tests := []struct {
 		name   string
@@ -166,6 +157,20 @@ func TestResource_Matches(t *testing.T) {
 				t.Errorf("Matches() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// createTestResource creates a standard test resource
+func createTestResource() Resource {
+	return Resource{
+		ID:       "i-123456",
+		Type:     "ec2",
+		Provider: "aws",
+		Region:   "us-east-1",
+		Tags: Tags{
+			Environment: "prod",
+			Team:        "platform",
+		},
 	}
 }
 

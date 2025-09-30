@@ -56,6 +56,13 @@ type ResourceState struct {
 	Exists         bool
 }
 
+// Tombstone represents a deleted resource marker
+type Tombstone struct {
+	ID        string    `json:"id"`
+	Tombstone bool      `json:"tombstone"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // For btree ordering
 func (r *ResourceState) Less(than *ResourceState) bool {
 	return r.ResourceID < than.ResourceID
@@ -162,35 +169,13 @@ func (s *MVCCStorage) RecordObservationBatch(resources []types.Resource) (int64,
 	rev := s.currentRev
 
 	startTime := time.Now()
-	err := s.db.Update(func(tx *bbolt.Tx) error {
-		bucket := tx.Bucket(bucketObservations)
-
-		for _, resource := range resources {
-			key := makeObservationKey(rev, resource.ID)
-			value, err := json.Marshal(resource)
-			if err != nil {
-				return err
-			}
-
-			if err := bucket.Put(key, value); err != nil {
-				return err
-			}
-		}
-
-		// Update meta
-		metaBucket := tx.Bucket(bucketMeta)
-		return metaBucket.Put([]byte("current_revision"), int64ToBytes(rev))
-	})
-
+	err := s.writeBatchToDB(rev, resources)
 	if err != nil {
 		s.logger.LogStorageError(ctx, "record_batch", err)
 		return 0, err
 	}
 
-	// Update in-memory index
-	for _, resource := range resources {
-		s.updateIndex(resource, rev, true)
-	}
+	s.updateBatchIndex(resources, rev)
 
 	s.logger.WithContext(ctx).Info().
 		Int("batch_size", len(resources)).
@@ -199,6 +184,40 @@ func (s *MVCCStorage) RecordObservationBatch(resources []types.Resource) (int64,
 		Msg("batch recorded successfully")
 
 	return rev, nil
+}
+
+// writeBatchToDB writes a batch of resources to the database
+func (s *MVCCStorage) writeBatchToDB(rev int64, resources []types.Resource) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket(bucketObservations)
+
+		for _, resource := range resources {
+			if err := s.writeResourceToBucket(bucket, rev, resource); err != nil {
+				return err
+			}
+		}
+
+		// Update meta
+		metaBucket := tx.Bucket(bucketMeta)
+		return metaBucket.Put([]byte("current_revision"), int64ToBytes(rev))
+	})
+}
+
+// writeResourceToBucket writes a single resource to a bucket
+func (s *MVCCStorage) writeResourceToBucket(bucket *bbolt.Bucket, rev int64, resource types.Resource) error {
+	key := makeObservationKey(rev, resource.ID)
+	value, err := json.Marshal(resource)
+	if err != nil {
+		return err
+	}
+	return bucket.Put(key, value)
+}
+
+// updateBatchIndex updates the in-memory index for a batch of resources
+func (s *MVCCStorage) updateBatchIndex(resources []types.Resource, rev int64) {
+	for _, resource := range resources {
+		s.updateIndex(resource, rev, true)
+	}
 }
 
 // RecordDisappearance records that a resource has disappeared
@@ -214,10 +233,10 @@ func (s *MVCCStorage) RecordDisappearance(resourceID string) (int64, error) {
 
 		// Store a tombstone marker
 		key := makeObservationKey(rev, resourceID)
-		tombstone := map[string]interface{}{
-			"id":        resourceID,
-			"tombstone": true,
-			"timestamp": time.Now(),
+		tombstone := Tombstone{
+			ID:        resourceID,
+			Tombstone: true,
+			Timestamp: time.Now(),
 		}
 		value, err := json.Marshal(tombstone)
 		if err != nil {
@@ -286,9 +305,9 @@ func (s *MVCCStorage) GetStateAtRevision(resourceID string, revision int64) (*Re
 				}
 
 				// Check if it's a tombstone
-				var data map[string]interface{}
+				var data Tombstone
 				if err := json.Unmarshal(v, &data); err == nil {
-					if tombstone, ok := data["tombstone"].(bool); ok && tombstone {
+					if data.Tombstone {
 						result.Exists = false
 						result.DisappearedRev = rev
 					}

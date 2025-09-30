@@ -14,36 +14,61 @@ import (
 
 // InstrumentedScan shows how to properly instrument a scan operation
 func InstrumentedScan(ctx context.Context, region string, resourceCount int) error {
-	// Start a span for the entire scan operation
-	ctx, span := Tracer.Start(ctx, "ovi.scan",
+	ctx, span := startScanSpan(ctx, region)
+	defer span.End()
+
+	startTime := time.Now()
+
+	// Execute scan phases
+	if err := executeScanPhases(ctx, region, resourceCount, span); err != nil {
+		return err
+	}
+
+	// Record final metrics
+	untrackedCount := detectUntrackedWithTracing(ctx, resourceCount)
+	recordScanMetrics(ctx, region, resourceCount, untrackedCount, startTime, span)
+
+	span.SetStatus(codes.Ok, "Scan completed successfully")
+	return nil
+}
+
+// startScanSpan creates the tracing span for scan operation
+func startScanSpan(ctx context.Context, region string) (context.Context, trace.Span) {
+	return Tracer.Start(ctx, "ovi.scan",
 		trace.WithAttributes(
 			attribute.String("aws.region", region),
 			attribute.String("operation.type", "full_scan"),
 		),
 		trace.WithSpanKind(trace.SpanKindInternal),
 	)
-	defer span.End()
+}
 
-	// Record start time for duration metric
-	startTime := time.Now()
-
-	// Simulate different phases of scanning
+// executeScanPhases runs the main scan phases
+func executeScanPhases(ctx context.Context, region string, resourceCount int, span trace.Span) error {
+	// List resources
 	if err := listResourcesWithTracing(ctx, region); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to list resources")
 		return err
 	}
 
-	// Record metrics
 	ResourcesScanned.Add(ctx, int64(resourceCount),
-		metric.WithAttributes(
-			attribute.String("region", region),
-		),
+		metric.WithAttributes(attribute.String("region", region)),
 	)
 
-	// Find untracked resources
-	untrackedCount := detectUntrackedWithTracing(ctx, resourceCount)
+	// Store observations
+	if err := storeObservationsWithTracing(ctx, resourceCount); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "Failed to store observations")
+		return err
+	}
 
+	return nil
+}
+
+// recordScanMetrics records all scan-related metrics
+func recordScanMetrics(ctx context.Context, region string, resourceCount, untrackedCount int, startTime time.Time, span trace.Span) {
+	// Record untracked resources
 	UntrackedFound.Add(ctx, int64(untrackedCount),
 		metric.WithAttributes(
 			attribute.String("region", region),
@@ -51,14 +76,7 @@ func InstrumentedScan(ctx context.Context, region string, resourceCount int) err
 		),
 	)
 
-	// Store in MVCC
-	if err := storeObservationsWithTracing(ctx, resourceCount); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "Failed to store observations")
-		return err
-	}
-
-	// Record scan duration
+	// Record duration
 	duration := time.Since(startTime).Seconds()
 	ScanDuration.Record(ctx, duration,
 		metric.WithAttributes(
@@ -67,15 +85,12 @@ func InstrumentedScan(ctx context.Context, region string, resourceCount int) err
 		),
 	)
 
-	// Add summary to span
+	// Add span attributes
 	span.SetAttributes(
 		attribute.Int("resources.total", resourceCount),
 		attribute.Int("resources.untracked", untrackedCount),
 		attribute.Float64("duration.seconds", duration),
 	)
-
-	span.SetStatus(codes.Ok, "Scan completed successfully")
-	return nil
 }
 
 // listResourcesWithTracing demonstrates child span creation

@@ -48,7 +48,18 @@ type Config struct {
 
 // InitOTEL initializes OpenTelemetry with traces and metrics
 func InitOTEL(ctx context.Context, cfg Config) (shutdown func(context.Context) error, err error) {
-	// Default to env vars if not provided
+	cfg = applyConfigDefaults(cfg)
+
+	res, err := createOTELResource(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return setupProviders(ctx, cfg, res)
+}
+
+// applyConfigDefaults applies default values to config
+func applyConfigDefaults(cfg Config) Config {
 	if cfg.OTELEndpoint == "" {
 		cfg.OTELEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 		if cfg.OTELEndpoint == "" {
@@ -60,7 +71,11 @@ func InitOTEL(ctx context.Context, cfg Config) (shutdown func(context.Context) e
 		cfg.ServiceName = "ovi"
 	}
 
-	// Create resource with service information
+	return cfg
+}
+
+// createOTELResource creates the OTEL resource with service information
+func createOTELResource(cfg Config) (*resource.Resource, error) {
 	res, err := resource.Merge(
 		resource.Default(),
 		resource.NewWithAttributes(
@@ -73,28 +88,33 @@ func InitOTEL(ctx context.Context, cfg Config) (shutdown func(context.Context) e
 	if err != nil {
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
+	return res, nil
+}
 
-	// Setup trace provider
+// setupProviders sets up trace and metric providers
+func setupProviders(ctx context.Context, cfg Config, res *resource.Resource) (func(context.Context) error, error) {
 	traceShutdown, err := setupTraceProvider(ctx, cfg, res)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup traces: %w", err)
 	}
 
-	// Setup metric provider
 	metricShutdown, err := setupMetricProvider(ctx, cfg, res)
 	if err != nil {
 		_ = traceShutdown(ctx)
 		return nil, fmt.Errorf("failed to setup metrics: %w", err)
 	}
 
-	// Initialize metrics
 	if err := initMetrics(); err != nil {
 		_ = traceShutdown(ctx)
 		_ = metricShutdown(ctx)
 		return nil, fmt.Errorf("failed to initialize metrics: %w", err)
 	}
 
-	// Return combined shutdown function
+	return createCombinedShutdown(traceShutdown, metricShutdown), nil
+}
+
+// createCombinedShutdown creates a combined shutdown function
+func createCombinedShutdown(traceShutdown, metricShutdown func(context.Context) error) func(context.Context) error {
 	return func(ctx context.Context) error {
 		var err error
 		if e := traceShutdown(ctx); e != nil {
@@ -104,7 +124,7 @@ func InitOTEL(ctx context.Context, cfg Config) (shutdown func(context.Context) e
 			err = fmt.Errorf("metric shutdown failed: %w", e)
 		}
 		return err
-	}, nil
+	}
 }
 
 // setupTraceProvider configures trace provider with OTLP exporter
@@ -185,9 +205,21 @@ func setupMetricProvider(ctx context.Context, cfg Config, res *resource.Resource
 
 // initMetrics initializes all metric instruments
 func initMetrics() error {
+	if err := initCounters(); err != nil {
+		return err
+	}
+
+	if err := initHistograms(); err != nil {
+		return err
+	}
+
+	return initGauges()
+}
+
+// initCounters initializes counter metrics
+func initCounters() error {
 	var err error
 
-	// Counters - use _total suffix per OTEL conventions
 	ResourcesScanned, err = Meter.Int64Counter("ovi.resources.scanned.total",
 		metric.WithDescription("Total number of resources scanned"),
 		metric.WithUnit("1"),
@@ -212,7 +244,13 @@ func initMetrics() error {
 		return fmt.Errorf("failed to create storage_writes counter: %w", err)
 	}
 
-	// Histogram - include unit in name
+	return nil
+}
+
+// initHistograms initializes histogram metrics
+func initHistograms() error {
+	var err error
+
 	ScanDuration, err = Meter.Float64Histogram("ovi.scan.duration.seconds",
 		metric.WithDescription("Duration of scan operations"),
 		metric.WithUnit("s"),
@@ -221,7 +259,13 @@ func initMetrics() error {
 		return fmt.Errorf("failed to create scan_duration histogram: %w", err)
 	}
 
-	// Gauges - current values
+	return nil
+}
+
+// initGauges initializes gauge metrics
+func initGauges() error {
+	var err error
+
 	StorageRevision, err = Meter.Int64Gauge("ovi.storage.revision.current",
 		metric.WithDescription("Current storage revision number"),
 		metric.WithUnit("1"),

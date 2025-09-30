@@ -16,6 +16,14 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// OpaExpressionValue represents the dynamic value from OPA expression results
+// CLAUDE.md EXCEPTION: This type MUST use map[string]interface{} because:
+// 1. OPA (Open Policy Agent) returns arbitrary JSON structures
+// 2. Policy rules determine the shape at runtime, not compile time
+// 3. Converting to Go structs would require runtime reflection
+// This is the ONLY acceptable use of map[string]interface{} in Elava.
+type OpaExpressionValue map[string]interface{}
+
 // PolicyEngine evaluates OPA policies against resources with MVCC context
 type PolicyEngine struct {
 	storage *storage.MVCCStorage
@@ -47,13 +55,16 @@ type PolicyContext struct {
 
 // PolicyResult contains the result of policy evaluation
 type PolicyResult struct {
-	Decision   string         `json:"decision"` // "allow", "deny", "require_approval", "flag"
-	Action     string         `json:"action"`   // "delete", "tag", "notify", "ignore"
-	Reason     string         `json:"reason"`
-	Confidence float64        `json:"confidence"`
-	Policies   []string       `json:"policies"` // Which policies matched
-	Risk       string         `json:"risk"`     // "high", "medium", "low"
-	Metadata   map[string]any `json:"metadata"`
+	Decision   string   `json:"decision"` // "allow", "deny", "require_approval", "flag"
+	Action     string   `json:"action"`   // "delete", "tag", "notify", "ignore"
+	Reason     string   `json:"reason"`
+	Confidence float64  `json:"confidence"`
+	Policies   []string `json:"policies"` // Which policies matched
+	Risk       string   `json:"risk"`     // "high", "medium", "low"
+	// Metadata stores dynamic policy-specific data from OPA evaluation
+	// This is intentionally a map because policies can attach arbitrary
+	// context that varies by policy type and cannot be predetermined
+	Metadata map[string]any `json:"metadata"`
 }
 
 // NewPolicyEngine creates a new policy engine
@@ -217,7 +228,14 @@ func (pe *PolicyEngine) parseEvalResults(results rego.ResultSet, result *PolicyR
 
 		// Then check expressions (rules)
 		if len(res.Expressions) > 0 {
-			if expr, ok := res.Expressions[0].Value.(map[string]interface{}); ok {
+			// Handle both OpaExpressionValue and map[string]interface{}
+			// CLAUDE.md EXCEPTION: OPA runtime returns interface{} that can be either type
+			switch expr := res.Expressions[0].Value.(type) {
+			case OpaExpressionValue:
+				for key, value := range expr {
+					pe.bindPolicyValue(key, value, result)
+				}
+			case map[string]interface{}: // OPA raw return type
 				for key, value := range expr {
 					pe.bindPolicyValue(key, value, result)
 				}
@@ -279,17 +297,29 @@ func (pe *PolicyEngine) bindFloatField(key string, value interface{}, result *Po
 // aggregateResults combines multiple policy results into a final decision
 func (pe *PolicyEngine) aggregateResults(results []PolicyResult) PolicyResult {
 	if len(results) == 0 {
-		return PolicyResult{
-			Decision:   "allow",
-			Action:     "ignore",
-			Risk:       "low",
-			Confidence: 1.0,
-			Reason:     "no policies matched",
-		}
+		return pe.getDefaultResult()
 	}
 
-	// Simple aggregation - in practice this would be more sophisticated
-	finalResult := PolicyResult{
+	finalResult := pe.initializeFinalResult()
+	pe.processResultsAggregation(results, &finalResult)
+
+	return finalResult
+}
+
+// getDefaultResult returns default policy result when no policies match
+func (pe *PolicyEngine) getDefaultResult() PolicyResult {
+	return PolicyResult{
+		Decision:   "allow",
+		Action:     "ignore",
+		Risk:       "low",
+		Confidence: 1.0,
+		Reason:     "no policies matched",
+	}
+}
+
+// initializeFinalResult creates initial aggregate result
+func (pe *PolicyEngine) initializeFinalResult() PolicyResult {
+	return PolicyResult{
 		Decision:   "allow",
 		Action:     "ignore",
 		Risk:       "low",
@@ -297,8 +327,34 @@ func (pe *PolicyEngine) aggregateResults(results []PolicyResult) PolicyResult {
 		Policies:   []string{},
 		Metadata:   make(map[string]any),
 	}
+}
 
-	// Find highest priority decision
+// processResultsAggregation aggregates multiple results
+func (pe *PolicyEngine) processResultsAggregation(results []PolicyResult, finalResult *PolicyResult) {
+	aggregator := &resultAggregator{
+		maxPriority: 0,
+		maxRisk:     0,
+		reasons:     []string{},
+	}
+
+	for _, result := range results {
+		pe.updateFromSingleResult(result, finalResult, aggregator)
+	}
+
+	if len(aggregator.reasons) > 0 {
+		finalResult.Reason = fmt.Sprintf("Multiple policies: %v", aggregator.reasons)
+	}
+}
+
+// resultAggregator holds aggregation state
+type resultAggregator struct {
+	maxPriority int
+	maxRisk     int
+	reasons     []string
+}
+
+// updateFromSingleResult updates final result from a single policy result
+func (pe *PolicyEngine) updateFromSingleResult(result PolicyResult, finalResult *PolicyResult, agg *resultAggregator) {
 	priorityOrder := map[string]int{
 		"deny":             4,
 		"require_approval": 3,
@@ -312,39 +368,26 @@ func (pe *PolicyEngine) aggregateResults(results []PolicyResult) PolicyResult {
 		"low":    1,
 	}
 
-	maxPriority := 0
-	maxRisk := 0
-	var reasons []string
-
-	for _, result := range results {
-		if priority := priorityOrder[result.Decision]; priority > maxPriority {
-			maxPriority = priority
-			finalResult.Decision = result.Decision
-			finalResult.Action = result.Action
-		}
-
-		if risk := riskOrder[result.Risk]; risk > maxRisk {
-			maxRisk = risk
-			finalResult.Risk = result.Risk
-		}
-
-		if result.Confidence > finalResult.Confidence {
-			finalResult.Confidence = result.Confidence
-		}
-
-		if result.Reason != "" {
-			reasons = append(reasons, result.Reason)
-		}
-
-		// Aggregate policy names
-		finalResult.Policies = append(finalResult.Policies, result.Policies...)
+	if priority := priorityOrder[result.Decision]; priority > agg.maxPriority {
+		agg.maxPriority = priority
+		finalResult.Decision = result.Decision
+		finalResult.Action = result.Action
 	}
 
-	if len(reasons) > 0 {
-		finalResult.Reason = fmt.Sprintf("Multiple policies: %v", reasons)
+	if risk := riskOrder[result.Risk]; risk > agg.maxRisk {
+		agg.maxRisk = risk
+		finalResult.Risk = result.Risk
 	}
 
-	return finalResult
+	if result.Confidence > finalResult.Confidence {
+		finalResult.Confidence = result.Confidence
+	}
+
+	if result.Reason != "" {
+		agg.reasons = append(agg.reasons, result.Reason)
+	}
+
+	finalResult.Policies = append(finalResult.Policies, result.Policies...)
 }
 
 // Helper functions

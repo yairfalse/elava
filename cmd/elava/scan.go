@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -37,33 +38,50 @@ type scanInfra struct {
 // Run executes the scan command
 func (cmd *ScanCommand) Run() error {
 	ctx := context.Background()
-
 	fmt.Printf("Scanning AWS region %s for untracked resources...\n\n", cmd.Region)
 
-	// Initialize storage and WAL
+	// Setup infrastructure
+	infra, err := cmd.setupInfrastructure(ctx)
+	if err != nil {
+		return err
+	}
+	defer cmd.cleanupInfrastructure(infra)
+
+	// Perform the scan
+	resources, err := cmd.performScan(ctx, infra)
+	if err != nil {
+		return err
+	}
+
+	// Process and display results
+	return cmd.processResults(ctx, infra, resources)
+}
+
+// setupInfrastructure initializes storage, WAL, and provider
+func (cmd *ScanCommand) setupInfrastructure(ctx context.Context) (*scanInfra, error) {
 	tmpDir := os.TempDir() + "/elava-scan"
 	_ = os.MkdirAll(tmpDir, 0750)
 
 	storage, err := storage.NewMVCCStorage(tmpDir)
 	if err != nil {
-		return fmt.Errorf("failed to create storage: %w", err)
+		return nil, fmt.Errorf("failed to create storage: %w", err)
 	}
-	defer func() { _ = storage.Close() }()
 
 	walInstance, err := wal.Open(tmpDir)
 	if err != nil {
-		return fmt.Errorf("failed to create WAL: %w", err)
+		storage.Close()
+		return nil, fmt.Errorf("failed to create WAL: %w", err)
 	}
-	defer func() { _ = walInstance.Close() }()
 
-	// Create AWS provider
 	providerConfig := providers.ProviderConfig{
 		Type:   "aws",
 		Region: cmd.Region,
 	}
 	provider, err := providers.GetProvider(ctx, "aws", providerConfig)
 	if err != nil {
-		return fmt.Errorf("failed to create AWS provider: %w", err)
+		storage.Close()
+		walInstance.Close()
+		return nil, fmt.Errorf("failed to create AWS provider: %w", err)
 	}
 
 	// Scan resources (tiered scanning not yet implemented)
@@ -71,16 +89,21 @@ func (cmd *ScanCommand) Run() error {
 	resources, err = cmd.scanResources(ctx, provider)
 	if err != nil {
 		return fmt.Errorf("failed to scan resources: %w", err)
+
 	}
 
-	// Build filter for WAL logging
+	// Display results
+	return cmd.displayResults(resources, untracked)
+}
+
+// logScanOperation records the scan in WAL
+func (cmd *ScanCommand) logScanOperation(walInstance *wal.WAL, resources []types.Resource) {
 	filter := types.ResourceFilter{}
 	if cmd.Filter != "" {
 		filter.Type = cmd.Filter
 	}
 
-	// Record observation in WAL
-	err = walInstance.Append(wal.EntryObserved, "", ScanOperation{
+	err := walInstance.Append(wal.EntryObserved, "", ScanOperation{
 		Timestamp:     time.Now(),
 		Region:        cmd.Region,
 		ResourceCount: len(resources),
@@ -89,16 +112,16 @@ func (cmd *ScanCommand) Run() error {
 	if err != nil {
 		fmt.Printf("Warning: failed to log scan operation: %v\n", err)
 	}
+}
 
-	// Get previous state from storage
+// handleStateChanges manages storage and change detection
+func (cmd *ScanCommand) handleStateChanges(storage *storage.MVCCStorage, resources []types.Resource) ChangeSet {
 	previousResources, err := getPreviousState(storage)
 	if err != nil {
-		// First scan, no previous state
 		previousResources = []types.Resource{}
 		fmt.Printf("First scan - establishing baseline\n\n")
 	}
 
-	// Store current observations in storage
 	revision, err := storeObservations(storage, resources)
 	if err != nil {
 		fmt.Printf("Warning: failed to store observations: %v\n", err)
@@ -106,34 +129,33 @@ func (cmd *ScanCommand) Run() error {
 		fmt.Printf("Stored observations at revision %d\n", revision)
 	}
 
-	// Detect changes if we have previous state
 	var changes ChangeSet
 	if len(previousResources) > 0 {
 		changes = detectChanges(resources, previousResources)
-		if len(changes.New) > 0 || len(changes.Modified) > 0 || len(changes.Disappeared) > 0 {
-			fmt.Printf("\nChanges detected:\n")
-			if len(changes.New) > 0 {
-				fmt.Printf("   New resources: %d\n", len(changes.New))
-			}
-			if len(changes.Modified) > 0 {
-				fmt.Printf("   Modified resources: %d\n", len(changes.Modified))
-			}
-			if len(changes.Disappeared) > 0 {
-				fmt.Printf("   Disappeared resources: %d\n", len(changes.Disappeared))
-			}
-			fmt.Printf("\n")
+		cmd.reportChanges(changes)
+	}
+	return changes
+}
+
+// reportChanges displays detected changes
+func (cmd *ScanCommand) reportChanges(changes ChangeSet) {
+	if len(changes.New) > 0 || len(changes.Modified) > 0 || len(changes.Disappeared) > 0 {
+		fmt.Printf("\nChanges detected:\n")
+		if len(changes.New) > 0 {
+			fmt.Printf("   New resources: %d\n", len(changes.New))
 		}
+		if len(changes.Modified) > 0 {
+			fmt.Printf("   Modified resources: %d\n", len(changes.Modified))
+		}
+		if len(changes.Disappeared) > 0 {
+			fmt.Printf("   Disappeared resources: %d\n", len(changes.Disappeared))
+		}
+		fmt.Printf("\n")
 	}
+}
 
-	// Find untracked resources
-	untracked := scanner.ScanForUntracked(ctx, resources)
-
-	// Apply risk filter if requested
-	if cmd.RiskOnly {
-		untracked = filterHighRisk(untracked)
-	}
-
-	// Display results
+// displayResults handles output formatting
+func (cmd *ScanCommand) displayResults(resources []types.Resource, untracked []scanner.UntrackedResource) error {
 	switch cmd.Output {
 	case "json":
 		return cmd.outputJSON(untracked)
@@ -158,60 +180,72 @@ func (cmd *ScanCommand) scanResources(ctx context.Context, provider providers.Cl
 
 // outputTable displays results in a nice table format
 func (cmd *ScanCommand) outputTable(allResources []types.Resource, untracked []scanner.UntrackedResource) error {
-	totalResources := len(allResources)
-	untrackedCount := len(untracked)
-	trackedCount := totalResources - untrackedCount
-
-	// Summary
-	fmt.Printf("Scan Summary:\n")
-	fmt.Printf("   Total resources: %d\n", totalResources)
-	fmt.Printf("   Tracked: %d (%.1f%%)\n", trackedCount, float64(trackedCount)/float64(totalResources)*100)
-	fmt.Printf("   Untracked: %d (%.1f%%)\n", untrackedCount, float64(untrackedCount)/float64(totalResources)*100)
-	fmt.Printf("\n")
+	cmd.printScanSummary(allResources, untracked)
 
 	if len(untracked) == 0 {
 		fmt.Println("All resources are properly tracked!")
 		return nil
 	}
 
-	// Sort by risk (high first)
+	sortUntrackedByRisk(untracked)
+	cmd.printUntrackedTable(untracked)
+	cmd.printActionSummary(untracked)
+
+	return nil
+}
+
+// printScanSummary prints the scan summary statistics
+func (cmd *ScanCommand) printScanSummary(allResources []types.Resource, untracked []scanner.UntrackedResource) {
+	totalResources := len(allResources)
+	untrackedCount := len(untracked)
+	trackedCount := totalResources - untrackedCount
+
+	fmt.Printf("Scan Summary:\n")
+	fmt.Printf("   Total resources: %d\n", totalResources)
+	fmt.Printf("   Tracked: %d (%.1f%%)\n", trackedCount, float64(trackedCount)/float64(totalResources)*100)
+	fmt.Printf("   Untracked: %d (%.1f%%)\n", untrackedCount, float64(untrackedCount)/float64(totalResources)*100)
+	fmt.Printf("\n")
+}
+
+// sortUntrackedByRisk sorts untracked resources by risk level
+func sortUntrackedByRisk(untracked []scanner.UntrackedResource) {
 	sort.Slice(untracked, func(i, j int) bool {
 		riskOrder := map[string]int{"high": 3, "medium": 2, "low": 1}
 		return riskOrder[untracked[i].Risk] > riskOrder[untracked[j].Risk]
 	})
+}
 
+// printUntrackedTable prints the table of untracked resources
+func (cmd *ScanCommand) printUntrackedTable(untracked []scanner.UntrackedResource) {
 	fmt.Printf("Untracked Resources:\n")
 
-	// Create table writer
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "RESOURCE\tTYPE\tSTATUS\tRISK\tISSUES\tACTION")
 	_, _ = fmt.Fprintln(w, "--------\t----\t------\t----\t------\t------")
 
 	for _, item := range untracked {
-		resource := item.Resource
-		resourceID := truncate(resource.ID, 20)
-		issues := strings.Join(item.Issues, ", ")
-		issues = truncate(issues, 40)
-
-		riskDisplay := item.Risk
-
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-			resourceID,
-			resource.Type,
-			resource.Status,
-			riskDisplay,
-			issues,
-			item.Action,
-		)
+		cmd.writeUntrackedRow(w, item)
 	}
 
 	_ = w.Flush()
 	fmt.Printf("\n")
+}
 
-	// Action recommendations
-	cmd.printActionSummary(untracked)
+// writeUntrackedRow writes a single row to the untracked table
+func (cmd *ScanCommand) writeUntrackedRow(w io.Writer, item scanner.UntrackedResource) {
+	resource := item.Resource
+	resourceID := truncate(resource.ID, 20)
+	issues := strings.Join(item.Issues, ", ")
+	issues = truncate(issues, 40)
 
-	return nil
+	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+		resourceID,
+		resource.Type,
+		resource.Status,
+		item.Risk,
+		issues,
+		item.Action,
+	)
 }
 
 // printActionSummary shows recommended next steps
