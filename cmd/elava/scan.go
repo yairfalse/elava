@@ -84,16 +84,11 @@ func (cmd *ScanCommand) setupInfrastructure(ctx context.Context) (*scanInfra, er
 		return nil, fmt.Errorf("failed to create AWS provider: %w", err)
 	}
 
-	// Scan resources (tiered scanning not yet implemented)
-	var resources []types.Resource
-	resources, err = cmd.scanResources(ctx, provider)
-	if err != nil {
-		return fmt.Errorf("failed to scan resources: %w", err)
-
-	}
-
-	// Display results
-	return cmd.displayResults(resources, untracked)
+	return &scanInfra{
+		provider: provider,
+		storage:  storage,
+		wal:      walInstance,
+	}, nil
 }
 
 // logScanOperation records the scan in WAL
