@@ -29,7 +29,8 @@ func (s *MVCCStorage) queryEventsSince(ctx context.Context, bucketName []byte, s
 	defer s.mu.RUnlock()
 
 	var results [][]byte
-	sinceKey := makeAnalyzerEventKey(since.UnixNano(), 0)
+	// Increment timestamp to exclude events at the exact 'since' time with any revision
+	sinceKey := makeAnalyzerEventKey(since.UnixNano()+1, 0)
 
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		// Check context cancellation
