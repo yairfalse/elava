@@ -20,17 +20,28 @@ func (p *RealAWSProvider) listSQSQueues(ctx context.Context, filter elavatypes.R
 
 	input := &sqs.ListQueuesInput{}
 
-	// Apply prefix filter if queue names specified in IDs
-	if len(filter.IDs) > 0 {
-		input.QueueNamePrefix = &filter.IDs[0]
-	}
-
 	output, err := p.sqsClient.ListQueues(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list SQS queues: %w", err)
 	}
 
-	for _, queueURL := range output.QueueUrls {
+	queueURLs := output.QueueUrls
+	// If filter.IDs is provided, filter the queue URLs to only those in filter.IDs
+	if len(filter.IDs) > 0 {
+		idSet := make(map[string]struct{}, len(filter.IDs))
+		for _, id := range filter.IDs {
+			idSet[id] = struct{}{}
+		}
+		filtered := make([]string, 0, len(queueURLs))
+		for _, queueURL := range queueURLs {
+			if _, ok := idSet[queueURL]; ok {
+				filtered = append(filtered, queueURL)
+			}
+		}
+		queueURLs = filtered
+	}
+
+	for _, queueURL := range queueURLs {
 		resource, err := p.convertSQSQueue(ctx, queueURL)
 		if err != nil {
 			// Log error but continue processing other queues
