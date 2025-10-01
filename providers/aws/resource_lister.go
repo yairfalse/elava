@@ -54,6 +54,7 @@ func NewResourceListerRegistry() *ResourceListerRegistry {
 			&MemoryDBLister{},
 			&DynamoDBLister{},
 			&DynamoDBBackupLister{},
+			&SQSLister{},
 		},
 	}
 }
