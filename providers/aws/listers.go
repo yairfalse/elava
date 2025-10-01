@@ -257,3 +257,12 @@ func (l *DynamoDBBackupLister) IsCritical() bool { return false }
 func (l *DynamoDBBackupLister) List(ctx context.Context, p *RealAWSProvider, filter types.ResourceFilter) ([]types.Resource, error) {
 	return p.listDynamoDBBackups(ctx, filter)
 }
+
+// SQSLister lists SQS queues
+type SQSLister struct{}
+
+func (l *SQSLister) Name() string     { return "SQS queues" }
+func (l *SQSLister) IsCritical() bool { return false }
+func (l *SQSLister) List(ctx context.Context, p *RealAWSProvider, filter types.ResourceFilter) ([]types.Resource, error) {
+	return p.listSQSQueues(ctx, filter)
+}

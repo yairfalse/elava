@@ -26,6 +26,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/redshift"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"github.com/yairfalse/elava/providers"
 	"github.com/yairfalse/elava/types"
@@ -66,6 +67,7 @@ type RealAWSProvider struct {
 	dynamodbClient *dynamodb.Client
 	memorydbClient *memorydb.Client
 	redshiftClient *redshift.Client
+	sqsClient      *sqs.Client
 	region         string
 	accountID      string
 }
@@ -110,6 +112,7 @@ func NewRealAWSProvider(ctx context.Context, region string) (*RealAWSProvider, e
 		dynamodbClient: dynamodb.NewFromConfig(cfg),
 		memorydbClient: memorydb.NewFromConfig(cfg),
 		redshiftClient: redshift.NewFromConfig(cfg),
+		sqsClient:      sqs.NewFromConfig(cfg),
 		region:         region,
 		accountID:      accountID,
 	}, nil
