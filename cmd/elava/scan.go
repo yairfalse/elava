@@ -57,6 +57,52 @@ func (cmd *ScanCommand) Run() error {
 	return cmd.processResults(ctx, infra, resources)
 }
 
+// performScan executes the actual resource scan
+func (cmd *ScanCommand) performScan(ctx context.Context, infra *scanInfra) ([]types.Resource, error) {
+	resources, err := cmd.scanResources(ctx, infra.provider)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan resources: %w", err)
+	}
+	return resources, nil
+}
+
+// processResults handles storage, change detection, and display
+func (cmd *ScanCommand) processResults(ctx context.Context, infra *scanInfra, resources []types.Resource) error {
+	// Log scan operation
+	cmd.logScanOperation(infra.wal, resources)
+
+	// Handle state changes
+	changes := cmd.handleStateChanges(infra.storage, resources)
+
+	// Find untracked resources
+	s := scanner.NewScanner()
+	untracked := s.FindUntracked(resources, scanner.TagConfig{
+		OwnerTag:   "elava:owner",
+		ManagedTag: "elava:managed",
+	})
+
+	// Apply risk filter if requested
+	if cmd.RiskOnly {
+		untracked = filterHighRisk(untracked)
+	}
+
+	// Display results
+	return cmd.displayResults(resources, untracked)
+}
+
+// cleanupInfrastructure closes storage and WAL
+func (cmd *ScanCommand) cleanupInfrastructure(infra *scanInfra) {
+	if infra == nil {
+		return
+	}
+	if infra.storage != nil {
+		_ = infra.storage.Close()
+	}
+	if infra.wal != nil {
+		_ = infra.wal.Close()
+	}
+}
+
 // setupInfrastructure initializes storage, WAL, and provider
 func (cmd *ScanCommand) setupInfrastructure(ctx context.Context) (*scanInfra, error) {
 	tmpDir := os.TempDir() + "/elava-scan"
