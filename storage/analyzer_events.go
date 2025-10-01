@@ -74,5 +74,8 @@ func (s *MVCCStorage) getTime() time.Time {
 // makeAnalyzerEventKey creates timestamp-ordered key for analyzer events
 // Uses timestamp (nanoseconds) + revision for uniqueness and ordering
 func makeAnalyzerEventKey(timestamp, revision int64) []byte {
-	return []byte(fmt.Sprintf("%020d:%020d", timestamp, revision))
+	key := make([]byte, 16)
+	binary.BigEndian.PutUint64(key[0:8], uint64(timestamp))
+	binary.BigEndian.PutUint64(key[8:16], uint64(revision))
+	return key
 }
