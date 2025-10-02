@@ -34,21 +34,21 @@ func (s *MVCCStorage) StoreWastePattern(ctx context.Context, pattern WastePatter
 
 // StoreChangeEventBatch stores multiple change events atomically
 func (s *MVCCStorage) StoreChangeEventBatch(ctx context.Context, events []ChangeEvent) error {
-	return storeAnalyzerEventBatch(s, ctx, bucketChanges, events)
+	return storeAnalyzerEventBatch(s, bucketChanges, events)
 }
 
 // StoreDriftEventBatch stores multiple drift events atomically
 func (s *MVCCStorage) StoreDriftEventBatch(ctx context.Context, events []DriftEvent) error {
-	return storeAnalyzerEventBatch(s, ctx, bucketDrift, events)
+	return storeAnalyzerEventBatch(s, bucketDrift, events)
 }
 
 // StoreWastePatternBatch stores multiple waste patterns atomically
 func (s *MVCCStorage) StoreWastePatternBatch(ctx context.Context, patterns []WastePattern) error {
-	return storeAnalyzerEventBatch(s, ctx, bucketWaste, patterns)
+	return storeAnalyzerEventBatch(s, bucketWaste, patterns)
 }
 
 // storeAnalyzerEventBatch stores multiple events in a single transaction using generics
-func storeAnalyzerEventBatch[T any](s *MVCCStorage, ctx context.Context, bucketName []byte, events []T) error {
+func storeAnalyzerEventBatch[T any](s *MVCCStorage, bucketName []byte, events []T) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
