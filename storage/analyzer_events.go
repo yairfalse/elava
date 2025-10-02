@@ -63,7 +63,7 @@ func storeAnalyzerEventBatch[T any](s *MVCCStorage, ctx context.Context, bucketN
 
 		// Store each event in the batch
 		for i, event := range events {
-			key := makeAnalyzerEventKey(baseTimestamp, s.currentRev+int64(i)+1)
+			key := makeAnalyzerEventKey(baseTimestamp, s.currentRev+int64(i+1))
 			value, err := json.Marshal(event)
 			if err != nil {
 				return fmt.Errorf("failed to marshal event at index %d: %w", i, err)
