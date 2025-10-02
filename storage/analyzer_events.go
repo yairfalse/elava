@@ -136,7 +136,6 @@ func (s *MVCCStorage) getTime() time.Time {
 // Uses timestamp (nanoseconds) + revision for uniqueness and ordering
 func makeAnalyzerEventKey(timestamp, revision int64) []byte {
 	key := make([]byte, 16)
-	// Both timestamp and revision are always positive, safe to convert
 	binary.BigEndian.PutUint64(key[0:8], uint64(timestamp)) //nolint:gosec // timestamp is always positive
 	binary.BigEndian.PutUint64(key[8:16], uint64(revision)) //nolint:gosec // revision is always positive
 	return key
