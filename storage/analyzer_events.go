@@ -92,7 +92,6 @@ func storeAnalyzerEvent[T any](s *MVCCStorage, ctx context.Context, bucketName [
 
 	// Use current time in nanoseconds for key
 	timestamp := s.getCurrentTimestamp()
-	key := makeAnalyzerEventKey(timestamp, s.currentRev+1)
 
 	value, err := json.Marshal(data)
 	if err != nil {
@@ -104,6 +103,9 @@ func storeAnalyzerEvent[T any](s *MVCCStorage, ctx context.Context, bucketName [
 		if err != nil {
 			return fmt.Errorf("failed to create bucket %s: %w", bucketName, err)
 		}
+
+		// Create key inside transaction with next revision
+		key := makeAnalyzerEventKey(timestamp, s.currentRev+1)
 		if err := bucket.Put(key, value); err != nil {
 			return fmt.Errorf("failed to put event: %w", err)
 		}
