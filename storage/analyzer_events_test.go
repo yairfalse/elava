@@ -2,29 +2,9 @@ package storage
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 )
-
-type testChangeEvent struct {
-	Revision   int64
-	Timestamp  time.Time
-	ResourceID string
-	Type       string
-}
-
-type testDriftEvent struct {
-	ResourceID string
-	Field      string
-	Severity   string
-}
-
-type testWastePattern struct {
-	Type        string
-	ResourceIDs []string
-	Confidence  float64
-}
 
 func TestMVCCStorage_StoreAndQueryChangeEvents(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -34,11 +14,11 @@ func TestMVCCStorage_StoreAndQueryChangeEvents(t *testing.T) {
 	}
 	defer func() { _ = storage.Close() }()
 
-	event := testChangeEvent{
-		Revision:   1,
-		Timestamp:  time.Now(),
+	event := ChangeEvent{
 		ResourceID: "i-123",
-		Type:       "created",
+		ChangeType: "created",
+		Timestamp:  time.Now(),
+		Revision:   1,
 	}
 
 	ctx := context.Background()
@@ -55,13 +35,12 @@ func TestMVCCStorage_StoreAndQueryChangeEvents(t *testing.T) {
 		t.Errorf("Expected 1 event, got %d", len(events))
 	}
 
-	var retrieved testChangeEvent
-	if err := json.Unmarshal(events[0], &retrieved); err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
+	if events[0].ResourceID != "i-123" {
+		t.Errorf("ResourceID = %s, want i-123", events[0].ResourceID)
 	}
 
-	if retrieved.ResourceID != "i-123" {
-		t.Errorf("ResourceID = %s, want i-123", retrieved.ResourceID)
+	if events[0].ChangeType != "created" {
+		t.Errorf("ChangeType = %s, want created", events[0].ChangeType)
 	}
 }
 
@@ -73,9 +52,13 @@ func TestMVCCStorage_StoreAndQueryDriftEvents(t *testing.T) {
 	}
 	defer func() { _ = storage.Close() }()
 
-	event := testDriftEvent{
+	event := DriftEvent{
 		ResourceID: "i-456",
+		DriftType:  "config_drift",
+		Timestamp:  time.Now(),
 		Field:      "instance_type",
+		Expected:   "t2.micro",
+		Actual:     "t2.small",
 		Severity:   "medium",
 	}
 
@@ -93,13 +76,12 @@ func TestMVCCStorage_StoreAndQueryDriftEvents(t *testing.T) {
 		t.Errorf("Expected 1 event, got %d", len(events))
 	}
 
-	var retrieved testDriftEvent
-	if err := json.Unmarshal(events[0], &retrieved); err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
+	if events[0].Field != "instance_type" {
+		t.Errorf("Field = %s, want instance_type", events[0].Field)
 	}
 
-	if retrieved.Field != "instance_type" {
-		t.Errorf("Field = %s, want instance_type", retrieved.Field)
+	if events[0].Severity != "medium" {
+		t.Errorf("Severity = %s, want medium", events[0].Severity)
 	}
 }
 
@@ -111,10 +93,12 @@ func TestMVCCStorage_StoreAndQueryWastePatterns(t *testing.T) {
 	}
 	defer func() { _ = storage.Close() }()
 
-	pattern := testWastePattern{
-		Type:        "orphaned",
+	pattern := WastePattern{
+		PatternType: "orphaned",
 		ResourceIDs: []string{"i-789", "i-abc"},
+		Timestamp:   time.Now(),
 		Confidence:  0.95,
+		Reason:      "No owner tag",
 	}
 
 	ctx := context.Background()
@@ -131,12 +115,11 @@ func TestMVCCStorage_StoreAndQueryWastePatterns(t *testing.T) {
 		t.Errorf("Expected 1 pattern, got %d", len(patterns))
 	}
 
-	var retrieved testWastePattern
-	if err := json.Unmarshal(patterns[0], &retrieved); err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
+	if len(patterns[0].ResourceIDs) != 2 {
+		t.Errorf("Expected 2 resource IDs, got %d", len(patterns[0].ResourceIDs))
 	}
 
-	if len(retrieved.ResourceIDs) != 2 {
-		t.Errorf("Expected 2 resource IDs, got %d", len(retrieved.ResourceIDs))
+	if patterns[0].Confidence != 0.95 {
+		t.Errorf("Confidence = %f, want 0.95", patterns[0].Confidence)
 	}
 }

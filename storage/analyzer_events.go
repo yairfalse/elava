@@ -17,18 +17,18 @@ var (
 	bucketWaste   = []byte("waste")
 )
 
-// StoreChangeEvent stores a change event (generic interface{})
-func (s *MVCCStorage) StoreChangeEvent(ctx context.Context, event interface{}) error {
+// StoreChangeEvent stores a change event
+func (s *MVCCStorage) StoreChangeEvent(ctx context.Context, event ChangeEvent) error {
 	return s.storeAnalyzerEvent(ctx, bucketChanges, event)
 }
 
-// StoreDriftEvent stores a drift event (generic interface{})
-func (s *MVCCStorage) StoreDriftEvent(ctx context.Context, event interface{}) error {
+// StoreDriftEvent stores a drift event
+func (s *MVCCStorage) StoreDriftEvent(ctx context.Context, event DriftEvent) error {
 	return s.storeAnalyzerEvent(ctx, bucketDrift, event)
 }
 
-// StoreWastePattern stores a waste pattern (generic interface{})
-func (s *MVCCStorage) StoreWastePattern(ctx context.Context, pattern interface{}) error {
+// StoreWastePattern stores a waste pattern
+func (s *MVCCStorage) StoreWastePattern(ctx context.Context, pattern WastePattern) error {
 	return s.storeAnalyzerEvent(ctx, bucketWaste, pattern)
 }
 
