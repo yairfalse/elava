@@ -45,6 +45,13 @@ func (s *MVCCStorage) StoreWastePattern(ctx context.Context, pattern WastePatter
 func (s *MVCCStorage) StoreChangeEventBatch(ctx context.Context, events []ChangeEvent) error {
 	// Validate all events before storing
 	for i, event := range events {
+		// Check context cancellation during validation
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("batch validation cancelled: %w", ctx.Err())
+		default:
+		}
+
 		if err := validateChangeEvent(event); err != nil {
 			return fmt.Errorf("invalid change event at index %d: %w", i, err)
 		}
@@ -56,6 +63,13 @@ func (s *MVCCStorage) StoreChangeEventBatch(ctx context.Context, events []Change
 func (s *MVCCStorage) StoreDriftEventBatch(ctx context.Context, events []DriftEvent) error {
 	// Validate all events before storing
 	for i, event := range events {
+		// Check context cancellation during validation
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("batch validation cancelled: %w", ctx.Err())
+		default:
+		}
+
 		if err := validateDriftEvent(event); err != nil {
 			return fmt.Errorf("invalid drift event at index %d: %w", i, err)
 		}
@@ -67,6 +81,13 @@ func (s *MVCCStorage) StoreDriftEventBatch(ctx context.Context, events []DriftEv
 func (s *MVCCStorage) StoreWastePatternBatch(ctx context.Context, patterns []WastePattern) error {
 	// Validate all patterns before storing
 	for i, pattern := range patterns {
+		// Check context cancellation during validation
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("batch validation cancelled: %w", ctx.Err())
+		default:
+		}
+
 		if err := validateWastePattern(pattern); err != nil {
 			return fmt.Errorf("invalid waste pattern at index %d: %w", i, err)
 		}
