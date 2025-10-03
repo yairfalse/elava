@@ -19,31 +19,58 @@ var (
 
 // StoreChangeEvent stores a change event
 func (s *MVCCStorage) StoreChangeEvent(ctx context.Context, event ChangeEvent) error {
+	if err := validateChangeEvent(event); err != nil {
+		return fmt.Errorf("invalid change event: %w", err)
+	}
 	return storeAnalyzerEvent(s, ctx, bucketChanges, event)
 }
 
 // StoreDriftEvent stores a drift event
 func (s *MVCCStorage) StoreDriftEvent(ctx context.Context, event DriftEvent) error {
+	if err := validateDriftEvent(event); err != nil {
+		return fmt.Errorf("invalid drift event: %w", err)
+	}
 	return storeAnalyzerEvent(s, ctx, bucketDrift, event)
 }
 
 // StoreWastePattern stores a waste pattern
 func (s *MVCCStorage) StoreWastePattern(ctx context.Context, pattern WastePattern) error {
+	if err := validateWastePattern(pattern); err != nil {
+		return fmt.Errorf("invalid waste pattern: %w", err)
+	}
 	return storeAnalyzerEvent(s, ctx, bucketWaste, pattern)
 }
 
 // StoreChangeEventBatch stores multiple change events atomically
 func (s *MVCCStorage) StoreChangeEventBatch(ctx context.Context, events []ChangeEvent) error {
+	// Validate all events before storing
+	for i, event := range events {
+		if err := validateChangeEvent(event); err != nil {
+			return fmt.Errorf("invalid change event at index %d: %w", i, err)
+		}
+	}
 	return storeAnalyzerEventBatch(s, ctx, bucketChanges, events)
 }
 
 // StoreDriftEventBatch stores multiple drift events atomically
 func (s *MVCCStorage) StoreDriftEventBatch(ctx context.Context, events []DriftEvent) error {
+	// Validate all events before storing
+	for i, event := range events {
+		if err := validateDriftEvent(event); err != nil {
+			return fmt.Errorf("invalid drift event at index %d: %w", i, err)
+		}
+	}
 	return storeAnalyzerEventBatch(s, ctx, bucketDrift, events)
 }
 
 // StoreWastePatternBatch stores multiple waste patterns atomically
 func (s *MVCCStorage) StoreWastePatternBatch(ctx context.Context, patterns []WastePattern) error {
+	// Validate all patterns before storing
+	for i, pattern := range patterns {
+		if err := validateWastePattern(pattern); err != nil {
+			return fmt.Errorf("invalid waste pattern at index %d: %w", i, err)
+		}
+	}
 	return storeAnalyzerEventBatch(s, ctx, bucketWaste, patterns)
 }
 
