@@ -31,9 +31,15 @@ type ObservationStorage interface {
 
 // AnalyzerEventWriter stores analyzer-generated events
 type AnalyzerEventWriter interface {
+	// Single event operations
 	StoreChangeEvent(ctx context.Context, event ChangeEvent) error
 	StoreDriftEvent(ctx context.Context, event DriftEvent) error
 	StoreWastePattern(ctx context.Context, pattern WastePattern) error
+
+	// Batch operations for performance
+	StoreChangeEventBatch(ctx context.Context, events []ChangeEvent) error
+	StoreDriftEventBatch(ctx context.Context, events []DriftEvent) error
+	StoreWastePatternBatch(ctx context.Context, patterns []WastePattern) error
 }
 
 // AnalyzerEventReader queries analyzer events
