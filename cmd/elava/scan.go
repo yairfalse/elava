@@ -72,14 +72,11 @@ func (cmd *ScanCommand) processResults(ctx context.Context, infra *scanInfra, re
 	cmd.logScanOperation(infra.wal, resources)
 
 	// Handle state changes
-	changes := cmd.handleStateChanges(infra.storage, resources)
+	cmd.handleStateChanges(infra.storage, resources)
 
 	// Find untracked resources
-	s := scanner.NewScanner()
-	untracked := s.FindUntracked(resources, scanner.TagConfig{
-		OwnerTag:   "elava:owner",
-		ManagedTag: "elava:managed",
-	})
+	tracker := scanner.NewTracker()
+	untracked := tracker.FindUntracked(ctx, resources)
 
 	// Apply risk filter if requested
 	if cmd.RiskOnly {
