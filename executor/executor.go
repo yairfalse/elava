@@ -130,7 +130,8 @@ func (e *Engine) shouldStopExecution(singleResult *SingleExecutionResult, result
 func (e *Engine) finalizeExecutionResult(result *ExecutionResult) {
 	result.EndTime = time.Now()
 	result.Duration = result.EndTime.Sub(result.StartTime)
-	// Preserve PartialFailure if already set (early stop), otherwise set based on failure count
+	// Preserve PartialFailure if already set (e.g., due to early stop in shouldStopExecution when a failure occurs and ContinueOnFailure is false).
+	// If PartialFailure was not set earlier, set it now based on the number of failed executions.
 	if !result.PartialFailure {
 		result.PartialFailure = result.FailedCount > 0
 	}
