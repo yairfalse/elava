@@ -164,7 +164,7 @@ func (e *Engine) ExecuteSingle(ctx context.Context, decision types.Decision) (*S
 		return result, nil
 	}
 
-	// Check if execution failed (status set by performExecution)
+	// Check if execution failed (status set by e.performExecution)
 	if result.Status == StatusFailed {
 		return result, nil
 	}
