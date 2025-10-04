@@ -130,7 +130,10 @@ func (e *Engine) shouldStopExecution(singleResult *SingleExecutionResult, result
 func (e *Engine) finalizeExecutionResult(result *ExecutionResult) {
 	result.EndTime = time.Now()
 	result.Duration = result.EndTime.Sub(result.StartTime)
-	result.PartialFailure = result.FailedCount > 0
+	// Preserve PartialFailure if already set (early stop), otherwise set based on failure count
+	if !result.PartialFailure {
+		result.PartialFailure = result.FailedCount > 0
+	}
 	result.RollbackRequired = result.PartialFailure && e.options.RollbackOnPartialFail
 }
 
@@ -157,6 +160,11 @@ func (e *Engine) ExecuteSingle(ctx context.Context, decision types.Decision) (*S
 	// Execute the decision
 	resourceID, err := e.performExecution(ctx, decision, provider, result)
 	if err != nil {
+		return result, nil
+	}
+
+	// Check if execution failed (status set by performExecution)
+	if result.Status == StatusFailed {
 		return result, nil
 	}
 
