@@ -57,7 +57,7 @@ action := "notify" if {
 
 action := "ignore" if {
     not has_public_ingress
-    not (is_storage_resource; not is_encrypted)
+    not (is_storage_resource and not is_encrypted)
 }
 
 # Provide reason
@@ -74,7 +74,7 @@ reason := sprintf("Unencrypted %s detected", [input.resource.type]) if {
 
 reason := "Security checks passed" if {
     not has_public_ingress
-    not (is_storage_resource; not is_encrypted)
+    not (is_storage_resource and not is_encrypted)
 }
 
 # Confidence levels
@@ -86,7 +86,7 @@ confidence := 0.85 if {
 }
 confidence := 1.0 if {
     not has_public_ingress
-    not (is_storage_resource; not is_encrypted)
+    not (is_storage_resource and not is_encrypted)
 }
 
 # Metadata for enforcement
