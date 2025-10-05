@@ -106,5 +106,5 @@ metadata := {
 
 metadata := {} if {
     not has_public_ingress
-    not (is_storage_resource; not is_encrypted)
+    not (is_storage_resource and not is_encrypted)
 }
