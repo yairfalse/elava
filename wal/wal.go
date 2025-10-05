@@ -33,6 +33,28 @@ type Entry struct {
 	Error      string          `json:"error,omitempty"`
 }
 
+// Config holds WAL configuration
+type Config struct {
+	// Maximum file size before rotation (bytes)
+	MaxFileSize int64
+	// Retention period for old WAL files
+	RetentionDays int
+	// Buffer size for writes
+	BufferSize int
+	// File name prefix
+	FilePrefix string
+}
+
+// DefaultConfig returns sensible default configuration
+func DefaultConfig() Config {
+	return Config{
+		MaxFileSize:   100 * 1024 * 1024, // 100MB
+		RetentionDays: 30,                // 30 days
+		BufferSize:    4096,              // 4KB buffer
+		FilePrefix:    "elava",
+	}
+}
+
 // WAL provides Write-Ahead Logging for audit and recovery
 type WAL struct {
 	mu       sync.Mutex
@@ -40,16 +62,22 @@ type WAL struct {
 	writer   *bufio.Writer
 	sequence int64
 	dir      string
+	config   Config
 }
 
-// Open creates or opens a WAL in the specified directory
+// Open creates or opens a WAL in the specified directory with default config
 func Open(dir string) (*WAL, error) {
+	return OpenWithConfig(dir, DefaultConfig())
+}
+
+// OpenWithConfig creates or opens a WAL with custom configuration
+func OpenWithConfig(dir string, config Config) (*WAL, error) {
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, fmt.Errorf("failed to create WAL directory: %w", err)
 	}
 
 	// Use timestamp in filename for rotation
-	filename := fmt.Sprintf("elava-%s.wal", time.Now().Format("20060102-150405"))
+	filename := fmt.Sprintf("%s-%s.wal", config.FilePrefix, time.Now().Format("20060102-150405"))
 	path := filepath.Join(dir, filename)
 
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600) // #nosec G304 - path is constructed from trusted dir
@@ -59,11 +87,12 @@ func Open(dir string) (*WAL, error) {
 
 	w := &WAL{
 		file:   file,
-		writer: bufio.NewWriter(file),
+		writer: bufio.NewWriterSize(file, config.BufferSize),
 		dir:    dir,
+		config: config,
 	}
 
-	// Load last sequence number
+	// Load last sequence number from existing WAL files
 	w.loadSequence()
 
 	return w, nil
