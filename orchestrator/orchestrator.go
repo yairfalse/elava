@@ -36,6 +36,11 @@ func (o *Orchestrator) WithScanner(s Scanner) *Orchestrator {
 	return o
 }
 
+// PolicyEngine returns the policy engine for loading policies
+func (o *Orchestrator) PolicyEngine() *policy.PolicyEngine {
+	return o.policyEngine
+}
+
 // RunCycle runs one reconciliation cycle
 func (o *Orchestrator) RunCycle(ctx context.Context) (*CycleResult, error) {
 	result := &CycleResult{
