@@ -179,11 +179,70 @@ func (w *WAL) writeEntry(entry Entry) error {
 	return w.file.Sync()
 }
 
-// loadSequence finds the last sequence number
+// loadSequence finds the last sequence number from existing WAL files
 func (w *WAL) loadSequence() {
-	// In production, scan existing WAL files
-	// For now, start at 0
-	w.sequence = 0
+	maxSeq := w.findMaxSequence()
+	w.sequence = maxSeq
+}
+
+// findMaxSequence scans all WAL files to find the highest sequence number
+func (w *WAL) findMaxSequence() int64 {
+	files := w.listWALFiles()
+	if len(files) == 0 {
+		return 0
+	}
+
+	return w.scanFilesForMaxSequence(files)
+}
+
+// listWALFiles returns all WAL files in the directory, sorted by name
+func (w *WAL) listWALFiles() []string {
+	pattern := filepath.Join(w.dir, w.config.FilePrefix+"-*.wal")
+	files, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil
+	}
+	return files
+}
+
+// scanFilesForMaxSequence reads files to find the highest sequence number
+func (w *WAL) scanFilesForMaxSequence(files []string) int64 {
+	maxSeq := int64(0)
+
+	// Start from the last file (most recent) for efficiency
+	for i := len(files) - 1; i >= 0; i-- {
+		fileMax := w.getMaxSequenceFromFile(files[i])
+		if fileMax > maxSeq {
+			maxSeq = fileMax
+		}
+	}
+
+	return maxSeq
+}
+
+// getMaxSequenceFromFile reads a single file and returns its max sequence
+func (w *WAL) getMaxSequenceFromFile(path string) int64 {
+	reader, err := NewReader(path)
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = reader.Close() }()
+
+	maxSeq := int64(0)
+	for {
+		entry, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			continue // Skip corrupted entries
+		}
+		if entry.Sequence > maxSeq {
+			maxSeq = entry.Sequence
+		}
+	}
+
+	return maxSeq
 }
 
 // Reader provides WAL replay functionality
