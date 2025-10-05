@@ -1,0 +1,71 @@
+version: "1.0"
+provider: aws
+region: us-east-1
+
+# Policy enforcement
+policies:
+  path: ./policies/examples
+
+# Scanning configuration
+scanning:
+  enabled: true
+  adaptive_hours: true
+
+  tiers:
+    critical:
+      description: "Critical production resources"
+      scan_interval: 15m
+      patterns:
+        - type: rds
+          tags:
+            environment: production
+        - type: nat_gateway
+        - type: ec2
+          instance_type_pattern: "*xlarge"
+
+    production:
+      description: "Production resources"
+      scan_interval: 1h
+      patterns:
+        - tags:
+            environment: production
+        - status: running
+
+    standard:
+      description: "Development and staging"
+      scan_interval: 4h
+      patterns:
+        - tags:
+            environment: development
+        - tags:
+            environment: staging
+
+    archive:
+      description: "Rarely changing resources"
+      scan_interval: 24h
+      patterns:
+        - types: [snapshot, ami]
+        - status: stopped
+
+  change_detection:
+    enabled: true
+    check_interval: 5m
+    alert_on:
+      new_untagged_resources: true
+      status_changes: true
+      disappeared_resources: true
+      cost_increases: true
+      tag_changes: [Owner, Environment]
+
+  performance:
+    batch_size: 1000
+    parallel_workers: 4
+    rate_limit: 100
+
+# Behavior rules
+rules:
+  protect_blessed: true
+  notify_on_orphans: true
+  grace_period: 24h
+  auto_delete: false
+  require_approval: true

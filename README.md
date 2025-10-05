@@ -121,15 +121,16 @@ Read-only access:
 
 ```yaml
 # elava.yaml
-providers:
-  aws:
-    region: us-east-1
+version: "1.0"
+provider: aws
+region: us-east-1
 
-storage:
-  path: /var/lib/elava
-  retention: 30d
+# Optional: Policy enforcement with OPA
+policies:
+  path: ./policies/examples  # Omit to disable policy enforcement
 
 scanning:
+  enabled: true
   tiers:
     critical:
       scan_interval: 5m
@@ -141,6 +142,8 @@ scanning:
     standard:
       scan_interval: 1h
 ```
+
+**Policy enforcement is optional** - Elava works with or without OPA policies. Without policies, it only scans and stores observations.
 
 ## What's inside
 

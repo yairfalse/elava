@@ -18,6 +18,7 @@ type Config struct {
 	Resources map[string]types.ResourceSpec `yaml:"resources,omitempty"`
 	Rules     Rules                         `yaml:"rules,omitempty"`
 	Scanning  ScanningConfig                `yaml:"scanning,omitempty"`
+	Policies  PoliciesConfig                `yaml:"policies,omitempty"`
 }
 
 // ScanningConfig defines the tiered scanning strategy
@@ -76,6 +77,11 @@ type Rules struct {
 	GracePeriod     time.Duration `yaml:"grace_period"`
 	AutoDelete      bool          `yaml:"auto_delete"`
 	RequireApproval bool          `yaml:"require_approval"`
+}
+
+// PoliciesConfig defines policy enforcement configuration
+type PoliciesConfig struct {
+	Path string `yaml:"path"`
 }
 
 // LoadConfig loads configuration from file

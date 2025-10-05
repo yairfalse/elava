@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yairfalse/elava/config"
 	"github.com/yairfalse/elava/orchestrator"
+	"github.com/yairfalse/elava/policy"
 	"github.com/yairfalse/elava/providers"
 	"github.com/yairfalse/elava/providers/aws"
 	"github.com/yairfalse/elava/storage"
@@ -89,6 +90,18 @@ func runReconcile(cmd *cobra.Command, args []string) error {
 	// Create orchestrator
 	orch := orchestrator.NewOrchestrator(store)
 	orch = orch.WithScanner(scanner)
+
+	// Load policies if configured
+	if cfg.Policies.Path != "" {
+		fmt.Printf("📋 Loading policies from: %s\n", cfg.Policies.Path)
+		loader := policy.NewPolicyLoader(cfg.Policies.Path, orch.PolicyEngine())
+		if err := loader.LoadPolicies(ctx); err != nil {
+			return fmt.Errorf("failed to load policies: %w", err)
+		}
+		fmt.Println("✅ Policies loaded successfully")
+	} else {
+		fmt.Println("ℹ️  Policy enforcement disabled (no policies configured)")
+	}
 
 	// If dry-run, use enforcer without provider
 	if dryRun {
