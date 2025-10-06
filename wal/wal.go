@@ -33,6 +33,28 @@ type Entry struct {
 	Error      string          `json:"error,omitempty"`
 }
 
+// Config holds WAL configuration
+type Config struct {
+	// Maximum file size before rotation (bytes)
+	MaxFileSize int64
+	// Retention period for old WAL files
+	RetentionDays int
+	// Buffer size for writes
+	BufferSize int
+	// File name prefix
+	FilePrefix string
+}
+
+// DefaultConfig returns sensible default configuration
+func DefaultConfig() Config {
+	return Config{
+		MaxFileSize:   100 * 1024 * 1024, // 100MB
+		RetentionDays: 30,                // 30 days
+		BufferSize:    4096,              // 4KB buffer
+		FilePrefix:    "elava",
+	}
+}
+
 // WAL provides Write-Ahead Logging for audit and recovery
 type WAL struct {
 	mu       sync.Mutex
@@ -40,16 +62,22 @@ type WAL struct {
 	writer   *bufio.Writer
 	sequence int64
 	dir      string
+	config   Config
 }
 
-// Open creates or opens a WAL in the specified directory
+// Open creates or opens a WAL in the specified directory with default config
 func Open(dir string) (*WAL, error) {
+	return OpenWithConfig(dir, DefaultConfig())
+}
+
+// OpenWithConfig creates or opens a WAL with custom configuration
+func OpenWithConfig(dir string, config Config) (*WAL, error) {
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, fmt.Errorf("failed to create WAL directory: %w", err)
 	}
 
 	// Use timestamp in filename for rotation
-	filename := fmt.Sprintf("elava-%s.wal", time.Now().Format("20060102-150405"))
+	filename := fmt.Sprintf("%s-%s.wal", config.FilePrefix, time.Now().Format("20060102-150405"))
 	path := filepath.Join(dir, filename)
 
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600) // #nosec G304 - path is constructed from trusted dir
@@ -59,11 +87,12 @@ func Open(dir string) (*WAL, error) {
 
 	w := &WAL{
 		file:   file,
-		writer: bufio.NewWriter(file),
+		writer: bufio.NewWriterSize(file, config.BufferSize),
 		dir:    dir,
+		config: config,
 	}
 
-	// Load last sequence number
+	// Load last sequence number from existing WAL files
 	w.loadSequence()
 
 	return w, nil
@@ -85,12 +114,21 @@ func (w *WAL) Append(entryType EntryType, resourceID string, data interface{}) e
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.sequence++
+	// Check if rotation needed before writing
+	if w.shouldRotate() {
+		if err := w.rotateFile(); err != nil {
+			return fmt.Errorf("failed to rotate WAL: %w", err)
+		}
+	}
 
+	// Marshal data before incrementing sequence
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("failed to marshal data: %w", err)
 	}
+
+	// Increment sequence only after successful serialization
+	w.sequence++
 
 	entry := Entry{
 		Timestamp:  time.Now(),
@@ -100,7 +138,13 @@ func (w *WAL) Append(entryType EntryType, resourceID string, data interface{}) e
 		Data:       jsonData,
 	}
 
-	return w.writeEntry(entry)
+	// Write entry and rollback sequence on failure
+	if err := w.writeEntry(entry); err != nil {
+		w.sequence--
+		return err
+	}
+
+	return nil
 }
 
 // AppendError adds an error entry to the WAL
@@ -108,12 +152,14 @@ func (w *WAL) AppendError(entryType EntryType, resourceID string, data interface
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.sequence++
-
+	// Marshal data before incrementing sequence
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("failed to marshal data: %w", err)
 	}
+
+	// Increment sequence only after successful serialization
+	w.sequence++
 
 	entry := Entry{
 		Timestamp:  time.Now(),
@@ -124,7 +170,13 @@ func (w *WAL) AppendError(entryType EntryType, resourceID string, data interface
 		Error:      errToLog.Error(),
 	}
 
-	return w.writeEntry(entry)
+	// Write entry and rollback sequence on failure
+	if err := w.writeEntry(entry); err != nil {
+		w.sequence--
+		return err
+	}
+
+	return nil
 }
 
 // writeEntry writes a single entry to the WAL
@@ -150,11 +202,108 @@ func (w *WAL) writeEntry(entry Entry) error {
 	return w.file.Sync()
 }
 
-// loadSequence finds the last sequence number
+// shouldRotate checks if current file exceeds size limit
+func (w *WAL) shouldRotate() bool {
+	// Flush buffer to get accurate file size
+	_ = w.writer.Flush()
+
+	info, err := w.file.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Size() >= w.config.MaxFileSize
+}
+
+// rotateFile closes current file and opens a new one
+func (w *WAL) rotateFile() error {
+	// Flush and close current file
+	if err := w.writer.Flush(); err != nil {
+		return fmt.Errorf("failed to flush before rotation: %w", err)
+	}
+	if err := w.file.Close(); err != nil {
+		return fmt.Errorf("failed to close file before rotation: %w", err)
+	}
+
+	// Open new file
+	filename := fmt.Sprintf("%s-%s.wal", w.config.FilePrefix, time.Now().Format("20060102-150405"))
+	path := filepath.Join(w.dir, filename)
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to open new WAL file: %w", err)
+	}
+
+	// Update WAL file and writer
+	w.file = file
+	w.writer = bufio.NewWriterSize(file, w.config.BufferSize)
+
+	return nil
+}
+
+// loadSequence finds the last sequence number from existing WAL files
 func (w *WAL) loadSequence() {
-	// In production, scan existing WAL files
-	// For now, start at 0
-	w.sequence = 0
+	maxSeq := w.findMaxSequence()
+	w.sequence = maxSeq
+}
+
+// findMaxSequence scans all WAL files to find the highest sequence number
+func (w *WAL) findMaxSequence() int64 {
+	files := w.listWALFiles()
+	if len(files) == 0 {
+		return 0
+	}
+
+	return w.scanFilesForMaxSequence(files)
+}
+
+// listWALFiles returns all WAL files in the directory, sorted by name
+func (w *WAL) listWALFiles() []string {
+	pattern := filepath.Join(w.dir, w.config.FilePrefix+"-*.wal")
+	files, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil
+	}
+	return files
+}
+
+// scanFilesForMaxSequence reads files to find the highest sequence number
+func (w *WAL) scanFilesForMaxSequence(files []string) int64 {
+	maxSeq := int64(0)
+
+	// Start from the last file (most recent) for efficiency
+	for i := len(files) - 1; i >= 0; i-- {
+		fileMax := w.getMaxSequenceFromFile(files[i])
+		if fileMax > maxSeq {
+			maxSeq = fileMax
+		}
+	}
+
+	return maxSeq
+}
+
+// getMaxSequenceFromFile reads a single file and returns its max sequence
+func (w *WAL) getMaxSequenceFromFile(path string) int64 {
+	reader, err := NewReader(path)
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = reader.Close() }()
+
+	maxSeq := int64(0)
+	for {
+		entry, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			continue // Skip corrupted entries
+		}
+		if entry.Sequence > maxSeq {
+			maxSeq = entry.Sequence
+		}
+	}
+
+	return maxSeq
 }
 
 // Reader provides WAL replay functionality
