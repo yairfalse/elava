@@ -229,14 +229,15 @@ func getMaxSequenceFromFile(path string) int64 {
 
 	return scanMaxSequenceInFile(reader)
 }
+
 // HealthStatus represents WAL health
 type HealthStatus struct {
-	Healthy         bool
+	Healthy          bool
 	DiskUsagePercent float64
-	OldestFileAge   time.Duration
-	NeedsRotation   bool
-	NeedsCleanup    bool
-	Issues          []string
+	OldestFileAge    time.Duration
+	NeedsRotation    bool
+	NeedsCleanup     bool
+	Issues           []string
 }
 
 // GetHealth returns WAL health status

@@ -34,31 +34,50 @@ type Coordinator interface {
 	IsResourceClaimed(ctx context.Context, resourceID string) (bool, error)
 }
 
-// Config defines what infrastructure should exist
+// Config defines reconciliation configuration for Day 2 operations
 type Config struct {
-	Version   string               `yaml:"version"`
-	Provider  string               `yaml:"provider"`
-	Region    string               `yaml:"region"`
-	Resources []types.ResourceSpec `yaml:"resources"`
+	Version  string `yaml:"version"`
+	Provider string `yaml:"provider"`
+	Region   string `yaml:"region"`
+
+	// Deprecated: Resources field is deprecated and will be removed in v2.0.
+	// Elava no longer manages infrastructure via config declarations.
+	// This field is ignored. Use tag-based resource tracking instead.
+	Resources []types.ResourceSpec `yaml:"resources,omitempty"`
 }
 
-// Diff represents a difference between current and desired state
+// Diff represents a difference or change detected between observations
+//
+// Note: "Diff" name is legacy from IaC approach. In Day 2 operations, this represents
+// a detected change over time, not a diff from desired state.
+// TODO(v2.0): Rename to "Change" to better reflect Day 2 operations.
 type Diff struct {
 	Type       DiffType        `json:"type"`
 	ResourceID string          `json:"resource_id"`
-	Current    *types.Resource `json:"current,omitempty"`
-	Desired    *types.Resource `json:"desired,omitempty"`
+	Current    *types.Resource `json:"current,omitempty"` // Current state
+	Desired    *types.Resource `json:"desired,omitempty"` // Deprecated: will be renamed to Previous
 	Reason     string          `json:"reason"`
 }
 
-// DiffType categorizes the type of difference found
+// DiffType categorizes the type of change detected
+//
+// Note: Some types are deprecated as part of Day 2 pivot
 type DiffType string
 
 const (
-	DiffMissing   DiffType = "missing"   // Resource should exist but doesn't
-	DiffUnwanted  DiffType = "unwanted"  // Resource exists but shouldn't
-	DiffDrifted   DiffType = "drifted"   // Resource exists but has wrong configuration
-	DiffUnmanaged DiffType = "unmanaged" // Resource exists but isn't managed by Elava
+	// Deprecated: DiffMissing represents IaC mindset (state enforcement)
+	// In Day 2 ops, we don't declare what "should" exist
+	DiffMissing DiffType = "missing"
+
+	// Deprecated: DiffUnwanted represents IaC mindset (state enforcement)
+	// In Day 2 ops, we observe and notify, not enforce deletions
+	DiffUnwanted DiffType = "unwanted"
+
+	// DiffDrifted detects configuration or tag changes (valid for Day 2)
+	DiffDrifted DiffType = "drifted"
+
+	// DiffUnmanaged detects resources not tagged with elava:managed (valid for Day 2)
+	DiffUnmanaged DiffType = "unmanaged"
 )
 
 // Claim represents a resource claim for coordination
