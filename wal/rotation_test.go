@@ -34,7 +34,7 @@ func TestFileRotation_SequenceContinuity(t *testing.T) {
 
 	// Verify all entries are readable across files
 	count := 0
-	files, _ := filepath.Glob(filepath.Join(dir, "elava-*.wal"))
+	files, _ := filepath.Glob(filepath.Join(dir, config.FilePrefix+"-*.wal"))
 	for _, file := range files {
 		reader, _ := NewReader(file)
 		for {
