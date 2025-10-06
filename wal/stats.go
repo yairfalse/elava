@@ -220,13 +220,8 @@ func scanMaxSequenceInFile(reader *Reader) int64 {
 
 // getMaxSequenceFromFile reads file and returns max sequence
 func getMaxSequenceFromFile(path string) int64 {
-	reader, err := NewReader(path)
-	if err != nil {
-		return 0
-	}
-	defer func() { _ = reader.Close() }()
-
-	return scanMaxSequenceInFile(reader)
+	// Delegate to the method version in wal.go to avoid duplication.
+	return defaultWALGetMaxSequenceFromFile(path)
 }
 // HealthStatus represents WAL health
 type HealthStatus struct {
