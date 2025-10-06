@@ -69,7 +69,11 @@ func (w *WAL) collectSequenceStats(stats *Stats) {
 
 	files := w.listWALFiles()
 	stats.FirstSequence = w.findFirstSequence(files)
-	stats.SequenceCount = stats.LastSequence - stats.FirstSequence + 1
+	if stats.LastSequence == 0 {
+		stats.SequenceCount = 0
+	} else {
+		stats.SequenceCount = stats.LastSequence - stats.FirstSequence + 1
+	}
 	stats.WritesPerFile = w.countWritesPerFile(files)
 }
 
