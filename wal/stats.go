@@ -260,6 +260,11 @@ func (w *WAL) GetHealth() HealthStatus {
 // checkDiskUsage checks current file size
 func (w *WAL) checkDiskUsage(health *HealthStatus) {
 	size := w.getCurrentFileSize()
+	if w.config.MaxFileSize <= 0 {
+		health.DiskUsagePercent = 0
+		health.Issues = append(health.Issues, "invalid MaxFileSize configuration (<= 0)")
+		return
+	}
 	health.DiskUsagePercent = float64(size) / float64(w.config.MaxFileSize) * 100
 
 	if health.DiskUsagePercent > 90 {
