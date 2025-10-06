@@ -22,8 +22,8 @@ func TestGetStats_EmptyWAL(t *testing.T) {
 	if stats.LastSequence != 0 {
 		t.Errorf("Expected sequence 0, got %d", stats.LastSequence)
 	}
-	if stats.SequenceCount != 1 {
-		t.Errorf("Expected sequence count 1, got %d", stats.SequenceCount)
+	if stats.SequenceCount != 0 {
+		t.Errorf("Expected sequence count 0 (empty WAL), got %d", stats.SequenceCount)
 	}
 }
 

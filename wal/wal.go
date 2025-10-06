@@ -121,12 +121,14 @@ func (w *WAL) Append(entryType EntryType, resourceID string, data interface{}) e
 		}
 	}
 
-	w.sequence++
-
+	// Marshal data before incrementing sequence
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("failed to marshal data: %w", err)
 	}
+
+	// Increment sequence only after successful serialization
+	w.sequence++
 
 	entry := Entry{
 		Timestamp:  time.Now(),
@@ -136,7 +138,13 @@ func (w *WAL) Append(entryType EntryType, resourceID string, data interface{}) e
 		Data:       jsonData,
 	}
 
-	return w.writeEntry(entry)
+	// Write entry and rollback sequence on failure
+	if err := w.writeEntry(entry); err != nil {
+		w.sequence--
+		return err
+	}
+
+	return nil
 }
 
 // AppendError adds an error entry to the WAL
@@ -144,12 +152,14 @@ func (w *WAL) AppendError(entryType EntryType, resourceID string, data interface
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.sequence++
-
+	// Marshal data before incrementing sequence
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("failed to marshal data: %w", err)
 	}
+
+	// Increment sequence only after successful serialization
+	w.sequence++
 
 	entry := Entry{
 		Timestamp:  time.Now(),
@@ -160,7 +170,13 @@ func (w *WAL) AppendError(entryType EntryType, resourceID string, data interface
 		Error:      errToLog.Error(),
 	}
 
-	return w.writeEntry(entry)
+	// Write entry and rollback sequence on failure
+	if err := w.writeEntry(entry); err != nil {
+		w.sequence--
+		return err
+	}
+
+	return nil
 }
 
 // writeEntry writes a single entry to the WAL

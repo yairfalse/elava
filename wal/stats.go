@@ -1,6 +1,7 @@
 package wal
 
 import (
+	"io"
 	"path/filepath"
 	"time"
 )
@@ -199,14 +200,14 @@ func findLastSequenceInFiles(files []string) int64 {
 	return maxSeq
 }
 
-// scanMaxSequenceInFile iterates through a WALReader and returns the max sequence, skipping corrupted entries.
-func scanMaxSequenceInFile(reader WALReader) int64 {
+// scanMaxSequenceInFile iterates through a Reader and returns the max sequence, skipping corrupted entries.
+func scanMaxSequenceInFile(reader *Reader) int64 {
 	maxSeq := int64(0)
 	for {
 		entry, err := reader.Next()
 		if err != nil {
 			// If EOF, break; if other error, skip and continue.
-			if err == EOF {
+			if err == io.EOF {
 				break
 			}
 			continue
