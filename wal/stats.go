@@ -156,7 +156,11 @@ func GetStatsFromDir(dir string, config Config) Stats {
 	// Find sequence range
 	stats.FirstSequence = findFirstSequenceInFiles(files)
 	stats.LastSequence = findLastSequenceInFiles(files)
-	stats.SequenceCount = stats.LastSequence - stats.FirstSequence + 1
+	if len(files) == 0 || stats.LastSequence < stats.FirstSequence {
+		stats.SequenceCount = 0
+	} else {
+		stats.SequenceCount = stats.LastSequence - stats.FirstSequence + 1
+	}
 
 	return stats
 }
