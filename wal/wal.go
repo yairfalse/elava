@@ -114,6 +114,13 @@ func (w *WAL) Append(entryType EntryType, resourceID string, data interface{}) e
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	// Check if rotation needed before writing
+	if w.shouldRotate() {
+		if err := w.rotateFile(); err != nil {
+			return fmt.Errorf("failed to rotate WAL: %w", err)
+		}
+	}
+
 	w.sequence++
 
 	jsonData, err := json.Marshal(data)
@@ -177,6 +184,44 @@ func (w *WAL) writeEntry(entry Entry) error {
 	}
 
 	return w.file.Sync()
+}
+
+// shouldRotate checks if current file exceeds size limit
+func (w *WAL) shouldRotate() bool {
+	// Flush buffer to get accurate file size
+	_ = w.writer.Flush()
+
+	info, err := w.file.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Size() >= w.config.MaxFileSize
+}
+
+// rotateFile closes current file and opens a new one
+func (w *WAL) rotateFile() error {
+	// Flush and close current file
+	if err := w.writer.Flush(); err != nil {
+		return fmt.Errorf("failed to flush before rotation: %w", err)
+	}
+	if err := w.file.Close(); err != nil {
+		return fmt.Errorf("failed to close file before rotation: %w", err)
+	}
+
+	// Open new file
+	filename := fmt.Sprintf("%s-%s.wal", w.config.FilePrefix, time.Now().Format("20060102-150405"))
+	path := filepath.Join(w.dir, filename)
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to open new WAL file: %w", err)
+	}
+
+	// Update WAL file and writer
+	w.file = file
+	w.writer = bufio.NewWriterSize(file, w.config.BufferSize)
+
+	return nil
 }
 
 // loadSequence finds the last sequence number from existing WAL files
