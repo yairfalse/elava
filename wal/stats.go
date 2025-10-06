@@ -21,7 +21,6 @@ type Stats struct {
 	LastSequence  int64
 
 	// Performance metrics
-	LastWriteTime time.Time
 	WritesPerFile map[string]int
 }
 
