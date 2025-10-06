@@ -195,6 +195,25 @@ func findLastSequenceInFiles(files []string) int64 {
 	return maxSeq
 }
 
+// scanMaxSequenceInFile iterates through a WALReader and returns the max sequence, skipping corrupted entries.
+func scanMaxSequenceInFile(reader WALReader) int64 {
+	maxSeq := int64(0)
+	for {
+		entry, err := reader.Next()
+		if err != nil {
+			// If EOF, break; if other error, skip and continue.
+			if err == EOF {
+				break
+			}
+			continue
+		}
+		if entry.Sequence > maxSeq {
+			maxSeq = entry.Sequence
+		}
+	}
+	return maxSeq
+}
+
 // getMaxSequenceFromFile reads file and returns max sequence
 func getMaxSequenceFromFile(path string) int64 {
 	reader, err := NewReader(path)
@@ -203,20 +222,8 @@ func getMaxSequenceFromFile(path string) int64 {
 	}
 	defer func() { _ = reader.Close() }()
 
-	maxSeq := int64(0)
-	for {
-		entry, err := reader.Next()
-		if err != nil {
-			break
-		}
-		if entry.Sequence > maxSeq {
-			maxSeq = entry.Sequence
-		}
-	}
-
-	return maxSeq
+	return scanMaxSequenceInFile(reader)
 }
-
 // HealthStatus represents WAL health
 type HealthStatus struct {
 	Healthy         bool
