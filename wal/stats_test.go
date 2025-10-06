@@ -30,12 +30,17 @@ func TestGetStats_EmptyWAL(t *testing.T) {
 func TestGetStats_WithEntries(t *testing.T) {
 	dir := t.TempDir()
 
-	w, _ := Open(dir)
+	w, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Failed to open WAL: %v", err)
+	}
 	defer func() { _ = w.Close() }()
 
 	// Write some entries
 	for i := 0; i < 10; i++ {
-		_ = w.Append(EntryObserved, "resource", nil)
+		if err := w.Append(EntryObserved, "resource", nil); err != nil {
+			t.Fatalf("Failed to append entry %d: %v", i, err)
+		}
 	}
 
 	stats := w.GetStats()
@@ -58,12 +63,17 @@ func TestGetStats_MultipleFiles(t *testing.T) {
 	config := DefaultConfig()
 	config.MaxFileSize = 200
 
-	w, _ := OpenWithConfig(dir, config)
+	w, err := OpenWithConfig(dir, config)
+	if err != nil {
+		t.Fatalf("Failed to open WAL: %v", err)
+	}
 
 	// Write enough to trigger rotation (each entry ~100 bytes with JSON)
 	for i := 0; i < 10; i++ {
 		largeData := make([]byte, 80)
-		_ = w.Append(EntryObserved, "resource", largeData)
+		if err := w.Append(EntryObserved, "resource", largeData); err != nil {
+			t.Fatalf("Failed to append entry %d: %v", i, err)
+		}
 	}
 	defer func() { _ = w.Close() }()
 
@@ -85,11 +95,18 @@ func TestGetStatsFromDir(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create and close a WAL with entries
-	w, _ := Open(dir)
-	for i := 0; i < 5; i++ {
-		_ = w.Append(EntryObserved, "resource", nil)
+	w, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Failed to open WAL: %v", err)
 	}
-	_ = w.Close()
+	for i := 0; i < 5; i++ {
+		if err := w.Append(EntryObserved, "resource", nil); err != nil {
+			t.Fatalf("Failed to append entry %d: %v", i, err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Failed to close WAL: %v", err)
+	}
 
 	// Get stats without opening WAL
 	config := DefaultConfig()
@@ -123,12 +140,17 @@ func TestGetStatsFromDir_EmptyDirectory(t *testing.T) {
 func TestGetHealth_Healthy(t *testing.T) {
 	dir := t.TempDir()
 
-	w, _ := Open(dir)
+	w, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Failed to open WAL: %v", err)
+	}
 	defer func() { _ = w.Close() }()
 
 	// Write a few entries (well below limits)
 	for i := 0; i < 5; i++ {
-		_ = w.Append(EntryObserved, "resource", nil)
+		if err := w.Append(EntryObserved, "resource", nil); err != nil {
+			t.Fatalf("Failed to append entry %d: %v", i, err)
+		}
 	}
 
 	health := w.GetHealth()
@@ -151,12 +173,17 @@ func TestGetHealth_NeedsRotation(t *testing.T) {
 	config := DefaultConfig()
 	config.MaxFileSize = 100 // Very small
 
-	w, _ := OpenWithConfig(dir, config)
+	w, err := OpenWithConfig(dir, config)
+	if err != nil {
+		t.Fatalf("Failed to open WAL: %v", err)
+	}
 	defer func() { _ = w.Close() }()
 
 	// Write enough to exceed limit
 	largeData := make([]byte, 150)
-	_ = w.Append(EntryObserved, "resource", largeData)
+	if err := w.Append(EntryObserved, "resource", largeData); err != nil {
+		t.Fatalf("Failed to append entry: %v", err)
+	}
 
 	health := w.GetHealth()
 
@@ -171,11 +198,16 @@ func TestGetHealth_NeedsRotation(t *testing.T) {
 func TestCountEntriesInFile(t *testing.T) {
 	dir := t.TempDir()
 
-	w, _ := Open(dir)
+	w, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Failed to open WAL: %v", err)
+	}
 
 	// Write known number of entries
 	for i := 0; i < 7; i++ {
-		_ = w.Append(EntryObserved, "resource", nil)
+		if err := w.Append(EntryObserved, "resource", nil); err != nil {
+			t.Fatalf("Failed to append entry %d: %v", i, err)
+		}
 	}
 
 	files := w.listWALFiles()
@@ -188,7 +220,9 @@ func TestCountEntriesInFile(t *testing.T) {
 		t.Errorf("Expected 7 entries, got %d", count)
 	}
 
-	_ = w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("Failed to close WAL: %v", err)
+	}
 }
 
 func TestWritesPerFile(t *testing.T) {
@@ -198,13 +232,18 @@ func TestWritesPerFile(t *testing.T) {
 	config := DefaultConfig()
 	config.MaxFileSize = 200
 
-	w, _ := OpenWithConfig(dir, config)
+	w, err := OpenWithConfig(dir, config)
+	if err != nil {
+		t.Fatalf("Failed to open WAL: %v", err)
+	}
 
 	// Write enough to trigger rotation (each entry ~100 bytes with JSON)
 	numWrites := 10
 	for i := 0; i < numWrites; i++ {
 		largeData := make([]byte, 80)
-		_ = w.Append(EntryObserved, "r", largeData)
+		if err := w.Append(EntryObserved, "r", largeData); err != nil {
+			t.Fatalf("Failed to append entry %d: %v", i, err)
+		}
 	}
 
 	stats := w.GetStats()
@@ -222,7 +261,9 @@ func TestWritesPerFile(t *testing.T) {
 		t.Errorf("Expected %d total writes, got %d", numWrites, totalWrites)
 	}
 
-	_ = w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("Failed to close WAL: %v", err)
+	}
 }
 
 func TestFileTimeRange(t *testing.T) {
@@ -234,17 +275,26 @@ func TestFileTimeRange(t *testing.T) {
 	config := DefaultConfig()
 	config.MaxFileSize = 200
 
-	w, _ := OpenWithConfig(dir, config)
+	w, err := OpenWithConfig(dir, config)
+	if err != nil {
+		t.Fatalf("Failed to open WAL: %v", err)
+	}
 
 	// Write entries to trigger rotation
 	for i := 0; i < 5; i++ {
 		largeData := make([]byte, 80)
-		_ = w.Append(EntryObserved, "resource", largeData)
+		if err := w.Append(EntryObserved, "resource", largeData); err != nil {
+			t.Fatalf("Failed to append entry %d: %v", i, err)
+		}
 		if i == 2 {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-	defer func() { _ = w.Close() }()
+	defer func() {
+		if err := w.Close(); err != nil {
+			t.Errorf("Failed to close WAL: %v", err)
+		}
+	}()
 
 	stats := w.GetStats()
 
