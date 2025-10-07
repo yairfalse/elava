@@ -2,10 +2,12 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/yairfalse/elava/types"
+	"go.etcd.io/bbolt"
 )
 
 func TestMVCCStorage_RecordObservation(t *testing.T) {
@@ -458,5 +460,162 @@ func TestMVCCStorage_CompactWithContext_Cancellation(t *testing.T) {
 	}
 	if err != context.Canceled {
 		t.Errorf("Expected context.Canceled error, got %v", err)
+	}
+}
+
+func TestMVCCStorage_GetLatestResource(t *testing.T) {
+	tmpDir := t.TempDir()
+	storage, err := NewMVCCStorage(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
+	defer func() { _ = storage.Close() }()
+
+	// Create initial resource
+	resource := types.Resource{
+		ID:       "i-123",
+		Type:     "ec2",
+		Status:   "running",
+		Provider: "aws",
+		Tags:     types.Tags{ElavaOwner: "team-web"},
+	}
+
+	if _, err := storage.RecordObservation(resource); err != nil {
+		t.Fatalf("Failed to record observation: %v", err)
+	}
+
+	// Update the resource
+	resource.Status = "stopped"
+	if _, err := storage.RecordObservation(resource); err != nil {
+		t.Fatalf("Failed to record observation: %v", err)
+	}
+
+	// Get latest resource
+	latest, err := storage.GetLatestResource("i-123")
+	if err != nil {
+		t.Fatalf("GetLatestResource failed: %v", err)
+	}
+
+	if latest.ID != "i-123" {
+		t.Errorf("ResourceID = %s, want i-123", latest.ID)
+	}
+	if latest.Status != "stopped" {
+		t.Errorf("Status = %s, want stopped (latest)", latest.Status)
+	}
+
+	// Test non-existent resource
+	_, err = storage.GetLatestResource("i-nonexistent")
+	if err == nil {
+		t.Error("Expected error for non-existent resource")
+	}
+
+	// Test disappeared resource
+	if _, err := storage.RecordDisappearance("i-123"); err != nil {
+		t.Fatalf("Failed to record disappearance: %v", err)
+	}
+
+	_, err = storage.GetLatestResource("i-123")
+	if err == nil {
+		t.Error("Expected error for disappeared resource")
+	}
+}
+
+func TestMVCCStorage_DB(t *testing.T) {
+	tmpDir := t.TempDir()
+	storage, err := NewMVCCStorage(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
+	defer func() { _ = storage.Close() }()
+
+	// Test DB accessor returns valid database
+	db := storage.DB()
+	if db == nil {
+		t.Error("DB() returned nil")
+	}
+
+	// Verify we can use it
+	err = db.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket(bucketMeta)
+		if bucket == nil {
+			return fmt.Errorf("meta bucket not found")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Errorf("Failed to use DB: %v", err)
+	}
+}
+
+func TestBytesToInt64(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+		expected int64
+	}{
+		{"zero", []byte("0"), 0},
+		{"positive", []byte("12345"), 12345},
+		{"large", []byte("9223372036854775807"), 9223372036854775807},
+		{"invalid", []byte("not-a-number"), 0},
+		{"empty", []byte(""), 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := bytesToInt64(tt.input)
+			if result != tt.expected {
+				t.Errorf("bytesToInt64(%s) = %d, want %d", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestInt64ToBytes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    int64
+		expected string
+	}{
+		{"zero", 0, "0"},
+		{"positive", 12345, "12345"},
+		{"negative", -100, "-100"},
+		{"large", 9223372036854775807, "9223372036854775807"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := int64ToBytes(tt.input)
+			if string(result) != tt.expected {
+				t.Errorf("int64ToBytes(%d) = %s, want %s", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestParseObservationKey(t *testing.T) {
+	tests := []struct {
+		name        string
+		key         []byte
+		expectedRev int64
+		expectedID  string
+	}{
+		{"valid", makeObservationKey(123, "i-abc"), 123, "i-abc"},
+		{"large rev", makeObservationKey(9999999999999999, "resource-1"), 9999999999999999, "resource-1"},
+		{"empty id", makeObservationKey(1, ""), 1, ""},
+		{"too short", []byte("123"), 0, ""},
+		{"no separator", []byte("0000000000000001"), 0, ""},
+		{"invalid rev", []byte("not-a-number:id"), 0, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rev, id := parseObservationKey(tt.key)
+			if rev != tt.expectedRev {
+				t.Errorf("revision = %d, want %d", rev, tt.expectedRev)
+			}
+			if id != tt.expectedID {
+				t.Errorf("id = %s, want %s", id, tt.expectedID)
+			}
+		})
 	}
 }

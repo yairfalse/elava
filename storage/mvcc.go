@@ -334,45 +334,11 @@ func (s *MVCCStorage) GetLatestResource(resourceID string) (*types.Resource, err
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var latestResource *types.Resource
-	var latestRev int64
+	latestResource, latestRev, tombstoneRev := s.scanForLatestResource(resourceID)
 
-	err := s.db.View(func(tx *bbolt.Tx) error {
-		bucket := tx.Bucket(bucketObservations)
-		c := bucket.Cursor()
-
-		// Use a reverse cursor to efficiently find the latest revision for this resource
-		// We assume observation keys are formatted as [revision]_[resourceID]
-		// So we seek to the highest possible revision for this resource
-		seekKeyPrefix := []byte("_" + resourceID)
-		for k, v := c.Last(); k != nil; k, v = c.Prev() {
-			rev, id := parseObservationKey(k)
-			if id != resourceID {
-				continue
-			}
-			// Check if it's a tombstone
-			var tombstone Tombstone
-			if err := json.Unmarshal(v, &tombstone); err == nil && tombstone.Tombstone {
-				// Resource was marked as disappeared
-				continue
-			}
-
-			// Try to unmarshal as full resource
-			var resource types.Resource
-			if err := json.Unmarshal(v, &resource); err != nil {
-				continue // Skip corrupted entries
-			}
-
-			latestResource = &resource
-			latestRev = rev
-			break // Found the latest revision for this resource
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
+	// If tombstone exists after the latest resource, resource has disappeared
+	if tombstoneRev > latestRev {
+		return nil, fmt.Errorf("resource %s not found", resourceID)
 	}
 
 	if latestResource == nil {
@@ -381,6 +347,71 @@ func (s *MVCCStorage) GetLatestResource(resourceID string) (*types.Resource, err
 
 	return latestResource, nil
 }
+
+// scanForLatestResource scans database for the latest version of a resource using reverse cursor for efficiency
+func (s *MVCCStorage) scanForLatestResource(resourceID string) (*types.Resource, int64, int64) {
+	var latestResource *types.Resource
+	var latestRev int64
+	var tombstoneRev int64
+
+	_ = s.db.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket(bucketObservations)
+		c := bucket.Cursor()
+
+		// Use reverse cursor to efficiently find the latest revision
+		// Keys are formatted as [16-digit-revision]:[resourceID]
+		for k, v := c.Last(); k != nil; k, v = c.Prev() {
+			rev, id := parseObservationKey(k)
+			if id != resourceID {
+				continue
+			}
+
+			if s.isTombstone(v) {
+				tombstoneRev = max(tombstoneRev, rev)
+				continue
+			}
+
+			// Found the latest non-tombstone revision
+			if latestResource == nil {
+				if resource := s.unmarshalResource(v); resource != nil {
+					latestResource = resource
+					latestRev = rev
+					// If we haven't seen a tombstone yet, we can break early
+					if tombstoneRev == 0 {
+						break
+					}
+				}
+			}
+		}
+		return nil
+	})
+
+	return latestResource, latestRev, tombstoneRev
+}
+
+// isTombstone checks if the data represents a tombstone marker
+func (s *MVCCStorage) isTombstone(data []byte) bool {
+	var tombstone Tombstone
+	return json.Unmarshal(data, &tombstone) == nil && tombstone.Tombstone
+}
+
+// unmarshalResource attempts to unmarshal resource data, returns nil on error
+func (s *MVCCStorage) unmarshalResource(data []byte) *types.Resource {
+	var resource types.Resource
+	if err := json.Unmarshal(data, &resource); err != nil {
+		return nil
+	}
+	return &resource
+}
+
+// max returns the larger of two int64 values
+func max(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 
 // GetResourcesByOwner returns all resources for an owner
 func (s *MVCCStorage) GetResourcesByOwner(owner string) ([]*ResourceState, error) {
@@ -557,11 +588,20 @@ func makeObservationKey(rev int64, resourceID string) []byte {
 }
 
 func parseObservationKey(key []byte) (int64, string) {
-	// Simple parsing - in production would be more robust
+	keyStr := string(key)
+
+	// Key format: 16-digit zero-padded revision + ":" + resource ID
+	if len(keyStr) < 17 || keyStr[16] != ':' {
+		return 0, "" // Invalid key format
+	}
+
 	var rev int64
-	var id string
-	_, _ = fmt.Sscanf(string(key), "%016d:%s", &rev, &id)
-	return rev, id
+	n, err := fmt.Sscanf(keyStr[:16], "%016d", &rev)
+	if err != nil || n != 1 {
+		return 0, "" // Failed to parse revision
+	}
+
+	return rev, keyStr[17:]
 }
 
 func int64ToBytes(n int64) []byte {
@@ -587,12 +627,13 @@ func (s *MVCCStorage) Stats() (resourceCount int, currentRev int64, dbSizeBytes 
 	resourceCount = s.index.Len()
 	currentRev = s.currentRev
 
-	// Get database statistics for monitoring
-	stats := s.db.Stats()
-	// Use FreeAlloc as a proxy for size (bytes allocated in free pages)
-	dbSizeBytes = int64(stats.FreeAlloc)
-	if dbSizeBytes == 0 {
-		dbSizeBytes = 4096 // Default non-zero value
+	// Get actual database file size
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		dbSizeBytes = tx.Size()
+		return nil
+	})
+	if err != nil || dbSizeBytes == 0 {
+		dbSizeBytes = 4096 // Default non-zero value on error
 	}
 
 	return resourceCount, currentRev, dbSizeBytes
@@ -629,19 +670,56 @@ func (s *MVCCStorage) CompactWithContext(ctx context.Context, keepRevisions int6
 func (s *MVCCStorage) performCompaction(ctx context.Context, cutoff int64) (int, error) {
 	deletedCount := 0
 
-	return deletedCount, s.db.Update(func(tx *bbolt.Tx) error {
+	// Track resource IDs that were completely compacted (all revisions removed)
+	resourceRevisions := make(map[string]int64)
+
+	err := s.db.Update(func(tx *bbolt.Tx) error {
 		if err := s.checkContext(ctx); err != nil {
 			return err
 		}
 
-		toDelete, err := s.findKeysToDelete(ctx, tx, cutoff)
+		toDelete, revisionMap, err := s.findKeysToDelete(ctx, tx, cutoff)
 		if err != nil {
 			return err
+		}
+
+		// Update resourceRevisions map with remaining revisions per resource
+		for id, latestRev := range revisionMap {
+			resourceRevisions[id] = latestRev
 		}
 
 		deletedCount, err = s.deleteKeys(ctx, tx, toDelete)
 		return err
 	})
+
+	if err != nil {
+		return deletedCount, err
+	}
+
+	// Clean up index entries for resources that have no revisions >= cutoff
+	s.cleanupIndexAfterCompaction(resourceRevisions, cutoff)
+
+	return deletedCount, nil
+}
+
+// cleanupIndexAfterCompaction removes index entries for resources with no remaining revisions
+func (s *MVCCStorage) cleanupIndexAfterCompaction(resourceRevisions map[string]int64, cutoff int64) {
+	toRemove := make([]*ResourceState, 0)
+
+	s.index.Ascend(func(state *ResourceState) bool {
+		latestRev, exists := resourceRevisions[state.ResourceID]
+		// If resource wasn't seen in compaction or its latest revision is before cutoff,
+		// it means all its data was compacted away
+		if !exists || latestRev < cutoff {
+			toRemove = append(toRemove, state)
+		}
+		return true
+	})
+
+	// Remove stale index entries
+	for _, state := range toRemove {
+		s.index.Delete(state)
+	}
 }
 
 // checkContext checks if context is cancelled
@@ -654,12 +732,13 @@ func (s *MVCCStorage) checkContext(ctx context.Context) error {
 	}
 }
 
-// findKeysToDelete identifies keys to delete during compaction
-func (s *MVCCStorage) findKeysToDelete(ctx context.Context, tx *bbolt.Tx, cutoff int64) ([][]byte, error) {
+// findKeysToDelete identifies keys to delete during compaction and tracks remaining revisions
+func (s *MVCCStorage) findKeysToDelete(ctx context.Context, tx *bbolt.Tx, cutoff int64) ([][]byte, map[string]int64, error) {
 	bucket := tx.Bucket(bucketObservations)
 	c := bucket.Cursor()
 
 	var toDelete [][]byte
+	resourceRevisions := make(map[string]int64) // Track latest revision per resource
 	processed := 0
 
 	for k, _ := c.First(); k != nil; k, _ = c.Next() {
@@ -667,17 +746,22 @@ func (s *MVCCStorage) findKeysToDelete(ctx context.Context, tx *bbolt.Tx, cutoff
 		if processed%100 == 0 {
 			if err := s.checkContext(ctx); err != nil {
 				s.logger.WithContext(ctx).Warn().Int("processed", processed).Msg("compaction cancelled")
-				return nil, err
+				return nil, nil, err
 			}
 		}
 
-		rev, _ := parseObservationKey(k)
+		rev, id := parseObservationKey(k)
 		if rev < cutoff {
 			toDelete = append(toDelete, k)
+		} else {
+			// Track the latest revision for each resource that survives compaction
+			if existing, ok := resourceRevisions[id]; !ok || rev > existing {
+				resourceRevisions[id] = rev
+			}
 		}
 	}
 
-	return toDelete, nil
+	return toDelete, resourceRevisions, nil
 }
 
 // deleteKeys removes the identified keys
