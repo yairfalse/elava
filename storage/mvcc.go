@@ -397,14 +397,6 @@ func (s *MVCCStorage) unmarshalResource(data []byte) *types.Resource {
 	return &resource
 }
 
-// max returns the larger of two int64 values
-func max(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // GetResourcesByOwner returns all resources for an owner
 func (s *MVCCStorage) GetResourcesByOwner(owner string) ([]*ResourceState, error) {
 	s.mu.RLock()
