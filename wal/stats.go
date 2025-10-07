@@ -21,7 +21,6 @@ type Stats struct {
 	LastSequence  int64
 
 	// Performance metrics
-	LastWriteTime time.Time
 	WritesPerFile map[string]int
 }
 
@@ -70,10 +69,10 @@ func (w *WAL) collectSequenceStats(stats *Stats) {
 
 	files := w.listWALFiles()
 	stats.FirstSequence = w.findFirstSequence(files)
-	if stats.LastSequence == 0 {
-		stats.SequenceCount = 0
-	} else {
+	if stats.LastSequence >= stats.FirstSequence {
 		stats.SequenceCount = stats.LastSequence - stats.FirstSequence + 1
+	} else {
+		stats.SequenceCount = 0
 	}
 	stats.WritesPerFile = w.countWritesPerFile(files)
 }
@@ -221,13 +220,8 @@ func scanMaxSequenceInFile(reader *Reader) int64 {
 
 // getMaxSequenceFromFile reads file and returns max sequence
 func getMaxSequenceFromFile(path string) int64 {
-	reader, err := NewReader(path)
-	if err != nil {
-		return 0
-	}
-	defer func() { _ = reader.Close() }()
-
-	return scanMaxSequenceInFile(reader)
+	// Delegate to the method version in wal.go to avoid duplication.
+	return defaultWALGetMaxSequenceFromFile(path)
 }
 
 // HealthStatus represents WAL health
@@ -262,6 +256,11 @@ func (w *WAL) GetHealth() HealthStatus {
 // checkDiskUsage checks current file size
 func (w *WAL) checkDiskUsage(health *HealthStatus) {
 	size := w.getCurrentFileSize()
+	if w.config.MaxFileSize <= 0 {
+		health.DiskUsagePercent = 0
+		health.Issues = append(health.Issues, "invalid MaxFileSize configuration (<= 0)")
+		return
+	}
 	health.DiskUsagePercent = float64(size) / float64(w.config.MaxFileSize) * 100
 
 	if health.DiskUsagePercent > 90 {

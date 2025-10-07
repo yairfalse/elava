@@ -57,6 +57,7 @@ func (s *MVCCStorage) StoreChangeEventBatch(ctx context.Context, events []Change
 		}
 	}
 	return storeAnalyzerEventBatch(s, ctx, bucketChanges, events)
+
 }
 
 // StoreDriftEventBatch stores multiple drift events atomically
@@ -75,6 +76,7 @@ func (s *MVCCStorage) StoreDriftEventBatch(ctx context.Context, events []DriftEv
 		}
 	}
 	return storeAnalyzerEventBatch(s, ctx, bucketDrift, events)
+
 }
 
 // StoreWastePatternBatch stores multiple waste patterns atomically
@@ -93,10 +95,11 @@ func (s *MVCCStorage) StoreWastePatternBatch(ctx context.Context, patterns []Was
 		}
 	}
 	return storeAnalyzerEventBatch(s, ctx, bucketWaste, patterns)
+
 }
 
 // storeAnalyzerEventBatch stores multiple events in a single transaction using generics
-func storeAnalyzerEventBatch[T any](s *MVCCStorage, ctx context.Context, bucketName []byte, events []T) error {
+func storeAnalyzerEventBatch[T any](s *MVCCStorage, bucketName []byte, events []T) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -184,7 +187,6 @@ func (s *MVCCStorage) getTime() time.Time {
 // Uses timestamp (nanoseconds) + revision for uniqueness and ordering
 func makeAnalyzerEventKey(timestamp, revision int64) []byte {
 	key := make([]byte, 16)
-	// Both timestamp and revision are always positive, safe to convert
 	binary.BigEndian.PutUint64(key[0:8], uint64(timestamp)) //nolint:gosec // timestamp is always positive
 	binary.BigEndian.PutUint64(key[8:16], uint64(revision)) //nolint:gosec // revision is always positive
 	return key

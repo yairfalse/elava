@@ -412,6 +412,7 @@ func max(a, b int64) int64 {
 	return b
 }
 
+
 // GetResourcesByOwner returns all resources for an owner
 func (s *MVCCStorage) GetResourcesByOwner(owner string) ([]*ResourceState, error) {
 	s.mu.RLock()
