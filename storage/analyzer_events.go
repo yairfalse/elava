@@ -56,7 +56,7 @@ func (s *MVCCStorage) StoreChangeEventBatch(ctx context.Context, events []Change
 			return fmt.Errorf("invalid change event at index %d: %w", i, err)
 		}
 	}
-	return storeAnalyzerEventBatch(s, ctx, bucketChanges, events)
+	return storeAnalyzerEventBatch(s, bucketChanges, events)
 
 }
 
@@ -75,7 +75,7 @@ func (s *MVCCStorage) StoreDriftEventBatch(ctx context.Context, events []DriftEv
 			return fmt.Errorf("invalid drift event at index %d: %w", i, err)
 		}
 	}
-	return storeAnalyzerEventBatch(s, ctx, bucketDrift, events)
+	return storeAnalyzerEventBatch(s, bucketDrift, events)
 
 }
 
@@ -94,7 +94,7 @@ func (s *MVCCStorage) StoreWastePatternBatch(ctx context.Context, patterns []Was
 			return fmt.Errorf("invalid waste pattern at index %d: %w", i, err)
 		}
 	}
-	return storeAnalyzerEventBatch(s, ctx, bucketWaste, patterns)
+	return storeAnalyzerEventBatch(s, bucketWaste, patterns)
 
 }
 

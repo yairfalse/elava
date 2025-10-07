@@ -199,29 +199,29 @@ func findLastSequenceInFiles(files []string) int64 {
 	return maxSeq
 }
 
-// scanMaxSequenceInFile iterates through a Reader and returns the max sequence, skipping corrupted entries.
-func scanMaxSequenceInFile(reader *Reader) int64 {
+// getMaxSequenceFromFile reads file and returns max sequence
+func getMaxSequenceFromFile(path string) int64 {
+	reader, err := NewReader(path)
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = reader.Close() }()
+
 	maxSeq := int64(0)
 	for {
 		entry, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
-			// If EOF, break; if other error, skip and continue.
-			if err == io.EOF {
-				break
-			}
-			continue
+			continue // Skip corrupted entries
 		}
 		if entry.Sequence > maxSeq {
 			maxSeq = entry.Sequence
 		}
 	}
-	return maxSeq
-}
 
-// getMaxSequenceFromFile reads file and returns max sequence
-func getMaxSequenceFromFile(path string) int64 {
-	// Delegate to the method version in wal.go to avoid duplication.
-	return defaultWALGetMaxSequenceFromFile(path)
+	return maxSeq
 }
 
 // HealthStatus represents WAL health
