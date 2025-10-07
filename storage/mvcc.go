@@ -341,26 +341,31 @@ func (s *MVCCStorage) GetLatestResource(resourceID string) (*types.Resource, err
 		bucket := tx.Bucket(bucketObservations)
 		c := bucket.Cursor()
 
-		// Scan for this resource and find the latest revision
-		for k, v := c.First(); k != nil; k, v = c.Next() {
+		// Use a reverse cursor to efficiently find the latest revision for this resource
+		// We assume observation keys are formatted as [revision]_[resourceID]
+		// So we seek to the highest possible revision for this resource
+		seekKeyPrefix := []byte("_" + resourceID)
+		for k, v := c.Last(); k != nil; k, v = c.Prev() {
 			rev, id := parseObservationKey(k)
-			if id == resourceID && rev > latestRev {
-				// Check if it's a tombstone
-				var tombstone Tombstone
-				if err := json.Unmarshal(v, &tombstone); err == nil && tombstone.Tombstone {
-					// Resource was marked as disappeared
-					continue
-				}
-
-				// Try to unmarshal as full resource
-				var resource types.Resource
-				if err := json.Unmarshal(v, &resource); err != nil {
-					continue // Skip corrupted entries
-				}
-
-				latestResource = &resource
-				latestRev = rev
+			if id != resourceID {
+				continue
 			}
+			// Check if it's a tombstone
+			var tombstone Tombstone
+			if err := json.Unmarshal(v, &tombstone); err == nil && tombstone.Tombstone {
+				// Resource was marked as disappeared
+				continue
+			}
+
+			// Try to unmarshal as full resource
+			var resource types.Resource
+			if err := json.Unmarshal(v, &resource); err != nil {
+				continue // Skip corrupted entries
+			}
+
+			latestResource = &resource
+			latestRev = rev
+			break // Found the latest revision for this resource
 		}
 
 		return nil
