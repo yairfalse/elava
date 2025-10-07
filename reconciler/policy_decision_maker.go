@@ -103,7 +103,7 @@ func (dm *PolicyEnforcingDecisionMaker) decideDisappeared(ctx context.Context, c
 	// Check if resource was blessed (protected)
 	if change.Previous.IsBlessed() {
 		return &types.Decision{
-			Action:     "alert",
+			Action:     types.ActionAlert,
 			ResourceID: change.ResourceID,
 			Reason:     "ALERT: Blessed (protected) resource has disappeared unexpectedly!",
 			Metadata: map[string]any{
@@ -116,7 +116,7 @@ func (dm *PolicyEnforcingDecisionMaker) decideDisappeared(ctx context.Context, c
 
 	// For non-blessed resources, notify about disappearance
 	return &types.Decision{
-		Action:     "notify",
+		Action:     types.ActionNotify,
 		ResourceID: change.ResourceID,
 		Reason:     fmt.Sprintf("Resource disappeared: %s", change.Details),
 		Metadata: map[string]any{
@@ -144,14 +144,14 @@ func (dm *PolicyEnforcingDecisionMaker) decideStatusChanged(ctx context.Context,
 	policyResult, err := dm.evaluatePolicy(ctx, *change.Current)
 	if err != nil {
 		return &types.Decision{
-			Action:     "notify",
+			Action:     types.ActionNotify,
 			ResourceID: change.ResourceID,
 			Reason:     fmt.Sprintf("Status changed from %s to %s", prevStatus, currStatus),
 		}, nil
 	}
 
 	return &types.Decision{
-		Action:     dm.mapPolicyAction(policyResult.Action, "notify"),
+		Action:     dm.mapPolicyAction(policyResult.Action, types.ActionNotify),
 		ResourceID: change.ResourceID,
 		Reason:     fmt.Sprintf("Status changed from %s to %s (policy: %s)", prevStatus, currStatus, policyResult.Reason),
 		Metadata: map[string]any{
@@ -173,16 +173,16 @@ func (dm *PolicyEnforcingDecisionMaker) decideTagDrift(ctx context.Context, chan
 	policyResult, err := dm.evaluatePolicy(ctx, *change.Current)
 	if err != nil {
 		return &types.Decision{
-			Action:     "notify",
+			Action:     types.ActionNotify,
 			ResourceID: change.ResourceID,
 			Reason:     "Tag drift detected: " + change.Details,
 		}, nil
 	}
 
 	// Check if we should auto-fix tags based on policy
-	action := dm.mapPolicyAction(policyResult.Action, "notify")
+	action := dm.mapPolicyAction(policyResult.Action, types.ActionNotify)
 	if policyResult.Decision == "deny" && policyResult.Action == "tag" {
-		action = "enforce_tags"
+		action = types.ActionEnforceTags
 	}
 
 	return &types.Decision{
@@ -209,14 +209,14 @@ func (dm *PolicyEnforcingDecisionMaker) decideModified(ctx context.Context, chan
 	policyResult, err := dm.evaluatePolicy(ctx, *change.Current)
 	if err != nil {
 		return &types.Decision{
-			Action:     "notify",
+			Action:     types.ActionNotify,
 			ResourceID: change.ResourceID,
 			Reason:     "Resource configuration changed: " + change.Details,
 		}, nil
 	}
 
 	return &types.Decision{
-		Action:     dm.mapPolicyAction(policyResult.Action, "notify"),
+		Action:     dm.mapPolicyAction(policyResult.Action, types.ActionNotify),
 		ResourceID: change.ResourceID,
 		Reason:     fmt.Sprintf("Configuration changed (policy: %s): %s", policyResult.Reason, change.Details),
 		Metadata: map[string]any{
@@ -234,7 +234,7 @@ func (dm *PolicyEnforcingDecisionMaker) decideUnmanaged(ctx context.Context, cha
 
 	// For unmanaged resources, notify but don't take action
 	return &types.Decision{
-		Action:     "notify",
+		Action:     types.ActionNotify,
 		ResourceID: change.ResourceID,
 		Reason:     "Unmanaged resource detected: " + change.Details,
 		Metadata: map[string]any{
@@ -250,7 +250,7 @@ func (dm *PolicyEnforcingDecisionMaker) evaluatePolicy(ctx context.Context, reso
 		// No policy engine configured - allow with default
 		return policy.PolicyResult{
 			Decision:   "allow",
-			Action:     "notify",
+			Action:     types.ActionNotify,
 			Risk:       "low",
 			Confidence: 0.5,
 			Reason:     "no policy engine configured",
