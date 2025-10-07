@@ -329,6 +329,54 @@ func (s *MVCCStorage) GetStateAtRevision(resourceID string, revision int64) (*Re
 	return result, nil
 }
 
+// GetLatestResource retrieves the latest full resource data for a given resource ID
+func (s *MVCCStorage) GetLatestResource(resourceID string) (*types.Resource, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var latestResource *types.Resource
+	var latestRev int64
+
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket(bucketObservations)
+		c := bucket.Cursor()
+
+		// Scan for this resource and find the latest revision
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			rev, id := parseObservationKey(k)
+			if id == resourceID && rev > latestRev {
+				// Check if it's a tombstone
+				var tombstone Tombstone
+				if err := json.Unmarshal(v, &tombstone); err == nil && tombstone.Tombstone {
+					// Resource was marked as disappeared
+					continue
+				}
+
+				// Try to unmarshal as full resource
+				var resource types.Resource
+				if err := json.Unmarshal(v, &resource); err != nil {
+					continue // Skip corrupted entries
+				}
+
+				latestResource = &resource
+				latestRev = rev
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if latestResource == nil {
+		return nil, fmt.Errorf("resource %s not found", resourceID)
+	}
+
+	return latestResource, nil
+}
+
 // GetResourcesByOwner returns all resources for an owner
 func (s *MVCCStorage) GetResourcesByOwner(owner string) ([]*ResourceState, error) {
 	s.mu.RLock()
