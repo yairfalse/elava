@@ -348,7 +348,7 @@ func (s *MVCCStorage) GetLatestResource(resourceID string) (*types.Resource, err
 	return latestResource, nil
 }
 
-// scanForLatestResource scans database for the latest version of a resource
+// scanForLatestResource scans database for the latest version of a resource using reverse cursor for efficiency
 func (s *MVCCStorage) scanForLatestResource(resourceID string) (*types.Resource, int64, int64) {
 	var latestResource *types.Resource
 	var latestRev int64
@@ -358,7 +358,9 @@ func (s *MVCCStorage) scanForLatestResource(resourceID string) (*types.Resource,
 		bucket := tx.Bucket(bucketObservations)
 		c := bucket.Cursor()
 
-		for k, v := c.First(); k != nil; k, v = c.Next() {
+		// Use reverse cursor to efficiently find the latest revision
+		// Keys are formatted as [16-digit-revision]:[resourceID]
+		for k, v := c.Last(); k != nil; k, v = c.Prev() {
 			rev, id := parseObservationKey(k)
 			if id != resourceID {
 				continue
@@ -369,10 +371,15 @@ func (s *MVCCStorage) scanForLatestResource(resourceID string) (*types.Resource,
 				continue
 			}
 
-			if rev > latestRev {
+			// Found the latest non-tombstone revision
+			if latestResource == nil {
 				if resource := s.unmarshalResource(v); resource != nil {
 					latestResource = resource
 					latestRev = rev
+					// If we haven't seen a tombstone yet, we can break early
+					if tombstoneRev == 0 {
+						break
+					}
 				}
 			}
 		}
@@ -395,6 +402,14 @@ func (s *MVCCStorage) unmarshalResource(data []byte) *types.Resource {
 		return nil
 	}
 	return &resource
+}
+
+// max returns the larger of two int64 values
+func max(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // GetResourcesByOwner returns all resources for an owner
