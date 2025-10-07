@@ -74,7 +74,7 @@ func (dm *PolicyEnforcingDecisionMaker) decideAppeared(ctx context.Context, chan
 	if err != nil {
 		// On policy error, default to notify
 		return &types.Decision{
-			Action:     "notify",
+			Action:     types.ActionNotify,
 			ResourceID: change.ResourceID,
 			Reason:     fmt.Sprintf("New resource appeared: %s (policy evaluation failed: %v)", change.Details, err),
 		}, nil
