@@ -271,12 +271,12 @@ func (dm *PolicyEnforcingDecisionMaker) evaluatePolicy(ctx context.Context, reso
 func (dm *PolicyEnforcingDecisionMaker) mapPolicyAction(policyAction, defaultAction string) string {
 	// Map policy actions to reconciler actions
 	mapping := map[string]string{
-		"delete":  "notify", // Day 2: never auto-delete, only notify
-		"tag":     "auto_tag",
-		"notify":  "notify",
-		"ignore":  "ignore",
-		"protect": "protect",
-		"alert":   "alert",
+		"delete":  types.ActionNotify, // Day 2: never auto-delete, only notify
+		"tag":     types.ActionAutoTag,
+		"notify":  types.ActionNotify,
+		"ignore":  types.ActionIgnore,
+		"protect": types.ActionProtect,
+		"alert":   types.ActionAlert,
 	}
 
 	if action, ok := mapping[policyAction]; ok {
