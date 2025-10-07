@@ -82,7 +82,7 @@ func (dm *PolicyEnforcingDecisionMaker) decideAppeared(ctx context.Context, chan
 
 	// Map policy decision to action
 	return &types.Decision{
-		Action:     dm.mapPolicyAction(policyResult.Action, "notify"),
+		Action:     dm.mapPolicyAction(policyResult.Action, types.ActionNotify),
 		ResourceID: change.ResourceID,
 		Reason:     fmt.Sprintf("New resource appeared: %s (policy: %s)", change.Details, policyResult.Reason),
 		Metadata: map[string]any{
