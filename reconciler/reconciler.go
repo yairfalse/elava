@@ -175,36 +175,14 @@ func (e *Engine) observeCurrentState(ctx context.Context, config Config) ([]type
 }
 
 // buildDesiredState converts config specs to desired resources
+//
+// Deprecated: buildDesiredState is deprecated and will be removed in v2.0.
+// Elava has pivoted from IaC state management to Day 2 operations.
+// Instead of declaring desired state, Elava now observes actual infrastructure,
+// detects changes, and enforces policies. Use tag-based resource tracking.
+// See docs/design/day2-reconciler.md for the new approach.
 func (e *Engine) buildDesiredState(config Config) []types.Resource {
-	var desired []types.Resource
-
-	for i, spec := range config.Resources {
-		for j := 0; j < max(spec.Count, 1); j++ {
-			resource := types.Resource{
-				ID:       fmt.Sprintf("%s-%d-%d", spec.Type, i, j),
-				Type:     spec.Type,
-				Provider: config.Provider,
-				Region:   spec.Region,
-				Tags:     spec.Tags,
-			}
-
-			// Mark as Elava-managed
-			resource.Tags.ElavaManaged = true
-			if resource.Tags.ElavaOwner == "" {
-				resource.Tags.ElavaOwner = "ovi"
-			}
-
-			desired = append(desired, resource)
-		}
-	}
-
-	return desired
-}
-
-// max returns the maximum of two integers
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+	// TODO(v2.0): Remove this function entirely
+	// For now, return empty to avoid creating resources from config
+	return []types.Resource{}
 }

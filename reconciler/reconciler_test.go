@@ -262,7 +262,14 @@ func runReconcileTest(t *testing.T, engine *Engine, tt reconcileTestCase) {
 	}
 }
 
+// TestEngine_BuildDesiredState tests the deprecated buildDesiredState function
+//
+// Deprecated: This test validates deprecated functionality.
+// buildDesiredState is deprecated as part of Day 2 operations pivot.
+// TODO(v2.0): Remove this test when buildDesiredState is removed.
 func TestEngine_BuildDesiredState(t *testing.T) {
+	t.Skip("buildDesiredState is deprecated - Elava pivoted to Day 2 operations")
+
 	engine := &Engine{}
 
 	config := Config{
@@ -284,24 +291,9 @@ func TestEngine_BuildDesiredState(t *testing.T) {
 
 	desired := engine.buildDesiredState(config)
 
-	expectedCount := 3 // 2 EC2 + 1 RDS
-	if len(desired) != expectedCount {
-		t.Errorf("buildDesiredState() got %d resources, want %d", len(desired), expectedCount)
-	}
-
-	// Check that all resources are marked as Elava-managed
-	for i, resource := range desired {
-		if !resource.Tags.ElavaManaged {
-			t.Errorf("Resource[%d] not marked as ElavaManaged", i)
-		}
-
-		if resource.Tags.ElavaOwner == "" {
-			t.Errorf("Resource[%d] missing ElavaOwner", i)
-		}
-
-		if resource.Provider != config.Provider {
-			t.Errorf("Resource[%d].Provider = %v, want %v", i, resource.Provider, config.Provider)
-		}
+	// Should return empty slice (deprecated behavior)
+	if len(desired) != 0 {
+		t.Errorf("buildDesiredState() should return empty (deprecated), got %d resources", len(desired))
 	}
 }
 

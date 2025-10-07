@@ -223,14 +223,15 @@ func getMaxSequenceFromFile(path string) int64 {
 	// Delegate to the method version in wal.go to avoid duplication.
 	return defaultWALGetMaxSequenceFromFile(path)
 }
+
 // HealthStatus represents WAL health
 type HealthStatus struct {
-	Healthy         bool
+	Healthy          bool
 	DiskUsagePercent float64
-	OldestFileAge   time.Duration
-	NeedsRotation   bool
-	NeedsCleanup    bool
-	Issues          []string
+	OldestFileAge    time.Duration
+	NeedsRotation    bool
+	NeedsCleanup     bool
+	Issues           []string
 }
 
 // GetHealth returns WAL health status
