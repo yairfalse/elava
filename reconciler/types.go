@@ -54,8 +54,8 @@ type Config struct {
 type Diff struct {
 	Type       DiffType        `json:"type"`
 	ResourceID string          `json:"resource_id"`
-	Current    *types.Resource `json:"current,omitempty"` // Current state
-	Desired    *types.Resource `json:"desired,omitempty"` // Deprecated: use Previous instead for Day 2 operations
+	Current    *types.Resource `json:"current,omitempty"`  // Current state
+	Desired    *types.Resource `json:"desired,omitempty"`  // Deprecated: use Previous instead for Day 2 operations
 	Previous   *types.Resource `json:"previous,omitempty"` // Preferred: previous state in Day 2 operations
 	Reason     string          `json:"reason"`
 }

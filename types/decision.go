@@ -7,24 +7,37 @@ import (
 
 // Action types
 const (
+	// Legacy IaC actions (being deprecated)
 	ActionCreate    = "create"
 	ActionUpdate    = "update"
 	ActionDelete    = "delete"
 	ActionTerminate = "terminate"
-	ActionNotify    = "notify"
-	ActionTag       = "tag"
-	ActionNoop      = "noop"
+
+	// Day 2 operations actions
+	ActionNotify        = "notify"         // Send notification about resource state
+	ActionAlert         = "alert"          // High-priority alert (e.g., blessed resource disappeared)
+	ActionProtect       = "protect"        // Mark resource as protected/blessed
+	ActionEnforceTags   = "enforce_tags"   // Auto-correct tag drift
+	ActionEnforcePolicy = "enforce_policy" // Fix policy violation
+	ActionAutoTag       = "auto_tag"       // Automatically add missing tags
+	ActionIgnore        = "ignore"         // Acknowledged, no action needed
+	ActionAudit         = "audit"          // Log for audit trail only
+
+	// Generic actions
+	ActionTag  = "tag"
+	ActionNoop = "noop"
 )
 
 // Decision represents an action to take on a resource
 type Decision struct {
-	Action       string    `json:"action"`
-	ResourceID   string    `json:"resource_id"`
-	ResourceType string    `json:"resource_type,omitempty"`
-	Reason       string    `json:"reason"`
-	IsBlessed    bool      `json:"is_blessed,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	ExecutedAt   time.Time `json:"executed_at,omitempty"`
+	Action       string         `json:"action"`
+	ResourceID   string         `json:"resource_id"`
+	ResourceType string         `json:"resource_type,omitempty"`
+	Reason       string         `json:"reason"`
+	IsBlessed    bool           `json:"is_blessed,omitempty"`
+	CreatedAt    time.Time      `json:"created_at"`
+	ExecutedAt   time.Time      `json:"executed_at,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"` // Day 2: Additional context (change type, policy info, etc.)
 }
 
 // Validate ensures the decision has required fields
