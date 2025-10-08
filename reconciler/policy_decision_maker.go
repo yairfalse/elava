@@ -46,6 +46,8 @@ func (dm *PolicyEnforcingDecisionMaker) Decide(ctx context.Context, changes []Ch
 // decideFromChange makes a decision for a single detected change
 func (dm *PolicyEnforcingDecisionMaker) decideFromChange(ctx context.Context, change Change) (*types.Decision, error) {
 	switch change.Type {
+	case ChangeBaseline:
+		return dm.decideBaseline(ctx, change)
 	case ChangeAppeared:
 		return dm.decideAppeared(ctx, change)
 	case ChangeDisappeared:
@@ -240,6 +242,24 @@ func (dm *PolicyEnforcingDecisionMaker) decideUnmanaged(ctx context.Context, cha
 		Metadata: map[string]any{
 			"change_type": string(change.Type),
 			"managed":     false,
+		},
+	}, nil
+}
+
+// decideBaseline handles baseline observations (first scan)
+func (dm *PolicyEnforcingDecisionMaker) decideBaseline(ctx context.Context, change Change) (*types.Decision, error) {
+	if change.Current == nil {
+		return nil, fmt.Errorf("baseline change without current state")
+	}
+
+	// For baseline, just audit - don't alert or notify
+	return &types.Decision{
+		Action:     types.ActionAudit,
+		ResourceID: change.ResourceID,
+		Reason:     "Baseline observation recorded",
+		Metadata: map[string]any{
+			"change_type": string(change.Type),
+			"is_baseline": true,
 		},
 	}, nil
 }

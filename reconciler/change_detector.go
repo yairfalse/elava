@@ -29,6 +29,9 @@ type Change struct {
 type ChangeType string
 
 const (
+	// ChangeBaseline - first observation of pre-existing resource (first scan only)
+	ChangeBaseline ChangeType = "baseline"
+
 	// ChangeAppeared - new resource observed
 	ChangeAppeared ChangeType = "appeared"
 
@@ -73,17 +76,33 @@ func (d *TemporalChangeDetector) DetectChanges(ctx context.Context, current []ty
 		return nil, err
 	}
 
-	// Detect appeared and modified resources
-	for _, resource := range current {
-		change := d.detectResourceChange(ctx, resource, previousIDs)
-		if change != nil {
-			changes = append(changes, *change)
-		}
-	}
+	// Check if this is the first scan (no previous resources)
+	isFirstScan := len(previousIDs) == 0
 
-	// Detect disappeared resources
-	disappeared := d.detectDisappeared(ctx, currentMap, previousIDs)
-	changes = append(changes, disappeared...)
+	if isFirstScan {
+		// First scan: mark all resources as baseline
+		for _, resource := range current {
+			changes = append(changes, Change{
+				Type:       ChangeBaseline,
+				ResourceID: resource.ID,
+				Current:    &resource,
+				Timestamp:  time.Now(),
+				Details:    "Baseline observation",
+			})
+		}
+	} else {
+		// Normal scan: detect appeared and modified resources
+		for _, resource := range current {
+			change := d.detectResourceChange(ctx, resource, previousIDs)
+			if change != nil {
+				changes = append(changes, *change)
+			}
+		}
+
+		// Detect disappeared resources
+		disappeared := d.detectDisappeared(ctx, currentMap, previousIDs)
+		changes = append(changes, disappeared...)
+	}
 
 	return changes, nil
 }
