@@ -9,7 +9,7 @@ import (
 )
 
 func TestTemporalChangeDetector_DetectChanges_NewResources(t *testing.T) {
-	// Create storage
+	// Create storage with previous observation
 	tmpDir := t.TempDir()
 	mvccStorage, err := storage.NewMVCCStorage(tmpDir)
 	if err != nil {
@@ -21,10 +21,24 @@ func TestTemporalChangeDetector_DetectChanges_NewResources(t *testing.T) {
 		}
 	}()
 
+	// Record a previous observation so it's not first scan
+	previous := types.Resource{
+		ID:       "i-existing",
+		Type:     "ec2",
+		Provider: "aws",
+		Status:   "running",
+		Tags:     types.Tags{ElavaManaged: true},
+	}
+	_, err = mvccStorage.RecordObservation(previous)
+	if err != nil {
+		t.Fatalf("Failed to record previous observation: %v", err)
+	}
+
 	detector := NewTemporalChangeDetector(mvccStorage)
 
 	// Current observation with new resources
 	current := []types.Resource{
+		previous, // Keep existing
 		{
 			ID:       "i-new1",
 			Type:     "ec2",
@@ -505,5 +519,119 @@ func TestNewTemporalChangeDetector(t *testing.T) {
 
 	if detector.storage != mvccStorage {
 		t.Error("ChangeDetector storage not set correctly")
+	}
+}
+
+func TestTemporalChangeDetector_DetectChanges_FirstScanBaseline(t *testing.T) {
+	// Create empty storage (first scan scenario)
+	tmpDir := t.TempDir()
+	mvccStorage, err := storage.NewMVCCStorage(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create MVCC storage: %v", err)
+	}
+	defer func() {
+		if err := mvccStorage.Close(); err != nil {
+			t.Errorf("Failed to close storage: %v", err)
+		}
+	}()
+
+	detector := NewTemporalChangeDetector(mvccStorage)
+
+	// First scan with resources
+	current := []types.Resource{
+		{
+			ID:       "i-123",
+			Type:     "ec2",
+			Provider: "aws",
+			Status:   "running",
+			Tags:     types.Tags{ElavaManaged: true},
+		},
+		{
+			ID:       "db-456",
+			Type:     "rds",
+			Provider: "aws",
+			Status:   "available",
+			Tags:     types.Tags{ElavaManaged: true},
+		},
+	}
+
+	changes, err := detector.DetectChanges(context.Background(), current)
+	if err != nil {
+		t.Fatalf("DetectChanges failed: %v", err)
+	}
+
+	// All resources should be marked as baseline
+	if len(changes) != 2 {
+		t.Errorf("Expected 2 baseline changes, got %d", len(changes))
+	}
+
+	for i, change := range changes {
+		if change.Type != ChangeBaseline {
+			t.Errorf("Change %d: expected ChangeBaseline, got %v", i, change.Type)
+		}
+		if change.Details != "Baseline observation" {
+			t.Errorf("Change %d: expected 'Baseline observation', got %q", i, change.Details)
+		}
+		if change.Current == nil {
+			t.Errorf("Change %d: Current should not be nil", i)
+		}
+	}
+}
+
+func TestTemporalChangeDetector_DetectChanges_SecondScanAfterBaseline(t *testing.T) {
+	// Create storage and record baseline
+	tmpDir := t.TempDir()
+	mvccStorage, err := storage.NewMVCCStorage(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create MVCC storage: %v", err)
+	}
+	defer func() {
+		if err := mvccStorage.Close(); err != nil {
+			t.Errorf("Failed to close storage: %v", err)
+		}
+	}()
+
+	// Record baseline observations
+	baseline := types.Resource{
+		ID:       "i-123",
+		Type:     "ec2",
+		Provider: "aws",
+		Status:   "running",
+		Tags:     types.Tags{ElavaManaged: true},
+	}
+	_, err = mvccStorage.RecordObservation(baseline)
+	if err != nil {
+		t.Fatalf("Failed to record baseline: %v", err)
+	}
+
+	detector := NewTemporalChangeDetector(mvccStorage)
+
+	// Second scan - one existing, one new
+	current := []types.Resource{
+		baseline, // No change
+		{
+			ID:       "i-new",
+			Type:     "ec2",
+			Provider: "aws",
+			Status:   "running",
+			Tags:     types.Tags{ElavaManaged: true},
+		}, // New resource
+	}
+
+	changes, err := detector.DetectChanges(context.Background(), current)
+	if err != nil {
+		t.Fatalf("DetectChanges failed: %v", err)
+	}
+
+	// Should detect only the new resource, not baseline
+	if len(changes) != 1 {
+		t.Errorf("Expected 1 change (appeared), got %d", len(changes))
+	}
+
+	if changes[0].Type != ChangeAppeared {
+		t.Errorf("Expected ChangeAppeared, got %v", changes[0].Type)
+	}
+	if changes[0].ResourceID != "i-new" {
+		t.Errorf("Expected resource i-new, got %s", changes[0].ResourceID)
 	}
 }
