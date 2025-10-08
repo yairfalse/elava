@@ -180,7 +180,7 @@ func TestFormatAge(t *testing.T) {
 		{
 			name:     "1 year 2 months ago",
 			time:     now.Add(-14 * 30 * 24 * time.Hour),
-			expected: "1 years, 2 months ago",
+			expected: "1 year, 2 months ago",
 		},
 		{
 			name:     "3 months ago",
