@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/yairfalse/elava/storage"
+	"github.com/yairfalse/elava/telemetry"
 	"github.com/yairfalse/elava/types"
 	"github.com/yairfalse/elava/wal"
 )
@@ -25,6 +26,7 @@ type Engine struct {
 	coordinator         Coordinator
 	storage             *storage.MVCCStorage
 	wal                 *wal.WAL
+	logger              *telemetry.Logger
 	instanceID          string
 	options             ReconcilerOptions
 }
@@ -47,6 +49,7 @@ func NewEngine(
 		coordinator:         coordinator,
 		storage:             storage,
 		wal:                 walInstance,
+		logger:              telemetry.NewLogger("reconciler-engine"),
 		instanceID:          instanceID,
 		options:             options,
 	}
@@ -99,9 +102,19 @@ func (e *Engine) handleBaselineScan(resources []types.Resource, decisions []type
 		}
 	}
 
-	// If this is a baseline scan, display summary
+	// If this is a baseline scan, log summary
 	if isBaseline && len(resources) > 0 {
 		summary := SummarizeBaseline(resources)
+		e.logger.Info().
+			Int("total_resources", summary.Total).
+			Int("resource_types", len(summary.ByType)).
+			Int("untagged", len(summary.Untagged)).
+			Int("no_owner", len(summary.NoOwner)).
+			Str("oldest_resource", formatAge(summary.OldestResource)).
+			Str("newest_resource", formatAge(summary.NewestResource)).
+			Msg("baseline scan complete")
+
+		// Still print formatted summary to stdout for user visibility
 		fmt.Println(summary.FormatBaselineSummary())
 	}
 

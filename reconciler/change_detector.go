@@ -68,7 +68,7 @@ func (d *TemporalChangeDetector) DetectChanges(ctx context.Context, current []ty
 	var changes []Change
 
 	// Build current resource map
-	currentMap := buildResourceMap(current)
+	currentMap := types.BuildResourceMap(current)
 
 	// Get all resource IDs we've seen before
 	previousIDs, err := d.getPreviousResourceIDs(ctx)
@@ -280,13 +280,4 @@ func hasModifications(current, previous types.Resource) bool {
 	}
 
 	return false
-}
-
-// buildResourceMap converts slice to map for efficient lookup
-func buildResourceMap(resources []types.Resource) map[string]types.Resource {
-	resourceMap := make(map[string]types.Resource)
-	for _, resource := range resources {
-		resourceMap[resource.ID] = resource
-	}
-	return resourceMap
 }
