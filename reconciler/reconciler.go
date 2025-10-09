@@ -19,21 +19,21 @@ type ObservationData struct {
 
 // Engine implements the main reconciliation logic
 type Engine struct {
-	observer      Observer
-	comparator    Comparator
-	decisionMaker DecisionMaker
-	coordinator   Coordinator
-	storage       *storage.MVCCStorage
-	wal           *wal.WAL
-	instanceID    string
-	options       ReconcilerOptions
+	observer            Observer
+	changeDetector      ChangeDetector
+	policyDecisionMaker PolicyDecisionMaker
+	coordinator         Coordinator
+	storage             *storage.MVCCStorage
+	wal                 *wal.WAL
+	instanceID          string
+	options             ReconcilerOptions
 }
 
 // NewEngine creates a new reconciler engine
 func NewEngine(
 	observer Observer,
-	comparator Comparator,
-	decisionMaker DecisionMaker,
+	changeDetector ChangeDetector,
+	policyDecisionMaker PolicyDecisionMaker,
 	coordinator Coordinator,
 	storage *storage.MVCCStorage,
 	walInstance *wal.WAL,
@@ -41,14 +41,14 @@ func NewEngine(
 	options ReconcilerOptions,
 ) *Engine {
 	return &Engine{
-		observer:      observer,
-		comparator:    comparator,
-		decisionMaker: decisionMaker,
-		coordinator:   coordinator,
-		storage:       storage,
-		wal:           walInstance,
-		instanceID:    instanceID,
-		options:       options,
+		observer:            observer,
+		changeDetector:      changeDetector,
+		policyDecisionMaker: policyDecisionMaker,
+		coordinator:         coordinator,
+		storage:             storage,
+		wal:                 walInstance,
+		instanceID:          instanceID,
+		options:             options,
 	}
 }
 
@@ -65,7 +65,7 @@ func (e *Engine) Reconcile(ctx context.Context, config Config) ([]types.Decision
 		return nil, err
 	}
 
-	decisions, err := e.compareAndDecide(config, current)
+	decisions, err := e.detectAndDecide(ctx, current)
 	if err != nil {
 		return nil, err
 	}
@@ -104,15 +104,14 @@ func (e *Engine) observeAndStore(ctx context.Context, config Config) ([]types.Re
 	return current, nil
 }
 
-// compareAndDecide compares states and makes decisions
-func (e *Engine) compareAndDecide(config Config, current []types.Resource) ([]types.Decision, error) {
-	desired := e.buildDesiredState(config)
-	diffs, err := e.comparator.Compare(current, desired)
+// detectAndDecide detects changes and makes policy-based decisions
+func (e *Engine) detectAndDecide(ctx context.Context, current []types.Resource) ([]types.Decision, error) {
+	changes, err := e.changeDetector.DetectChanges(ctx, current)
 	if err != nil {
-		return nil, fmt.Errorf("failed to compare states: %w", err)
+		return nil, fmt.Errorf("failed to detect changes: %w", err)
 	}
 
-	decisions, err := e.decisionMaker.Decide(diffs)
+	decisions, err := e.policyDecisionMaker.Decide(ctx, changes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make decisions: %w", err)
 	}
@@ -172,17 +171,4 @@ func (e *Engine) observeCurrentState(ctx context.Context, config Config) ([]type
 	}
 
 	return resources, nil
-}
-
-// buildDesiredState converts config specs to desired resources
-//
-// Deprecated: buildDesiredState is deprecated and will be removed in v2.0.
-// Elava has pivoted from IaC state management to Day 2 operations.
-// Instead of declaring desired state, Elava now observes actual infrastructure,
-// detects changes, and enforces policies. Use tag-based resource tracking.
-// See docs/design/day2-reconciler.md for the new approach.
-func (e *Engine) buildDesiredState(config Config) []types.Resource {
-	// TODO(v2.0): Remove this function entirely
-	// For now, return empty to avoid creating resources from config
-	return []types.Resource{}
 }

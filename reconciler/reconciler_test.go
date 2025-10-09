@@ -23,26 +23,26 @@ func (m *MockObserver) Observe(ctx context.Context, filter types.ResourceFilter)
 	return m.resources, nil
 }
 
-// MockComparator for testing
-type MockComparator struct {
-	diffs []Diff
-	err   error
+// MockChangeDetector for testing
+type MockChangeDetector struct {
+	changes []Change
+	err     error
 }
 
-func (m *MockComparator) Compare(current, desired []types.Resource) ([]Diff, error) {
+func (m *MockChangeDetector) DetectChanges(ctx context.Context, current []types.Resource) ([]Change, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	return m.diffs, nil
+	return m.changes, nil
 }
 
-// MockDecisionMaker for testing
-type MockDecisionMaker struct {
+// MockPolicyDecisionMaker for testing
+type MockPolicyDecisionMaker struct {
 	decisions []types.Decision
 	err       error
 }
 
-func (m *MockDecisionMaker) Decide(diffs []Diff) ([]types.Decision, error) {
+func (m *MockPolicyDecisionMaker) Decide(ctx context.Context, changes []Change) ([]types.Decision, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -122,35 +122,35 @@ func setupTestInfrastructure(t *testing.T) (*storage.MVCCStorage, *wal.WAL) {
 
 // reconcileTestCase defines a test case for reconciliation
 type reconcileTestCase struct {
-	name              string
-	observer          Observer
-	comparator        Comparator
-	decisionMaker     DecisionMaker
-	config            Config
-	expectedDecisions int
-	shouldError       bool
+	name                string
+	observer            Observer
+	changeDetector      ChangeDetector
+	policyDecisionMaker PolicyDecisionMaker
+	config              Config
+	expectedDecisions   int
+	shouldError         bool
 }
 
 // getReconcileTestCases returns all test cases
 func getReconcileTestCases() []reconcileTestCase {
 	return []reconcileTestCase{
 		{
-			name:              "successful reconciliation",
-			observer:          createMockObserverWithResources(),
-			comparator:        createMockComparatorWithDiffs(),
-			decisionMaker:     createMockDecisionMakerWithDecisions(),
-			config:            createTestConfig(),
-			expectedDecisions: 1,
-			shouldError:       false,
+			name:                "successful reconciliation",
+			observer:            createMockObserverWithResources(),
+			changeDetector:      createMockChangeDetectorWithChanges(),
+			policyDecisionMaker: createMockPolicyDecisionMakerWithDecisions(),
+			config:              createTestConfig(),
+			expectedDecisions:   1,
+			shouldError:         false,
 		},
 		{
-			name:              "empty reconciliation",
-			observer:          &MockObserver{resources: []types.Resource{}},
-			comparator:        &MockComparator{diffs: []Diff{}},
-			decisionMaker:     &MockDecisionMaker{decisions: []types.Decision{}},
-			config:            createEmptyTestConfig(),
-			expectedDecisions: 0,
-			shouldError:       false,
+			name:                "empty reconciliation",
+			observer:            &MockObserver{resources: []types.Resource{}},
+			changeDetector:      &MockChangeDetector{changes: []Change{}},
+			policyDecisionMaker: &MockPolicyDecisionMaker{decisions: []types.Decision{}},
+			config:              createEmptyTestConfig(),
+			expectedDecisions:   0,
+			shouldError:         false,
 		},
 	}
 }
@@ -169,26 +169,26 @@ func createMockObserverWithResources() *MockObserver {
 	}
 }
 
-// createMockComparatorWithDiffs creates a mock comparator with test diffs
-func createMockComparatorWithDiffs() *MockComparator {
-	return &MockComparator{
-		diffs: []Diff{
+// createMockChangeDetectorWithChanges creates a mock change detector with test changes
+func createMockChangeDetectorWithChanges() *MockChangeDetector {
+	return &MockChangeDetector{
+		changes: []Change{
 			{
-				Type:       DiffMissing,
-				ResourceID: "i-missing",
-				Reason:     "Test missing resource",
+				Type:       ChangeAppeared,
+				ResourceID: "i-appeared",
+				Details:    "Test appeared resource",
 			},
 		},
 	}
 }
 
-// createMockDecisionMakerWithDecisions creates a mock decision maker with test decisions
-func createMockDecisionMakerWithDecisions() *MockDecisionMaker {
-	return &MockDecisionMaker{
+// createMockPolicyDecisionMakerWithDecisions creates a mock policy decision maker with test decisions
+func createMockPolicyDecisionMakerWithDecisions() *MockPolicyDecisionMaker {
+	return &MockPolicyDecisionMaker{
 		decisions: []types.Decision{
 			{
-				Action:     "create",
-				ResourceID: "i-missing",
+				Action:     "notify",
+				ResourceID: "i-appeared",
 				Reason:     "Test decision",
 			},
 		},
@@ -231,8 +231,8 @@ func setupTestEngine(tt reconcileTestCase, storage *storage.MVCCStorage, walInst
 
 	return NewEngine(
 		tt.observer,
-		tt.comparator,
-		tt.decisionMaker,
+		tt.changeDetector,
+		tt.policyDecisionMaker,
 		coordinator,
 		storage,
 		walInstance,
@@ -259,41 +259,6 @@ func runReconcileTest(t *testing.T, engine *Engine, tt reconcileTestCase) {
 
 	if len(decisions) != tt.expectedDecisions {
 		t.Errorf("Reconcile() got %d decisions, want %d", len(decisions), tt.expectedDecisions)
-	}
-}
-
-// TestEngine_BuildDesiredState tests the deprecated buildDesiredState function
-//
-// Deprecated: This test validates deprecated functionality.
-// buildDesiredState is deprecated as part of Day 2 operations pivot.
-// TODO(v2.0): Remove this test when buildDesiredState is removed.
-func TestEngine_BuildDesiredState(t *testing.T) {
-	t.Skip("buildDesiredState is deprecated - Elava pivoted to Day 2 operations")
-
-	engine := &Engine{}
-
-	config := Config{
-		Provider: "aws",
-		Region:   "us-east-1",
-		Resources: []types.ResourceSpec{
-			{
-				Type:  "ec2",
-				Count: 2,
-				Tags:  types.Tags{Environment: "prod"},
-			},
-			{
-				Type:  "rds",
-				Count: 1,
-				Tags:  types.Tags{Environment: "prod"},
-			},
-		},
-	}
-
-	desired := engine.buildDesiredState(config)
-
-	// Should return empty slice (deprecated behavior)
-	if len(desired) != 0 {
-		t.Errorf("buildDesiredState() should return empty (deprecated), got %d resources", len(desired))
 	}
 }
 
@@ -343,15 +308,15 @@ func TestNewEngine(t *testing.T) {
 	defer func() { _ = walInstance.Close() }()
 
 	observer := &MockObserver{}
-	comparator := &MockComparator{}
-	decisionMaker := &MockDecisionMaker{}
+	changeDetector := &MockChangeDetector{}
+	policyDecisionMaker := &MockPolicyDecisionMaker{}
 	coordinator := NewMockCoordinator()
 	options := ReconcilerOptions{}
 
 	engine := NewEngine(
 		observer,
-		comparator,
-		decisionMaker,
+		changeDetector,
+		policyDecisionMaker,
 		coordinator,
 		storage,
 		walInstance,
