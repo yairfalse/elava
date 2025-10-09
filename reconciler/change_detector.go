@@ -281,3 +281,12 @@ func hasModifications(current, previous types.Resource) bool {
 
 	return false
 }
+
+// buildResourceMap converts slice to map for efficient lookup
+func buildResourceMap(resources []types.Resource) map[string]types.Resource {
+	resourceMap := make(map[string]types.Resource)
+	for _, resource := range resources {
+		resourceMap[resource.ID] = resource
+	}
+	return resourceMap
+}
