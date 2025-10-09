@@ -68,7 +68,7 @@ func (d *TemporalChangeDetector) DetectChanges(ctx context.Context, current []ty
 	var changes []Change
 
 	// Build current resource map
-	currentMap := buildResourceMap(current)
+	currentMap := types.BuildResourceMap(current)
 
 	// Get all resource IDs we've seen before
 	previousIDs, err := d.getPreviousResourceIDs(ctx)

@@ -42,8 +42,8 @@ func (d *DriftAnalyzerImpl) AnalyzeDrift(ctx context.Context, from, to time.Time
 	}
 
 	// Compare resources
-	fromMap := d.buildResourceMap(fromResources)
-	toMap := d.buildResourceMap(toResources)
+	fromMap := types.BuildResourceMap(fromResources)
+	toMap := types.BuildResourceMap(toResources)
 
 	// Check for drift in existing resources
 	for id, fromRes := range fromMap {
@@ -62,15 +62,6 @@ func (d *DriftAnalyzerImpl) getResourcesAtTime(ctx context.Context, t time.Time)
 	start := t.Add(-time.Hour)
 	end := t.Add(time.Hour)
 	return d.queryEngine.QueryByTimeRange(ctx, start, end)
-}
-
-// buildResourceMap creates ID->Resource map
-func (d *DriftAnalyzerImpl) buildResourceMap(resources []types.Resource) map[string]types.Resource {
-	m := make(map[string]types.Resource)
-	for _, r := range resources {
-		m[r.ID] = r
-	}
-	return m
 }
 
 // compareResources compares two resource states

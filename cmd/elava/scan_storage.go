@@ -52,8 +52,8 @@ func getPreviousState(storage *storage.MVCCStorage) ([]types.Resource, error) {
 // detectChanges compares current and previous resources to find differences - CLAUDE.md: Small focused function
 func detectChanges(current, previous []types.Resource) ChangeSet {
 	// Build lookup maps for efficient comparison
-	currentMap := buildResourceMap(current)
-	previousMap := buildResourceMap(previous)
+	currentMap := types.BuildResourceMap(current)
+	previousMap := types.BuildResourceMap(previous)
 
 	changes := ChangeSet{}
 
@@ -84,15 +84,6 @@ func detectChanges(current, previous []types.Resource) ChangeSet {
 	}
 
 	return changes
-}
-
-// buildResourceMap creates ID->Resource lookup map - CLAUDE.md: Small helper function
-func buildResourceMap(resources []types.Resource) map[string]types.Resource {
-	resourceMap := make(map[string]types.Resource)
-	for _, resource := range resources {
-		resourceMap[resource.ID] = resource
-	}
-	return resourceMap
 }
 
 // resourceChanged checks if resource has meaningful changes - CLAUDE.md: Small helper function

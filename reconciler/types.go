@@ -17,12 +17,12 @@ type Observer interface {
 	Observe(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error)
 }
 
-// Comparator identifies differences between current and desired state
+// Deprecated: Comparator is deprecated - use ChangeDetector instead
 type Comparator interface {
 	Compare(current, desired []types.Resource) ([]Diff, error)
 }
 
-// DecisionMaker generates decisions based on state differences
+// Deprecated: DecisionMaker is deprecated - use PolicyDecisionMaker instead
 type DecisionMaker interface {
 	Decide(diffs []Diff) ([]types.Decision, error)
 }

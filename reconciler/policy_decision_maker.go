@@ -8,6 +8,11 @@ import (
 	"github.com/yairfalse/elava/types"
 )
 
+// PolicyDecisionMaker makes decisions based on detected changes and policies
+type PolicyDecisionMaker interface {
+	Decide(ctx context.Context, changes []Change) ([]types.Decision, error)
+}
+
 // PolicyEnforcingDecisionMaker makes decisions based on detected changes and OPA policies
 // This is the Day 2 operations decision maker that focuses on:
 // - Protecting blessed resources
