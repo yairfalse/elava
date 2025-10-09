@@ -70,6 +70,9 @@ func (e *Engine) Reconcile(ctx context.Context, config Config) ([]types.Decision
 		return nil, err
 	}
 
+	// Handle baseline scan (first scan)
+	decisions = e.handleBaselineScan(current, decisions)
+
 	if err := e.logDecisions(decisions); err != nil {
 		return nil, err
 	}
@@ -79,6 +82,30 @@ func (e *Engine) Reconcile(ctx context.Context, config Config) ([]types.Decision
 	}
 
 	return decisions, nil
+}
+
+// handleBaselineScan detects first scan and displays baseline summary
+func (e *Engine) handleBaselineScan(resources []types.Resource, decisions []types.Decision) []types.Decision {
+	// Check if all decisions are for baseline changes
+	if len(decisions) == 0 {
+		return decisions
+	}
+
+	isBaseline := true
+	for _, decision := range decisions {
+		if decision.Action != "audit" {
+			isBaseline = false
+			break
+		}
+	}
+
+	// If this is a baseline scan, display summary
+	if isBaseline && len(resources) > 0 {
+		summary := SummarizeBaseline(resources)
+		fmt.Println(summary.FormatBaselineSummary())
+	}
+
+	return decisions
 }
 
 // logReconcileStart logs the start of reconciliation
