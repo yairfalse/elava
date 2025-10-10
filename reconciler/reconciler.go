@@ -63,13 +63,20 @@ func (e *Engine) Reconcile(ctx context.Context, config Config) ([]types.Decision
 		return nil, err
 	}
 
-	current, err := e.observeAndStore(ctx, config)
+	// Step 1: Observe current state (don't store yet)
+	current, err := e.observeCurrentState(ctx, config)
 	if err != nil {
 		return nil, err
 	}
 
+	// Step 2: Detect changes (compares against MVCC from BEFORE this scan)
 	decisions, err := e.detectAndDecide(ctx, current)
 	if err != nil {
+		return nil, err
+	}
+
+	// Step 3: Store observations (updates MVCC for next scan)
+	if err := e.storeObservations(ctx, current); err != nil {
 		return nil, err
 	}
 
@@ -129,19 +136,13 @@ func (e *Engine) logReconcileStart() error {
 	return nil
 }
 
-// observeAndStore observes current state and stores it
-func (e *Engine) observeAndStore(ctx context.Context, config Config) ([]types.Resource, error) {
-	current, err := e.observeCurrentState(ctx, config)
+// storeObservations stores current observations in MVCC
+func (e *Engine) storeObservations(ctx context.Context, resources []types.Resource) error {
+	_, err := e.storage.RecordObservationBatch(resources)
 	if err != nil {
-		return nil, fmt.Errorf("failed to observe current state: %w", err)
+		return fmt.Errorf("failed to store observations: %w", err)
 	}
-
-	_, err = e.storage.RecordObservationBatch(current)
-	if err != nil {
-		return nil, fmt.Errorf("failed to store observations: %w", err)
-	}
-
-	return current, nil
+	return nil
 }
 
 // detectAndDecide detects changes and makes policy-based decisions
