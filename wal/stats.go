@@ -69,7 +69,11 @@ func (w *WAL) collectSequenceStats(stats *Stats) {
 
 	files := w.listWALFiles()
 	stats.FirstSequence = w.findFirstSequence(files)
-	if stats.LastSequence >= stats.FirstSequence {
+
+	// If LastSequence is 0, the WAL is empty (no entries written yet)
+	if stats.LastSequence == 0 {
+		stats.SequenceCount = 0
+	} else if stats.LastSequence >= stats.FirstSequence {
 		stats.SequenceCount = stats.LastSequence - stats.FirstSequence + 1
 	} else {
 		stats.SequenceCount = 0
