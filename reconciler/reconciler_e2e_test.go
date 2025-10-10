@@ -159,7 +159,8 @@ func TestEngine_E2E_ChangeDetection(t *testing.T) {
 			},
 			modifyForScan2: func(baseline []types.Resource) []types.Resource {
 				// Stop the instance
-				modified := baseline[0]
+				modified := baseline[0] // copy struct
+				// If types.Resource contains pointer fields, consider deep copying them here.
 				modified.Status = "stopped"
 				return []types.Resource{modified}
 			},
