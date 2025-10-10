@@ -135,7 +135,7 @@ func TestEngine_E2E_ChangeDetection(t *testing.T) {
 			},
 			modifyForScan2: func(baseline []types.Resource) []types.Resource {
 				// Change owner tag
-				modified := baseline[0] // copy struct
+				modified := baseline[0]          // copy struct
 				modified.Tags = baseline[0].Tags // copy tags struct (shallow copy is sufficient if Tags has no pointer fields)
 				modified.Tags.ElavaOwner = "team-b"
 				return []types.Resource{modified}
