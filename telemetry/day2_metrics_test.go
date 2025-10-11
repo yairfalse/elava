@@ -143,8 +143,6 @@ func TestDay2Metrics_DecisionsMade(t *testing.T) {
 
 	// Auto-remediation
 	decisionsMade.Add(ctx, 3,
-
-
 		metric.WithAttributeSet(attribute.NewSet(
 			attribute.String("action", "enforce_tags"),
 			attribute.String("resource_type", "s3"),
