@@ -111,7 +111,7 @@ func TestDay2Metrics_DecisionsMade(t *testing.T) {
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	meter := provider.Meter("test")
 
-	decisonsMade, err := meter.Int64Counter("elava.decisions.made.total",
+	decisionsMade, err := meter.Int64Counter("elava.decisions.made.total",
 		metric.WithDescription("Total number of policy decisions made"),
 		metric.WithUnit("decisions"),
 	)
@@ -122,7 +122,7 @@ func TestDay2Metrics_DecisionsMade(t *testing.T) {
 	ctx := context.Background()
 
 	// Notify actions
-	decisonsMade.Add(ctx, 5,
+	decisionsMade.Add(ctx, 5,
 		metric.WithAttributeSet(attribute.NewSet(
 			attribute.String("action", "notify"),
 			attribute.String("resource_type", "ec2"),
@@ -132,7 +132,7 @@ func TestDay2Metrics_DecisionsMade(t *testing.T) {
 	)
 
 	// Critical alert
-	decisonsMade.Add(ctx, 1,
+	decisionsMade.Add(ctx, 1,
 		metric.WithAttributeSet(attribute.NewSet(
 			attribute.String("action", "alert"),
 			attribute.String("resource_type", "rds"),
@@ -142,7 +142,7 @@ func TestDay2Metrics_DecisionsMade(t *testing.T) {
 	)
 
 	// Auto-remediation
-	decisonsMade.Add(ctx, 3,
+	decisionsMade.Add(ctx, 3,
 		metric.WithAttributeSet(attribute.NewSet(
 			attribute.String("action", "enforce_tags"),
 			attribute.String("resource_type", "s3"),
