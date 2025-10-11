@@ -133,7 +133,6 @@ func TestDay2Metrics_DecisionsMade(t *testing.T) {
 
 	// Critical alert
 	decisionsMade.Add(ctx, 1,
-
 		metric.WithAttributeSet(attribute.NewSet(
 			attribute.String("action", "alert"),
 			attribute.String("resource_type", "rds"),
