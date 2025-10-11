@@ -123,8 +123,6 @@ func TestDay2Metrics_DecisionsMade(t *testing.T) {
 
 	// Notify actions
 	decisionsMade.Add(ctx, 5,
-
-
 		metric.WithAttributeSet(attribute.NewSet(
 			attribute.String("action", "notify"),
 			attribute.String("resource_type", "ec2"),
