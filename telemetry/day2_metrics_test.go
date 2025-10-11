@@ -112,8 +112,6 @@ func TestDay2Metrics_DecisionsMade(t *testing.T) {
 	meter := provider.Meter("test")
 
 	decisionsMade, err := meter.Int64Counter("elava.decisions.made.total",
-
-
 		metric.WithDescription("Total number of policy decisions made"),
 		metric.WithUnit("decisions"),
 	)
