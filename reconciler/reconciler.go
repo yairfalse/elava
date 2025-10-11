@@ -129,6 +129,23 @@ func (e *Engine) Reconcile(ctx context.Context, config Config) ([]types.Decision
 		e.day2Metrics.RecordReconcileDuration(ctx, scanType, config.Provider, config.Region, durationMs)
 	}
 
+	// Emit scan completed log event
+	if reconSpan != nil {
+		durationSeconds := time.Since(startTime).Seconds()
+		telemetry.RecordScanCompletedEvent(
+			reconSpan.Span,
+			scanType,
+			config.Provider,
+			config.Region,
+			int64(len(current)),
+			int64(len(current)), // new resources (simplified - could be from changes)
+			0,                   // changed count (not tracked separately yet)
+			0,                   // disappeared count (simplified)
+			durationSeconds,
+			fmt.Sprintf("%s scan completed: %d resources, %d decisions", scanType, len(current), len(decisions)),
+		)
+	}
+
 	return decisions, nil
 }
 
@@ -211,6 +228,25 @@ func (e *Engine) detectAndDecide(ctx context.Context, current []types.Resource, 
 		return nil, fmt.Errorf("failed to detect changes: %w", err)
 	}
 
+	// Emit log events for each change
+	environment := e.determineEnvironment(config)
+	for _, change := range changes {
+		if change.Type != ChangeBaseline {
+			severity := e.determineSeverity(change)
+			telemetry.RecordChangeDetectedEvent(
+				detectSpan,
+				string(change.Type),
+				change.ResourceID,
+				e.getResourceType(change),
+				environment,
+				severity,
+				config.Provider,
+				config.Region,
+				change.Details,
+			)
+		}
+	}
+
 	// Count change types and record metrics
 	appeared, disappeared, tagDrift, statusChanged := e.countChangeTypes(changes)
 	if detectSpan != nil {
@@ -250,6 +286,20 @@ func (e *Engine) detectAndDecide(ctx context.Context, current []types.Resource, 
 			decideSpan.End()
 		}
 		return nil, fmt.Errorf("failed to make decisions: %w", err)
+	}
+
+	// Emit log events for each decision
+	for _, decision := range decisions {
+		telemetry.RecordDecisionMadeEvent(
+			decideSpan,
+			decision.Action,
+			decision.ResourceID,
+			decision.ResourceType,
+			environment,
+			decision.IsBlessed,
+			decision.Reason,
+			fmt.Sprintf("Decision: %s for %s", decision.Action, decision.ResourceType),
+		)
 	}
 
 	// Count decision types
@@ -310,6 +360,35 @@ func (e *Engine) countDecisionTypes(decisions []types.Decision) (notify, alert, 
 // determineEnvironment determines environment from config or tags
 func (e *Engine) determineEnvironment(config Config) string {
 	// Could be enhanced to read from config or resource tags
+	return "unknown"
+}
+
+// determineSeverity determines severity level for a change
+func (e *Engine) determineSeverity(change Change) string {
+	switch change.Type {
+	case ChangeDisappeared:
+		return "warning"
+	case ChangeTagDrift:
+		return "warning"
+	case ChangeStatusChanged:
+		return "warning"
+	case ChangeUnmanaged:
+		return "info"
+	case ChangeAppeared:
+		return "info"
+	default:
+		return "info"
+	}
+}
+
+// getResourceType extracts resource type from change
+func (e *Engine) getResourceType(change Change) string {
+	if change.Current != nil {
+		return change.Current.Type
+	}
+	if change.Previous != nil {
+		return change.Previous.Type
+	}
 	return "unknown"
 }
 

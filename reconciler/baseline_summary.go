@@ -118,10 +118,18 @@ func formatAge(t time.Time) string {
 	years := int(duration.Hours() / 24 / 365)
 	if years > 0 {
 		months := int(duration.Hours()/24/30) % 12
-		if months > 0 {
-			return fmt.Sprintf("%d years, %d months ago", years, months)
+		yearWord := "years"
+		if years == 1 {
+			yearWord = "year"
 		}
-		return fmt.Sprintf("%d years ago", years)
+		monthWord := "months"
+		if months == 1 {
+			monthWord = "month"
+		}
+		if months > 0 {
+			return fmt.Sprintf("%d %s, %d %s ago", years, yearWord, months, monthWord)
+		}
+		return fmt.Sprintf("%d %s ago", years, yearWord)
 	}
 
 	months := int(duration.Hours() / 24 / 30)
