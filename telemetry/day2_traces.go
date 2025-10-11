@@ -10,7 +10,7 @@ import (
 // ReconciliationSpan represents a reconciliation cycle span
 type ReconciliationSpan struct {
 	ctx  context.Context
-	span trace.Span
+	Span trace.Span // Exported for error recording
 }
 
 // StartReconciliation starts a new reconciliation span
@@ -29,22 +29,22 @@ func StartReconciliation(
 		),
 	)
 
-	return ctx, &ReconciliationSpan{ctx: ctx, span: span}
+	return ctx, &ReconciliationSpan{ctx: ctx, Span: span}
 }
 
 // End ends the reconciliation span
 func (r *ReconciliationSpan) End() {
-	r.span.End()
+	r.Span.End()
 }
 
 // SetResourceCount sets the total resource count attribute
 func (r *ReconciliationSpan) SetResourceCount(count int64) {
-	r.span.SetAttributes(attribute.Int64("resources.total", count))
+	r.Span.SetAttributes(attribute.Int64("resources.total", count))
 }
 
 // SetChangeCount sets change count attributes
 func (r *ReconciliationSpan) SetChangeCount(appeared, disappeared, tagDrift, statusChanged int64) {
-	r.span.SetAttributes(
+	r.Span.SetAttributes(
 		attribute.Int64("changes.appeared", appeared),
 		attribute.Int64("changes.disappeared", disappeared),
 		attribute.Int64("changes.tag_drift", tagDrift),
