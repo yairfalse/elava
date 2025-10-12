@@ -47,17 +47,11 @@ exporters:
     resource_to_telemetry_conversion:
       enabled: true
 
-  # Loki exporter - sends logs/span events
-  loki:
-    endpoint: http://loki:3100/loki/api/v1/push
-    labels:
-      resource:
-        service.name: "service_name"
-        deployment.environment: "deployment_environment"
-      attributes:
-        severity: "severity"
-        resource.type: "resource_type"
-        change.type: "change_type"
+  # OTLP HTTP exporter to Loki - sends logs/span events
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
 
   # OTLP exporter to Jaeger - sends traces
   otlp/jaeger:
@@ -104,7 +98,7 @@ service:
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch, resource]
-      exporters: [loki, debug]
+      exporters: [otlphttp/loki, debug]
 
   telemetry:
     logs:

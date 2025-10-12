@@ -122,23 +122,23 @@ exporters:
       num_consumers: 10
       queue_size: 5000
 
-  # Loki exporter with authentication
-  loki:
+  # OTLP HTTP exporter to Loki with authentication
+  otlphttp/loki:
     endpoint: ${LOKI_ENDPOINT}
     # Uncomment for authentication:
     # headers:
     #   Authorization: "Bearer ${LOKI_API_TOKEN}"
-    labels:
-      resource:
-        service.name: "service_name"
-        deployment.environment: "deployment_environment"
-      attributes:
-        severity: "severity"
-        resource.type: "resource_type"
+    tls:
+      insecure: false
     retry_on_failure:
       enabled: true
       initial_interval: 5s
       max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 5000
 
   # Backup exporter - S3 for long-term storage
   # file:
@@ -197,7 +197,7 @@ service:
         - attributes
         - transform
         - batch
-      exporters: [loki]
+      exporters: [otlphttp/loki]
 
   telemetry:
     logs:
