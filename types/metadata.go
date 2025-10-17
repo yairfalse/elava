@@ -88,6 +88,12 @@ type ResourceMetadata struct {
 	InstanceTypes        string            `json:"instance_types,omitempty"`         // Comma-separated instance types
 	NodeLabels           map[string]string `json:"node_labels,omitempty"`            // K8s node labels
 	NodeTaints           string            `json:"node_taints,omitempty"`            // Formatted taints (key=value:effect)
+	// Auto Scaling Group specific
+	CurrentSize        int32  `json:"current_size,omitempty"`
+	InstanceIDs        string `json:"instance_ids,omitempty"`         // Comma-separated instance IDs
+	LaunchTemplate     string `json:"launch_template,omitempty"`      // Launch template name or ID
+	TargetGroupARNs    string `json:"target_group_arns,omitempty"`    // Comma-separated ARNs
+	VPCZoneIdentifiers string `json:"vpc_zone_identifiers,omitempty"` // Comma-separated subnet IDs
 
 	// Identity/Security specific
 	RoleName          string   `json:"role_name,omitempty"`
