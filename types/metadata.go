@@ -79,6 +79,16 @@ type ResourceMetadata struct {
 	MaxSize         int32  `json:"max_size,omitempty"`
 	TargetCapacity  int32  `json:"target_capacity,omitempty"`
 
+	// EKS specific
+	ClusterName          string            `json:"cluster_name,omitempty"`           // For node groups
+	RoleArn              string            `json:"role_arn,omitempty"`               // IAM role ARN
+	SubnetIDs            string            `json:"subnet_ids,omitempty"`             // Comma-separated subnet IDs
+	SecurityGroupIDs     string            `json:"security_group_ids,omitempty"`     // Comma-separated SG IDs
+	AutoScalingGroupName string            `json:"autoscaling_group_name,omitempty"` // Critical: EKS → ASG link!
+	InstanceTypes        string            `json:"instance_types,omitempty"`         // Comma-separated instance types
+	NodeLabels           map[string]string `json:"node_labels,omitempty"`            // K8s node labels
+	NodeTaints           string            `json:"node_taints,omitempty"`            // Formatted taints (key=value:effect)
+
 	// Identity/Security specific
 	RoleName          string   `json:"role_name,omitempty"`
 	AssumeRolePolicy  string   `json:"assume_role_policy,omitempty"`
