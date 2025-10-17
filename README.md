@@ -1,6 +1,6 @@
 # Elava
 
-AWS infrastructure scanner with memory. Scans your account, tracks changes over time.
+Infrastructure scanner with memory. Scans your account, tracks changes over time.
 
 ## What it does
 
