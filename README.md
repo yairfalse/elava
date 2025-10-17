@@ -1,18 +1,17 @@
 # Elava
 
-Infrastructure scanner with temporal memory. Scans AWS resources, stores observations over time, detects what changed.
+AWS infrastructure scanner with memory. Scans your account, tracks changes over time.
 
 ## What it does
 
-**Scans AWS resources** - Discovers 30+ resource types (EC2, RDS, S3, Lambda, etc.)
+Scans AWS resources and remembers what changed.
 
-**Tracks changes over time** - MVCC storage remembers every observation with timestamps
+- **Discovers resources** - EC2, RDS, S3, Lambda, VPCs, and more
+- **Tracks changes** - Stores every observation with timestamps
+- **Detects drift** - Shows what changed between scans
+- **Finds waste** - Orphaned volumes, idle instances, untagged resources
 
-**Detects waste** - Finds orphaned resources, idle instances, unattached volumes
-
-**Analyzes drift** - Shows what changed between scans
-
-That's it. Read-only. No modifications to your infrastructure.
+Read-only. No modifications to your infrastructure.
 
 ## Quick start
 
@@ -33,53 +32,35 @@ go build ./cmd/elava
 ## How it works
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      MVCC Storage (BadgerDB)                │
-│  • Every observation has timestamp + revision number        │
-│  • Query: "Show me what changed in the last 24 hours"       │
-│  • Tombstones track disappeared resources                   │
-└─────────────────────────────────────────────────────────────┘
-                              ▲
-                              │
-                    ┌─────────┴─────────┐
-                    │   elava scan      │
-                    └─────────┬─────────┘
-                              │
-                              ▼
-                    ┌───────────────────┐
-                    │   AWS Provider    │
-                    │  (30 resource     │
-                    │   types)          │
-                    └───────────────────┘
-                              │
-                              ▼
-                    ┌───────────────────┐
-                    │  Your AWS Account │
-                    │  (Read-only API   │
-                    │   calls)          │
-                    └───────────────────┘
+  AWS Account
+      │
+      │ Read-only API calls
+      ▼
+  elava scan
+      │
+      ▼
+  BadgerDB (MVCC)
+  • Timestamp per observation
+  • Revision history
+  • Tombstones for disappeared resources
 ```
 
-1. Calls AWS APIs (read-only)
-2. Stores observations in BadgerDB with timestamps
-3. Compares to previous observations to detect changes
-4. Identifies resources without proper tags
+1. Scan AWS resources via read-only APIs
+2. Store observations with timestamps
+3. Compare to previous scans
+4. Detect changes, drift, and waste
 
 ## What it scans
 
-**Compute**: EC2, Lambda, EKS, ECS, Auto Scaling Groups
+- **Compute**: EC2, Lambda, EKS, ECS, Auto Scaling Groups
+- **Databases**: RDS, Aurora, DynamoDB
+- **Storage**: S3, EBS volumes, snapshots
+- **Network**: VPCs, subnets, load balancers, NAT gateways, security groups
+- **Other**: IAM roles, CloudWatch logs, KMS keys
 
-**Databases**: RDS, Aurora, DynamoDB, Redshift, MemoryDB
+## AWS permissions
 
-**Storage**: S3, EBS volumes/snapshots, AMIs
-
-**Network**: Load balancers, Elastic IPs, NAT Gateways, Security Groups, VPC endpoints
-
-**Other**: CloudWatch logs, IAM roles, ECR, Route53, KMS, SQS
-
-## AWS permissions needed
-
-Read-only access:
+Read-only access. Attach `ReadOnlyAccess` managed policy or use this minimal policy:
 
 ```json
 {
@@ -92,25 +73,11 @@ Read-only access:
       "s3:List*",
       "s3:GetBucketTagging",
       "lambda:List*",
-      "eks:List*",
       "eks:Describe*",
-      "ecs:List*",
-      "ecs:Describe*",
       "elasticloadbalancing:Describe*",
       "autoscaling:Describe*",
       "iam:List*",
-      "kms:List*",
-      "kms:Describe*",
-      "logs:Describe*",
-      "route53:List*",
-      "ecr:Describe*",
-      "dynamodb:List*",
-      "dynamodb:Describe*",
-      "redshift:Describe*",
-      "memorydb:Describe*",
-      "sqs:List*",
-      "sqs:GetQueueAttributes",
-      "sqs:ListQueueTags"
+      "dynamodb:Describe*"
     ],
     "Resource": "*"
   }]
@@ -119,47 +86,36 @@ Read-only access:
 
 ## Configuration
 
+Optional `elava.yaml`:
+
 ```yaml
-# elava.yaml
-version: "1.0"
 provider: aws
 region: us-east-1
 
-# Optional: Policy enforcement with OPA
-policies:
-  path: ./policies/examples  # Omit to disable policy enforcement
-
 scanning:
-  enabled: true
-  tiers:
-    critical:
-      scan_interval: 5m
-      patterns:
-        - type: rds
-          tags:
-            environment: production
+  interval: 15m
 
-    standard:
-      scan_interval: 1h
+policies:
+  path: ./policies  # Optional: OPA policy enforcement
 ```
 
-**Policy enforcement is optional** - Elava works with or without OPA policies. Without policies, it only scans and stores observations.
+Defaults work fine. Config is optional.
 
-## What's inside
+## Policy enforcement (optional)
 
-```
-elava/
-├── providers/aws/    # AWS resource discovery
-├── storage/          # MVCC storage (BadgerDB)
-├── scanner/          # Tiered scanning + untracked detection
-├── analyzer/         # Waste detection, drift analysis
-├── cmd/elava/        # CLI commands
-└── types/            # Core types
-```
+Elava includes OPA policy support. Policies in `policies/` directory are loaded automatically.
 
-## Why "Elava"?
+Example policies included:
+- `ownership.rego` - Require owner tags
+- `security.rego` - Enforce encryption, public access rules
+- `waste.rego` - Detect idle resources
+- `compliance.rego` - Tag standards, naming conventions
 
-Finnish word for "living" or "door". Infrastructure should be living, not frozen in state files.
+Skip the `policies.path` config to disable policy enforcement.
+
+## Status
+
+Early development. Storage and core types are stable. AWS scanner in progress.
 
 ## License
 
