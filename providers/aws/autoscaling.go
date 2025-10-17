@@ -15,7 +15,28 @@ import (
 
 // ListAutoScalingGroups scans all Auto Scaling Groups
 func (p *RealAWSProvider) ListAutoScalingGroups(ctx context.Context) ([]types.Resource, error) {
-	output, err := p.asgClient.DescribeAutoScalingGroups(ctx, &autoscaling.DescribeAutoScalingGroupsInput{})
+	var allASGs []autoscalingtypes.AutoScalingGroup
+	var nextToken *string
+
+	for {
+		input := &autoscaling.DescribeAutoScalingGroupsInput{
+			NextToken: nextToken,
+		}
+		output, err := p.asgClient.DescribeAutoScalingGroups(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("failed to describe auto scaling groups: %w", err)
+		}
+		allASGs = append(allASGs, output.AutoScalingGroups...)
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	resources := make([]types.Resource, 0, len(allASGs))
+	for _, asg := range allASGs {
+
+  output, err := p.asgClient.DescribeAutoScalingGroups(ctx, &autoscaling.DescribeAutoScalingGroupsInput{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to describe auto scaling groups: %w", err)
 	}
