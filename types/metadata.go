@@ -79,6 +79,13 @@ type ResourceMetadata struct {
 	MaxSize         int32  `json:"max_size,omitempty"`
 	TargetCapacity  int32  `json:"target_capacity,omitempty"`
 
+	// Auto Scaling Group specific
+	CurrentSize        int32  `json:"current_size,omitempty"`
+	InstanceIDs        string `json:"instance_ids,omitempty"`         // Comma-separated instance IDs
+	LaunchTemplate     string `json:"launch_template,omitempty"`      // Launch template name or ID
+	TargetGroupARNs    string `json:"target_group_arns,omitempty"`    // Comma-separated ARNs
+	VPCZoneIdentifiers string `json:"vpc_zone_identifiers,omitempty"` // Comma-separated subnet IDs
+
 	// Identity/Security specific
 	RoleName          string   `json:"role_name,omitempty"`
 	AssumeRolePolicy  string   `json:"assume_role_policy,omitempty"`
