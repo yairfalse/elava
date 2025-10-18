@@ -67,6 +67,17 @@ type ResourceMetadata struct {
 	NatGatewayID       string   `json:"nat_gateway_id,omitempty"`
 	GroupName          string   `json:"group_name,omitempty"`
 
+	// Target Group specific
+	TargetType                 string `json:"target_type,omitempty"`                   // instance, ip, lambda
+	Protocol                   string `json:"protocol,omitempty"`                      // HTTP, HTTPS, TCP, etc.
+	LoadBalancerARNs           string `json:"load_balancer_arns,omitempty"`            // Comma-separated ARNs
+	HealthCheckProtocol        string `json:"health_check_protocol,omitempty"`         // Health check protocol
+	HealthCheckPort            string `json:"health_check_port,omitempty"`             // Health check port
+	HealthCheckPath            string `json:"health_check_path,omitempty"`             // Health check path (HTTP/HTTPS)
+	HealthCheckIntervalSeconds int32  `json:"health_check_interval_seconds,omitempty"` // Interval between checks
+	HealthCheckTimeoutSeconds  int32  `json:"health_check_timeout_seconds,omitempty"`  // Timeout for each check
+	HealthyThresholdCount      int32  `json:"healthy_threshold_count,omitempty"`       // Consecutive successes for healthy
+	UnhealthyThresholdCount    int32  `json:"unhealthy_threshold_count,omitempty"`     // Consecutive failures for unhealthy
 	// VPC Networking specific
 	CIDRBlock             string `json:"cidr_block,omitempty"`
 	MapPublicIPOnLaunch   bool   `json:"map_public_ip_on_launch"`
