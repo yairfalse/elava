@@ -91,7 +91,7 @@ func (p *RealAWSProvider) ListDBSubnetGroups(ctx context.Context) ([]types.Resou
 		}
 
 		for _, sg := range output.DBSubnetGroups {
-			resource := buildDBSubnetGroupResource(sg, p.region, p.accountID)
+			resource := p.buildDBSubnetGroupResourceWithTags(ctx, sg)
 			resources = append(resources, resource)
 		}
 	}
@@ -99,7 +99,34 @@ func (p *RealAWSProvider) ListDBSubnetGroups(ctx context.Context) ([]types.Resou
 	return resources, nil
 }
 
-// buildDBSubnetGroupResource converts DB subnet group to types.Resource
+// buildDBSubnetGroupResourceWithTags builds DB subnet group resource with tags from API
+func (p *RealAWSProvider) buildDBSubnetGroupResourceWithTags(ctx context.Context, sg rdstypes.DBSubnetGroup) types.Resource {
+	subnetIDs, azs := extractSubnetDetails(sg.Subnets)
+
+	// Fetch tags using ListTagsForResource API
+	tags := p.getDBSubnetGroupTags(ctx, sg.DBSubnetGroupArn)
+
+	return types.Resource{
+		ID:         aws.ToString(sg.DBSubnetGroupName),
+		Type:       "db_subnet_group",
+		Provider:   "aws",
+		Region:     p.region,
+		AccountID:  p.accountID,
+		Name:       aws.ToString(sg.DBSubnetGroupName),
+		Status:     aws.ToString(sg.SubnetGroupStatus),
+		Tags:       tags,
+		CreatedAt:  time.Now(), // API doesn't provide creation time
+		LastSeenAt: time.Now(),
+		Metadata: types.ResourceMetadata{
+			VpcID:             aws.ToString(sg.VpcId),
+			SubnetIDs:         subnetIDs,
+			AvailabilityZones: azs,
+			Comment:           aws.ToString(sg.DBSubnetGroupDescription),
+		},
+	}
+}
+
+// buildDBSubnetGroupResource converts DB subnet group to types.Resource (for testing)
 func buildDBSubnetGroupResource(sg rdstypes.DBSubnetGroup, region, accountID string) types.Resource {
 	subnetIDs, azs := extractSubnetDetails(sg.Subnets)
 
@@ -111,7 +138,7 @@ func buildDBSubnetGroupResource(sg rdstypes.DBSubnetGroup, region, accountID str
 		AccountID:  accountID,
 		Name:       aws.ToString(sg.DBSubnetGroupName),
 		Status:     aws.ToString(sg.SubnetGroupStatus),
-		Tags:       types.Tags{}, // DB subnet groups don't have tags
+		Tags:       types.Tags{}, // Tags fetched separately in production via getDBSubnetGroupTags
 		CreatedAt:  time.Now(),   // API doesn't provide creation time
 		LastSeenAt: time.Now(),
 		Metadata: types.ResourceMetadata{
@@ -121,6 +148,23 @@ func buildDBSubnetGroupResource(sg rdstypes.DBSubnetGroup, region, accountID str
 			Comment:           aws.ToString(sg.DBSubnetGroupDescription),
 		},
 	}
+}
+
+// getDBSubnetGroupTags fetches tags for a DB subnet group
+func (p *RealAWSProvider) getDBSubnetGroupTags(ctx context.Context, arn *string) types.Tags {
+	if arn == nil {
+		return types.Tags{}
+	}
+
+	tagsOutput, err := p.rdsClient.ListTagsForResource(ctx, &rds.ListTagsForResourceInput{
+		ResourceName: arn,
+	})
+
+	if err != nil || tagsOutput == nil {
+		return types.Tags{}
+	}
+
+	return convertRDSTags(tagsOutput.TagList)
 }
 
 // extractReadReplicaIdentifiers converts read replica slice to comma-separated string
