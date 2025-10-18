@@ -35,14 +35,6 @@ func (p *RealAWSProvider) ListAutoScalingGroups(ctx context.Context) ([]types.Re
 
 	resources := make([]types.Resource, 0, len(allASGs))
 	for _, asg := range allASGs {
-
-  output, err := p.asgClient.DescribeAutoScalingGroups(ctx, &autoscaling.DescribeAutoScalingGroupsInput{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to describe auto scaling groups: %w", err)
-	}
-
-	resources := make([]types.Resource, 0, len(output.AutoScalingGroups))
-	for _, asg := range output.AutoScalingGroups {
 		resource := buildASGResource(asg, p.region, p.accountID)
 		resources = append(resources, resource)
 	}
