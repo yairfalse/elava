@@ -73,6 +73,19 @@ type ResourceMetadata struct {
 	HealthCheckTimeoutSeconds  int32  `json:"health_check_timeout_seconds,omitempty"`  // Timeout for each check
 	HealthyThresholdCount      int32  `json:"healthy_threshold_count,omitempty"`       // Consecutive successes for healthy
 	UnhealthyThresholdCount    int32  `json:"unhealthy_threshold_count,omitempty"`     // Consecutive failures for unhealthy
+	// VPC Networking specific
+	CIDRBlock             string `json:"cidr_block,omitempty"`
+	MapPublicIPOnLaunch   bool   `json:"map_public_ip_on_launch"`
+	IsMainRouteTable      bool   `json:"is_main_route_table"`
+	AssociatedSubnetIDs   []string `json:"associated_subnet_ids,omitempty"`
+	Routes                string `json:"routes,omitempty"`                // Formatted route list
+	AttachmentState       string `json:"attachment_state,omitempty"`      // IGW attachment state
+	ElasticIPAllocationID string `json:"elastic_ip_allocation_id,omitempty"`
+	RequesterVpcID        string `json:"requester_vpc_id,omitempty"`
+	AccepterVpcID         string `json:"accepter_vpc_id,omitempty"`
+	RequesterCIDRBlock    string `json:"requester_cidr_block,omitempty"`
+	AccepterCIDRBlock     string `json:"accepter_cidr_block,omitempty"`
+	PeerRegion            string `json:"peer_region,omitempty"`
 
 	// Compute specific
 	FunctionName    string `json:"function_name,omitempty"`
