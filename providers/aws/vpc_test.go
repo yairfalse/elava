@@ -86,7 +86,7 @@ func TestBuildRouteTableResource(t *testing.T) {
 		assert.Equal(t, "main-route-table", resource.Name)
 		assert.Equal(t, "vpc-abc123", resource.Metadata.VpcID)
 		assert.Equal(t, true, resource.Metadata.IsMainRouteTable)
-		assert.Equal(t, "subnet-111,subnet-222", resource.Metadata.AssociatedSubnetIDs)
+		assert.Equal(t, []string{"subnet-111", "subnet-222"}, resource.Metadata.AssociatedSubnetIDs)
 		assert.Contains(t, resource.Metadata.Routes, "10.0.0.0/16 → local (active)")
 		assert.Contains(t, resource.Metadata.Routes, "0.0.0.0/0 → igw-xyz789 (active)")
 	})
@@ -301,12 +301,12 @@ func TestExtractAssociatedSubnetIDs(t *testing.T) {
 		}
 
 		result := extractAssociatedSubnetIDs(associations)
-		assert.Equal(t, "subnet-111,subnet-222,subnet-333", result)
+		assert.Equal(t, []string{"subnet-111", "subnet-222", "subnet-333"}, result)
 	})
 
 	t.Run("no subnets", func(t *testing.T) {
 		result := extractAssociatedSubnetIDs([]ec2types.RouteTableAssociation{})
-		assert.Equal(t, "", result)
+		assert.Nil(t, result)
 	})
 }
 

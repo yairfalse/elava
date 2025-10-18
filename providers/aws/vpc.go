@@ -300,9 +300,9 @@ func formatRoutes(routes []ec2types.Route) string {
 }
 
 // extractAssociatedSubnetIDs extracts subnet IDs from route table associations
-func extractAssociatedSubnetIDs(associations []ec2types.RouteTableAssociation) string {
+func extractAssociatedSubnetIDs(associations []ec2types.RouteTableAssociation) []string {
 	if len(associations) == 0 {
-		return ""
+		return nil
 	}
 
 	subnetIDs := make([]string, 0, len(associations))
@@ -312,7 +312,7 @@ func extractAssociatedSubnetIDs(associations []ec2types.RouteTableAssociation) s
 		}
 	}
 
-	return strings.Join(subnetIDs, ",")
+	return subnetIDs
 }
 
 // isMainRouteTable checks if route table is the main route table
