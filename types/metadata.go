@@ -22,15 +22,20 @@ type ResourceMetadata struct {
 	PubliclyAccessible bool      `json:"publicly_accessible,omitempty"`
 
 	// Database specific
-	Engine        string `json:"engine,omitempty"`
-	EngineVersion string `json:"engine_version,omitempty"`
-	InstanceClass string `json:"instance_class,omitempty"`
-	DBName        string `json:"db_name,omitempty"`
-	Endpoint      string `json:"endpoint,omitempty"`
-	Port          int32  `json:"port,omitempty"`
-	BackupWindow  string `json:"backup_window,omitempty"`
-	ClusterID     string `json:"cluster_id,omitempty"`
-	NodeCount     int    `json:"node_count,omitempty"`
+	Engine                      string `json:"engine,omitempty"`
+	EngineVersion               string `json:"engine_version,omitempty"`
+	InstanceClass               string `json:"instance_class,omitempty"`
+	DBName                      string `json:"db_name,omitempty"`
+	Endpoint                    string `json:"endpoint,omitempty"`
+	Port                        int32  `json:"port,omitempty"`
+	BackupWindow                string `json:"backup_window,omitempty"`
+	ClusterID                   string `json:"cluster_id,omitempty"`
+	NodeCount                   int    `json:"node_count,omitempty"`
+	DBSubnetGroupName           string `json:"db_subnet_group_name,omitempty"`
+	SecondaryAvailabilityZone   string `json:"secondary_availability_zone,omitempty"` // For Multi-AZ
+	ReadReplicaIdentifiers      string `json:"read_replica_identifiers,omitempty"`    // Comma-separated
+	ReadReplicaSourceIdentifier string `json:"read_replica_source_identifier,omitempty"`
+	AvailabilityZones           string `json:"availability_zones,omitempty"` // Comma-separated AZs (for subnet groups)
 
 	// Storage specific
 	BucketName         string `json:"bucket_name,omitempty"`
