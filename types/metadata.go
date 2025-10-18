@@ -66,7 +66,7 @@ type ResourceMetadata struct {
 	CIDRBlock             string `json:"cidr_block,omitempty"`
 	MapPublicIPOnLaunch   bool   `json:"map_public_ip_on_launch,omitempty"`
 	IsMainRouteTable      bool   `json:"is_main_route_table,omitempty"`
-	AssociatedSubnetIDs   string `json:"associated_subnet_ids,omitempty"` // Comma-separated
+	AssociatedSubnetIDs   []string `json:"associated_subnet_ids,omitempty"`
 	Routes                string `json:"routes,omitempty"`                // Formatted route list
 	AttachmentState       string `json:"attachment_state,omitempty"`      // IGW attachment state
 	ElasticIPAllocationID string `json:"elastic_ip_allocation_id,omitempty"`
