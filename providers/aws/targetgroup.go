@@ -47,7 +47,6 @@ func buildTargetGroupResource(tg elbv2types.TargetGroup, region, accountID strin
 		Name:       aws.ToString(tg.TargetGroupName),
 		Status:     "active",     // Target groups don't have explicit status
 		Tags:       types.Tags{}, // Tags need separate API call
-		CreatedAt:  time.Now(),   // API doesn't provide creation time
 		LastSeenAt: time.Now(),
 		Metadata: types.ResourceMetadata{
 			VpcID:                      aws.ToString(tg.VpcId),
