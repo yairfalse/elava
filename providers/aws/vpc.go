@@ -273,6 +273,9 @@ func formatRoutes(routes []ec2types.Route) string {
 		if dest == "" {
 			dest = aws.ToString(route.DestinationIpv6CidrBlock)
 		}
+		if dest == "" {
+			dest = aws.ToString(route.DestinationPrefixListId)
+		}
 
 		var target string
 		if route.GatewayId != nil {
