@@ -64,8 +64,8 @@ type ResourceMetadata struct {
 
 	// VPC Networking specific
 	CIDRBlock             string `json:"cidr_block,omitempty"`
-	MapPublicIPOnLaunch   bool   `json:"map_public_ip_on_launch,omitempty"`
-	IsMainRouteTable      bool   `json:"is_main_route_table,omitempty"`
+	MapPublicIPOnLaunch   bool   `json:"map_public_ip_on_launch"`
+	IsMainRouteTable      bool   `json:"is_main_route_table"`
 	AssociatedSubnetIDs   []string `json:"associated_subnet_ids,omitempty"`
 	Routes                string `json:"routes,omitempty"`                // Formatted route list
 	AttachmentState       string `json:"attachment_state,omitempty"`      // IGW attachment state
