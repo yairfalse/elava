@@ -1,0 +1,217 @@
+#!/bin/bash
+
+# Elava Pre-Commit Hook - Enforcing CLAUDE.md Standards
+# This hook runs before every commit to ensure code quality
+# Only checks files that are staged for commit
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo "🔍 Running Elava pre-commit checks..."
+echo "=========================================="
+
+# Get list of staged Go files (only files that exist)
+STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
+
+if [ -z "$STAGED_GO_FILES" ]; then
+    echo -e "${GREEN}✅ No Go files staged for commit${NC}"
+    exit 0
+fi
+
+# Track if any check fails
+FAILED=0
+
+# 1. GO FMT CHECK (only staged files)
+echo -e "\n${YELLOW}→ Running go fmt...${NC}"
+UNFORMATTED=""
+for file in $STAGED_GO_FILES; do
+    if [ -f "$file" ]; then
+        FMT_OUTPUT=$(gofmt -l "$file")
+        if [ -n "$FMT_OUTPUT" ]; then
+            UNFORMATTED="${UNFORMATTED}${FMT_OUTPUT}\n"
+        fi
+    fi
+done
+
+if [ -n "$UNFORMATTED" ]; then
+    echo -e "${RED}❌ Format failed. The following files need formatting:${NC}"
+    echo -e "$UNFORMATTED"
+    echo -e "${YELLOW}Run 'go fmt ./...' to fix${NC}"
+    FAILED=1
+else
+    echo -e "${GREEN}✅ All files properly formatted${NC}"
+fi
+
+# 2. GO VET CHECK (entire packages - necessary for type checking)
+echo -e "\n${YELLOW}→ Running go vet...${NC}"
+if ! go vet ./... 2>&1; then
+    echo -e "${RED}❌ Vet failed. Fix issues and retry${NC}"
+    FAILED=1
+else
+    echo -e "${GREEN}✅ Go vet passed${NC}"
+fi
+
+# 3. GOLANGCI-LINT CHECK (only staged files)
+echo -e "\n${YELLOW}→ Running golangci-lint...${NC}"
+if command -v golangci-lint &> /dev/null; then
+    LINT_FILES=$(echo "$STAGED_GO_FILES" | tr '\n' ' ')
+    if [ -n "$LINT_FILES" ]; then
+        if ! golangci-lint run --timeout=3m $LINT_FILES 2>&1 | head -20; then
+            echo -e "${YELLOW}⚠️  Lint warnings found (showing first 20 lines)${NC}"
+            # Don't fail on lint warnings, just show them
+        fi
+    fi
+else
+    echo -e "${YELLOW}⚠️  golangci-lint not installed. Install with: brew install golangci-lint${NC}"
+fi
+
+# 4. FUNCTION LENGTH CHECK (50 lines max per CLAUDE.md) - only staged files
+echo -e "\n${YELLOW}→ Checking function lengths...${NC}"
+LONG_FUNCTIONS=""
+for file in $STAGED_GO_FILES; do
+    if [ -f "$file" ]; then
+        LONG_FUNCS=$(awk '
+            /^func/ {
+                start=NR
+                fname=$0
+            }
+            /^}/ {
+                if(start && NR-start>50) {
+                    printf "%s:%d: Function too long (%d lines): %s\n", FILENAME, start, NR-start, fname
+                }
+                start=0
+            }
+        ' "$file")
+
+        if [ -n "$LONG_FUNCS" ]; then
+            LONG_FUNCTIONS="${LONG_FUNCTIONS}${LONG_FUNCS}\n"
+        fi
+    fi
+done
+
+if [ -n "$LONG_FUNCTIONS" ]; then
+    echo -e "${YELLOW}⚠️  Functions exceeding 50 lines found:${NC}"
+    echo -e "$LONG_FUNCTIONS" | head -10
+    echo -e "${YELLOW}Consider splitting these functions (showing first 10)${NC}"
+    # Don't fail, just warn
+else
+    echo -e "${GREEN}✅ All functions under 50 lines${NC}"
+fi
+
+# 5. CHECK FOR map[string]interface{} (BANNED per CLAUDE.md) - only staged files
+echo -e "\n${YELLOW}→ Checking for banned map[string]interface{}...${NC}"
+BANNED_MAPS=""
+for file in $STAGED_GO_FILES; do
+    if [ -f "$file" ]; then
+        MAPS=$(grep "map\[string\]interface{}" "$file" | grep -v "// " || true)
+        if [ -n "$MAPS" ]; then
+            BANNED_MAPS="${BANNED_MAPS}${file}: ${MAPS}\n"
+        fi
+    fi
+done
+
+if [ -n "$BANNED_MAPS" ]; then
+    echo -e "${RED}❌ Found banned map[string]interface{} usage:${NC}"
+    echo -e "$BANNED_MAPS"
+    echo -e "${YELLOW}Use structured types instead${NC}"
+    FAILED=1
+else
+    echo -e "${GREEN}✅ No map[string]interface{} found${NC}"
+fi
+
+# 6. CHECK FOR TODO/FIXME COMMENTS - only staged files
+echo -e "\n${YELLOW}→ Checking for TODO/FIXME comments...${NC}"
+TODOS=""
+for file in $STAGED_GO_FILES; do
+    if [ -f "$file" ]; then
+        TODO_LINES=$(grep -n "TODO\|FIXME" "$file" || true)
+        if [ -n "$TODO_LINES" ]; then
+            TODOS="${TODOS}${file}:${TODO_LINES}\n"
+        fi
+    fi
+done
+
+if [ -n "$TODOS" ]; then
+    echo -e "${YELLOW}⚠️  Found TODO/FIXME comments:${NC}"
+    echo -e "$TODOS" | head -5
+    echo -e "${YELLOW}Consider addressing these (showing first 5)${NC}"
+fi
+
+# 7. RUN TESTS (Quick unit tests only for pre-commit)
+echo -e "\n${YELLOW}→ Running unit tests...${NC}"
+if ! go test -short -race ./... > /dev/null 2>&1; then
+    echo -e "${RED}❌ Tests failed. Run 'go test ./...' to see details${NC}"
+    FAILED=1
+else
+    echo -e "${GREEN}✅ All tests passing${NC}"
+fi
+
+# 8. CHECK GO.MOD TIDINESS
+echo -e "\n${YELLOW}→ Checking go.mod tidiness...${NC}"
+go mod tidy
+if [ -n "$(git diff go.mod go.sum)" ]; then
+    echo -e "${YELLOW}⚠️  go.mod or go.sum changed after tidy${NC}"
+    echo -e "${YELLOW}Changes have been applied, please review and stage them${NC}"
+    # Don't fail, just notify
+else
+    echo -e "${GREEN}✅ go.mod is tidy${NC}"
+fi
+
+# 9. CHECK FOR PROPER ERROR HANDLING (context in errors) - only staged files
+echo -e "\n${YELLOW}→ Checking error handling patterns...${NC}"
+BAD_ERRORS=""
+for file in $STAGED_GO_FILES; do
+    if [ -f "$file" ] && [[ ! "$file" =~ _test\.go$ ]]; then
+        ERRORS=$(grep -n 'return err$\|return fmt.Errorf(".*")$' "$file" | grep -v "// " || true)
+        if [ -n "$ERRORS" ]; then
+            BAD_ERRORS="${BAD_ERRORS}${file}:${ERRORS}\n"
+        fi
+    fi
+done
+
+if [ -n "$BAD_ERRORS" ]; then
+    SAMPLE=$(echo -e "$BAD_ERRORS" | head -3)
+    COUNT=$(echo -e "$BAD_ERRORS" | wc -l | tr -d ' ')
+    echo -e "${YELLOW}⚠️  Found ${COUNT} potential errors without context (showing first 3):${NC}"
+    echo "$SAMPLE"
+    echo -e "${YELLOW}Consider using: fmt.Errorf(\"failed to X: %w\", err)${NC}"
+fi
+
+# 10. CHECK FOR SECURITY ISSUES
+echo -e "\n${YELLOW}→ Running security checks...${NC}"
+if command -v gosec &> /dev/null; then
+    GOSEC_FILES=$(echo "$STAGED_GO_FILES" | tr '\n' ' ')
+    if [ -n "$GOSEC_FILES" ]; then
+        if ! gosec -quiet -fmt text $GOSEC_FILES 2>/dev/null; then
+            echo -e "${YELLOW}⚠️  Security warnings found${NC}"
+        else
+            echo -e "${GREEN}✅ No security issues detected${NC}"
+        fi
+    fi
+else
+    echo -e "${YELLOW}ℹ️  gosec not installed. Install with: go install github.com/securego/gosec/v2/cmd/gosec@latest${NC}"
+fi
+
+echo -e "\n=========================================="
+
+# Final verdict
+if [ $FAILED -eq 1 ]; then
+    echo -e "${RED}❌ Pre-commit checks FAILED${NC}"
+    echo -e "${YELLOW}Fix the issues above and try again${NC}"
+    echo -e "\n${YELLOW}Quick fixes:${NC}"
+    echo "  go fmt ./..."
+    echo "  go vet ./..."
+    echo "  go mod tidy"
+    echo -e "\n${YELLOW}Or bypass this hook with: git commit --no-verify${NC}"
+    exit 1
+else
+    echo -e "${GREEN}✅ All pre-commit checks PASSED!${NC}"
+    echo -e "${GREEN}Ready to commit! 🚀${NC}"
+fi
+
+exit 0
