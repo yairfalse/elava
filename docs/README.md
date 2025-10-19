@@ -1,18 +1,19 @@
 # Elava Documentation
 
-**Elava** is a living infrastructure reconciliation engine that acts as a "benevolent dictator" for cloud resources.
+**Elava** is an infrastructure observability platform with temporal memory - think "git log for your cloud infrastructure".
 
 ## Overview
 
-Elava continuously observes your cloud infrastructure, compares it with desired state, and makes intelligent decisions about what actions to take. Unlike traditional tools, Elava is stateless but has memory through an etcd-inspired MVCC storage system.
+Elava continuously observes your cloud infrastructure, tracks changes over time, and provides temporal queries to understand what changed, when, and why. Unlike traditional monitoring tools, Elava has memory through an MVCC storage system that enables time-travel queries.
 
 ## Key Principles
 
-- **Stateless with Memory**: No state files, but MVCC provides coordination
-- **Observation-Based**: Records what it sees, makes decisions based on reality  
-- **Auditable**: Complete WAL trail of every observation → decision → execution
-- **Safe**: Blessed resources are protected, destructive actions require confirmation
-- **Coordinated**: Multiple instances can run without conflicts
+- **Observability-Only**: Read-only scanning, no infrastructure modifications
+- **Temporal Awareness**: MVCC storage provides complete historical context
+- **Time-Travel Queries**: Query infrastructure state at any point in time
+- **Drift Detection**: Compare current reality with historical snapshots
+- **Complete Audit Trail**: WAL logging of all observations and changes
+- **Multi-Account Support**: Scan across multiple AWS accounts
 
 ## Documentation Structure
 
@@ -22,45 +23,69 @@ Elava continuously observes your cloud infrastructure, compares it with desired 
 - [**WAL System**](architecture/wal-system.md) - Write-ahead logging for audit
 
 ### Design
-- [**Reconciler Engine**](design/reconciler-engine.md) - Core reconciliation logic
+- [**Analyzer Engine**](design/analyzer-engine.md) - Core analysis and drift detection
 - [**Provider Interface**](design/provider-interface.md) - Cloud provider abstraction
 - [**Type System**](design/type-system.md) - Structured types (no maps!)
 
+### Integration
+- [**Elava → Ahti Integration**](elava-ahti-integration.md) - Enterprise correlation with Tapio
+
 ### API Reference
 - [**Storage API**](api/storage.md) - MVCC storage operations
-- [**WAL API**](api/wal.md) - Write-ahead log operations  
-- [**Reconciler API**](api/reconciler.md) - Reconciliation engine
+- [**WAL API**](api/wal.md) - Write-ahead log operations
+- [**Analyzer API**](api/analyzer.md) - Analysis and drift detection
 
 ## Quick Start
 
 ```bash
 # Clone and build
-git clone https://github.com/yairfalse/ovi
-cd ovi
-go build ./cmd/ovi
+git clone https://github.com/yairfalse/elava
+cd elava
+go build ./cmd/elava
 
-# Run reconciliation
-./ovi reconcile --config infrastructure.yaml
+# Scan AWS infrastructure
+./elava scan --region us-east-1
+
+# View inventory
+./elava show ec2
+
+# Time-travel queries
+./elava history changes --since "24h ago"
+./elava history resource i-abc123 --at "2025-10-01"
+
+# Find missing tags
+./elava inventory tags missing --required "Environment,Team,Owner"
 ```
 
 ## What Makes Elava Different
 
-| Feature | Terraform | Elava |
-|---------|-----------|-----|
-| State Management | State files | MVCC storage |
-| Coordination | Locking | Claims + WAL |
-| Observability | Plan output | Complete audit trail |
-| Safety | Plan review | Blessed resources |
-| Memory | Stateful | Stateless with memory |
+| Feature | CloudWatch | Elava |
+|---------|-----------|-------|
+| State Management | Current state only | MVCC temporal storage |
+| History | Limited metrics | Complete observation history |
+| Time-Travel | No | Yes - query any point in time |
+| Drift Detection | No | Yes - compare historical states |
+| Tag Compliance | Manual | Automated scanning |
+| Change Tracking | CloudTrail (events) | Resource-level changes with context |
 
 ## Core Components
 
-1. **Observer** - Polls cloud providers for current state
-2. **Storage** - MVCC system for tracking observations over time  
-3. **Comparator** - Identifies differences between current/desired state
-4. **Decision Maker** - Generates safe actions based on differences
-5. **Executor** - Performs actions with full audit logging
-6. **WAL** - Immutable log of all operations for debugging/recovery
+1. **Scanner** - Polls cloud providers for current state (read-only)
+2. **Storage** - MVCC system for tracking observations over time
+3. **Analyzer** - Identifies drift, missing tags, orphaned resources
+4. **Query Engine** - Time-travel queries and historical analysis
+5. **WAL** - Immutable log of all observations for debugging/recovery
+
+## Enterprise: Elava + Ahti Integration
+
+For enterprise deployments, Elava integrates with **Ahti** (unified observability platform):
+
+- Correlates infrastructure events (Elava) with runtime events (Tapio)
+- Root cause analysis across K8s and AWS layers
+- Graph-based relationship modeling
+- Cross-system visibility
+
+See [Integration Design](elava-ahti-integration.md) for details.
 
 ## Test Coverage
 
@@ -71,10 +96,10 @@ go test ./... -v
 ```
 
 - **Storage Tests**: Time-travel queries, concurrent access, compaction
-- **WAL Tests**: Audit trails, replay functionality, data integrity  
-- **Reconciler Tests**: State comparison, decision making, safety checks
+- **WAL Tests**: Audit trails, replay functionality, data integrity
+- **Analyzer Tests**: Drift detection, pattern recognition
 - **Provider Tests**: AWS integration, resource filtering
 
 ---
 
-*Elava: Infrastructure reconciliation done right.*
+*Elava: Infrastructure observability with memory.*

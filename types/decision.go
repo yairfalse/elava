@@ -5,27 +5,27 @@ import (
 	"time"
 )
 
-// Action types
+// Action types - these are RECOMMENDATIONS only, not executed by Elava
+// Elava is observability-only and does not modify infrastructure
 const (
-	// Legacy IaC actions (being deprecated)
-	ActionCreate    = "create"
-	ActionUpdate    = "update"
-	ActionDelete    = "delete"
-	ActionTerminate = "terminate"
+	// Observability actions - currently used
+	ActionNotify = "notify" // Send notification about resource state
+	ActionAlert  = "alert"  // High-priority alert (e.g., resource disappeared)
+	ActionIgnore = "ignore" // Acknowledged, no action needed
+	ActionAudit  = "audit"  // Log for audit trail only
+	ActionNoop   = "noop"   // No action recommended
 
-	// Day 2 operations actions
-	ActionNotify        = "notify"         // Send notification about resource state
-	ActionAlert         = "alert"          // High-priority alert (e.g., blessed resource disappeared)
-	ActionProtect       = "protect"        // Mark resource as protected/blessed
-	ActionEnforceTags   = "enforce_tags"   // Auto-correct tag drift
-	ActionEnforcePolicy = "enforce_policy" // Fix policy violation
-	ActionAutoTag       = "auto_tag"       // Automatically add missing tags
-	ActionIgnore        = "ignore"         // Acknowledged, no action needed
-	ActionAudit         = "audit"          // Log for audit trail only
-
-	// Generic actions
-	ActionTag  = "tag"
-	ActionNoop = "noop"
+	// Legacy constants - NOT USED, kept for compatibility
+	// These do NOT trigger any infrastructure modifications
+	ActionCreate        = "create"         // (unused - Elava doesn't create resources)
+	ActionUpdate        = "update"         // (unused - Elava doesn't update resources)
+	ActionDelete        = "delete"         // (unused - Elava doesn't delete resources)
+	ActionTerminate     = "terminate"      // (unused - Elava doesn't terminate resources)
+	ActionProtect       = "protect"        // (unused - no protection mechanism)
+	ActionEnforceTags   = "enforce_tags"   // (unused - no tag enforcement)
+	ActionEnforcePolicy = "enforce_policy" // (unused - no policy enforcement)
+	ActionAutoTag       = "auto_tag"       // (unused - no auto-tagging)
+	ActionTag           = "tag"            // (unused - no tagging operations)
 )
 
 // Decision represents an action to take on a resource
