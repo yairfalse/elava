@@ -6,7 +6,7 @@ import (
 )
 
 // Action types - these are RECOMMENDATIONS only, not executed by Elava
-// Elava is observability-only and does NOT modify infrastructure
+// Elava is observability-only and does not modify infrastructure
 const (
 	// Observability actions - currently used
 	ActionNotify = "notify" // Send notification about resource state
