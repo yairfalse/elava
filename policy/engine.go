@@ -25,6 +25,10 @@ import (
 type OpaExpressionValue map[string]interface{}
 
 // PolicyEngine evaluates OPA policies against resources with MVCC context
+//
+// OBSERVABILITY ONLY: PolicyEngine returns policy evaluation results
+// as recommendations. It does NOT execute actions or modify infrastructure.
+// All operations are read-only evaluation and reporting.
 type PolicyEngine struct {
 	storage *storage.MVCCStorage
 	logger  *telemetry.Logger
@@ -56,7 +60,7 @@ type PolicyContext struct {
 // PolicyResult contains the result of policy evaluation
 type PolicyResult struct {
 	Decision   string   `json:"decision"` // "allow", "deny", "require_approval", "flag"
-	Action     string   `json:"action"`   // "delete", "tag", "notify", "ignore"
+	Action     string   `json:"action"`   // Recommended action: "notify", "alert", "ignore" (NOT executed)
 	Reason     string   `json:"reason"`
 	Confidence float64  `json:"confidence"`
 	Policies   []string `json:"policies"` // Which policies matched
