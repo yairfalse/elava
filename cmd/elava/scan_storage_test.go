@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 
 	"github.com/yairfalse/elava/storage"
@@ -10,15 +11,15 @@ import (
 // Test storeObservations function - CLAUDE.md: Small focused tests
 func TestStoreObservations_EmptyResources(t *testing.T) {
 	tmpDir := t.TempDir()
-	storage, err := storage.NewMVCCStorage(tmpDir)
+	store, err := storage.NewMVCCStorage(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer func() { _ = storage.Close() }()
+	defer func() { _ = store.Close() }()
 
 	var resources []types.Resource
 
-	revision, err := storeObservations(storage, resources)
+	revision, err := storeObservations(store, resources)
 
 	if err != nil {
 		t.Errorf("Expected no error for empty resources, got %v", err)
@@ -30,11 +31,11 @@ func TestStoreObservations_EmptyResources(t *testing.T) {
 
 func TestStoreObservations_SingleResource(t *testing.T) {
 	tmpDir := t.TempDir()
-	storage, err := storage.NewMVCCStorage(tmpDir)
+	store, err := storage.NewMVCCStorage(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer func() { _ = storage.Close() }()
+	defer func() { _ = store.Close() }()
 
 	resources := []types.Resource{
 		{
@@ -46,7 +47,7 @@ func TestStoreObservations_SingleResource(t *testing.T) {
 		},
 	}
 
-	revision, err := storeObservations(storage, resources)
+	revision, err := storeObservations(store, resources)
 
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
@@ -58,11 +59,11 @@ func TestStoreObservations_SingleResource(t *testing.T) {
 
 func TestStoreObservations_BatchResources(t *testing.T) {
 	tmpDir := t.TempDir()
-	storage, err := storage.NewMVCCStorage(tmpDir)
+	store, err := storage.NewMVCCStorage(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer func() { _ = storage.Close() }()
+	defer func() { _ = store.Close() }()
 
 	resources := []types.Resource{
 		{ID: "i-abc123", Type: "ec2", Status: "running"},
@@ -70,7 +71,7 @@ func TestStoreObservations_BatchResources(t *testing.T) {
 		{ID: "rds-ghi789", Type: "rds", Status: "available"},
 	}
 
-	revision, err := storeObservations(storage, resources)
+	revision, err := storeObservations(store, resources)
 
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
@@ -80,7 +81,7 @@ func TestStoreObservations_BatchResources(t *testing.T) {
 	}
 
 	// Verify all resources were stored
-	currentState, err := storage.GetAllCurrentResources()
+	currentState, err := store.GetAllCurrentResources()
 	if err != nil {
 		t.Fatalf("Failed to get current state: %v", err)
 	}
@@ -89,192 +90,114 @@ func TestStoreObservations_BatchResources(t *testing.T) {
 	}
 }
 
-// Test getPreviousState function
-func TestGetPreviousState_EmptyStorage(t *testing.T) {
+// Test detectChanges function with ChangeDetector integration
+func TestDetectChanges_FirstScan(t *testing.T) {
 	tmpDir := t.TempDir()
-	storage, err := storage.NewMVCCStorage(tmpDir)
+	store, err := storage.NewMVCCStorage(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer func() { _ = storage.Close() }()
+	defer func() { _ = store.Close() }()
 
-	previous, err := getPreviousState(storage)
-
-	if err != nil {
-		t.Errorf("Expected no error for empty storage, got %v", err)
-	}
-	if len(previous) != 0 {
-		t.Errorf("Expected empty previous state, got %d resources", len(previous))
-	}
-}
-
-func TestGetPreviousState_WithData(t *testing.T) {
-	tmpDir := t.TempDir()
-	storage, err := storage.NewMVCCStorage(tmpDir)
-	if err != nil {
-		t.Fatalf("Failed to create storage: %v", err)
-	}
-	defer func() { _ = storage.Close() }()
-
-	// Store some resources first
+	ctx := context.Background()
 	resources := []types.Resource{
-		{ID: "i-abc123", Type: "ec2", Status: "running"},
-	}
-	_, err = storeObservations(storage, resources)
-	if err != nil {
-		t.Fatalf("Failed to store initial resources: %v", err)
+		{ID: "i-new1", Type: "ec2", Status: "running"},
+		{ID: "i-new2", Type: "ec2", Status: "running"},
 	}
 
-	previous, err := getPreviousState(storage)
+	changes := detectChanges(ctx, store, resources)
 
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-	if len(previous) != 1 {
-		t.Errorf("Expected 1 resource, got %d", len(previous))
-	}
-	if previous[0].ID != "i-abc123" {
-		t.Errorf("Expected resource i-abc123, got %s", previous[0].ID)
-	}
-}
-
-// Test detectChanges function
-func TestDetectChanges_NoChanges(t *testing.T) {
-	current := []types.Resource{
-		{ID: "i-abc123", Type: "ec2", Status: "running"},
-	}
-	previous := []types.Resource{
-		{ID: "i-abc123", Type: "ec2", Status: "running"},
-	}
-
-	changes := detectChanges(current, previous)
-
-	if len(changes.New) != 0 {
-		t.Errorf("Expected no new resources, got %d", len(changes.New))
+	if len(changes.New) != 2 {
+		t.Errorf("Expected 2 new resources, got %d", len(changes.New))
 	}
 	if len(changes.Modified) != 0 {
-		t.Errorf("Expected no modified resources, got %d", len(changes.Modified))
+		t.Errorf("Expected 0 modified resources, got %d", len(changes.Modified))
 	}
 	if len(changes.Disappeared) != 0 {
-		t.Errorf("Expected no disappeared resources, got %d", len(changes.Disappeared))
+		t.Errorf("Expected 0 disappeared resources, got %d", len(changes.Disappeared))
 	}
 }
 
-func TestDetectChanges_NewResource(t *testing.T) {
-	current := []types.Resource{
-		{ID: "i-abc123", Type: "ec2", Status: "running"},
-		{ID: "i-def456", Type: "ec2", Status: "running"}, // New
+func TestDetectChanges_WithModifications(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := storage.NewMVCCStorage(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
 	}
-	previous := []types.Resource{
-		{ID: "i-abc123", Type: "ec2", Status: "running"},
-	}
+	defer func() { _ = store.Close() }()
 
-	changes := detectChanges(current, previous)
+	ctx := context.Background()
 
-	if len(changes.New) != 1 {
-		t.Errorf("Expected 1 new resource, got %d", len(changes.New))
+	// First scan
+	original := types.Resource{
+		ID:     "i-abc123",
+		Type:   "ec2",
+		Status: "running",
+		Tags:   types.Tags{Environment: "dev"},
 	}
-	if changes.New[0].ID != "i-def456" {
-		t.Errorf("Expected new resource i-def456, got %s", changes.New[0].ID)
-	}
-}
+	_, _ = store.RecordObservation(original)
 
-func TestDetectChanges_DisappearedResource(t *testing.T) {
-	current := []types.Resource{
-		{ID: "i-abc123", Type: "ec2", Status: "running"},
-	}
-	previous := []types.Resource{
-		{ID: "i-abc123", Type: "ec2", Status: "running"},
-		{ID: "i-def456", Type: "ec2", Status: "running"}, // Disappeared
-	}
+	// Second scan with modification
+	modified := original
+	modified.Tags.Environment = "prod" // Changed!
 
-	changes := detectChanges(current, previous)
-
-	if len(changes.Disappeared) != 1 {
-		t.Errorf("Expected 1 disappeared resource, got %d", len(changes.Disappeared))
-	}
-	if changes.Disappeared[0] != "i-def456" {
-		t.Errorf("Expected disappeared resource i-def456, got %s", changes.Disappeared[0])
-	}
-}
-
-func TestDetectChanges_ModifiedResource(t *testing.T) {
-	current := []types.Resource{
-		{ID: "i-abc123", Type: "ec2", Status: "stopped"}, // Changed status
-	}
-	previous := []types.Resource{
-		{ID: "i-abc123", Type: "ec2", Status: "running"},
-	}
-
-	changes := detectChanges(current, previous)
+	changes := detectChanges(ctx, store, []types.Resource{modified})
 
 	if len(changes.Modified) != 1 {
 		t.Errorf("Expected 1 modified resource, got %d", len(changes.Modified))
 	}
-	if changes.Modified[0].Current.ID != "i-abc123" {
-		t.Errorf("Expected modified resource i-abc123, got %s", changes.Modified[0].Current.ID)
+}
+
+func TestDetectChanges_WithDisappearances(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := storage.NewMVCCStorage(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
 	}
-	if changes.Modified[0].Previous.Status != "running" {
-		t.Errorf("Expected previous status running, got %s", changes.Modified[0].Previous.Status)
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+
+	// First scan - 2 resources
+	resources := []types.Resource{
+		{ID: "i-keep", Type: "ec2", Status: "running"},
+		{ID: "i-gone", Type: "ec2", Status: "running"},
 	}
-	if changes.Modified[0].Current.Status != "stopped" {
-		t.Errorf("Expected current status stopped, got %s", changes.Modified[0].Current.Status)
+	_, _ = store.RecordObservationBatch(resources)
+
+	// Second scan - only 1 resource (i-gone disappeared)
+	changes := detectChanges(ctx, store, []types.Resource{
+		{ID: "i-keep", Type: "ec2", Status: "running"},
+	})
+
+	if len(changes.Disappeared) != 1 {
+		t.Errorf("Expected 1 disappeared resource, got %d", len(changes.Disappeared))
+	}
+	if changes.Disappeared[0] != "i-gone" {
+		t.Errorf("Expected i-gone to disappear, got %s", changes.Disappeared[0])
 	}
 }
 
-// Table-driven test for complex change scenarios
-func TestDetectChanges_ComplexScenarios(t *testing.T) {
-	tests := []struct {
-		name     string
-		current  []types.Resource
-		previous []types.Resource
-		wantNew  int
-		wantMod  int
-		wantDis  int
-	}{
-		{
-			name:     "empty to empty",
-			current:  []types.Resource{},
-			previous: []types.Resource{},
-			wantNew:  0,
-			wantMod:  0,
-			wantDis:  0,
-		},
-		{
-			name: "first scan",
-			current: []types.Resource{
-				{ID: "i-abc123", Status: "running"},
-			},
-			previous: []types.Resource{},
-			wantNew:  1,
-			wantMod:  0,
-			wantDis:  0,
-		},
-		{
-			name:    "everything disappeared",
-			current: []types.Resource{},
-			previous: []types.Resource{
-				{ID: "i-abc123", Status: "running"},
-			},
-			wantNew: 0,
-			wantMod: 0,
-			wantDis: 1,
-		},
+func TestConvertToChangeSet(t *testing.T) {
+	created := types.Resource{ID: "i-new", Type: "ec2"}
+	previous := types.Resource{ID: "i-mod", Type: "ec2", Status: "running"}
+	current := types.Resource{ID: "i-mod", Type: "ec2", Status: "stopped"}
+
+	events := []storage.ChangeEvent{
+		{ChangeType: "created", ResourceID: "i-new", Current: &created},
+		{ChangeType: "modified", ResourceID: "i-mod", Previous: &previous, Current: &current},
+		{ChangeType: "disappeared", ResourceID: "i-gone"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			changes := detectChanges(tt.current, tt.previous)
+	changes := convertToChangeSet(events)
 
-			if len(changes.New) != tt.wantNew {
-				t.Errorf("New: got %d, want %d", len(changes.New), tt.wantNew)
-			}
-			if len(changes.Modified) != tt.wantMod {
-				t.Errorf("Modified: got %d, want %d", len(changes.Modified), tt.wantMod)
-			}
-			if len(changes.Disappeared) != tt.wantDis {
-				t.Errorf("Disappeared: got %d, want %d", len(changes.Disappeared), tt.wantDis)
-			}
-		})
+	if len(changes.New) != 1 {
+		t.Errorf("Expected 1 new resource, got %d", len(changes.New))
+	}
+	if len(changes.Modified) != 1 {
+		t.Errorf("Expected 1 modified resource, got %d", len(changes.Modified))
+	}
+	if len(changes.Disappeared) != 1 {
+		t.Errorf("Expected 1 disappeared resource, got %d", len(changes.Disappeared))
 	}
 }

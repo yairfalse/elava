@@ -71,8 +71,8 @@ func (cmd *ScanCommand) processResults(ctx context.Context, infra *scanInfra, re
 	// Log scan operation
 	cmd.logScanOperation(infra.wal, resources)
 
-	// Handle state changes
-	cmd.handleStateChanges(infra.storage, resources)
+	// Handle state changes (detect and store change events)
+	cmd.handleStateChanges(ctx, infra.storage, resources)
 
 	// Find untracked resources
 	tracker := scanner.NewTracker()
@@ -153,13 +153,8 @@ func (cmd *ScanCommand) logScanOperation(walInstance *wal.WAL, resources []types
 }
 
 // handleStateChanges manages storage and change detection
-func (cmd *ScanCommand) handleStateChanges(storage *storage.MVCCStorage, resources []types.Resource) ChangeSet {
-	previousResources, err := getPreviousState(storage)
-	if err != nil {
-		previousResources = []types.Resource{}
-		fmt.Printf("First scan - establishing baseline\n\n")
-	}
-
+func (cmd *ScanCommand) handleStateChanges(ctx context.Context, storage *storage.MVCCStorage, resources []types.Resource) ChangeSet {
+	// Store observations first
 	revision, err := storeObservations(storage, resources)
 	if err != nil {
 		fmt.Printf("Warning: failed to store observations: %v\n", err)
@@ -167,11 +162,16 @@ func (cmd *ScanCommand) handleStateChanges(storage *storage.MVCCStorage, resourc
 		fmt.Printf("Stored observations at revision %d\n", revision)
 	}
 
-	var changes ChangeSet
-	if len(previousResources) > 0 {
-		changes = detectChanges(resources, previousResources)
+	// Detect changes using ChangeDetector analyzer
+	changes := detectChanges(ctx, storage, resources)
+
+	// Report changes to user
+	if len(changes.New) > 0 || len(changes.Modified) > 0 || len(changes.Disappeared) > 0 {
 		cmd.reportChanges(changes)
+	} else {
+		fmt.Printf("First scan - establishing baseline\n\n")
 	}
+
 	return changes
 }
 

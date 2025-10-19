@@ -1,6 +1,10 @@
 package main
 
 import (
+	"context"
+	"fmt"
+
+	"github.com/yairfalse/elava/analyzer"
 	"github.com/yairfalse/elava/storage"
 	"github.com/yairfalse/elava/types"
 )
@@ -28,69 +32,50 @@ func storeObservations(storage *storage.MVCCStorage, resources []types.Resource)
 	return storage.RecordObservationBatch(resources)
 }
 
-// getPreviousState retrieves the last known state from storage - CLAUDE.md: Small focused function
-func getPreviousState(storage *storage.MVCCStorage) ([]types.Resource, error) {
-	states, err := storage.GetAllCurrentResources()
+// detectChanges uses ChangeDetector to find differences and stores events
+func detectChanges(ctx context.Context, store *storage.MVCCStorage, current []types.Resource) ChangeSet {
+	// Use ChangeDetector analyzer
+	detector := analyzer.NewChangeDetector(store)
+	changeEvents, err := detector.DetectChanges(ctx, current)
 	if err != nil {
-		return nil, err
+		// Storage error during change detection
+		fmt.Printf("Warning: failed to detect changes: %v\n", err)
+		return ChangeSet{}
 	}
 
-	// Convert ResourceState back to Resource
-	// Note: This is simplified - in real implementation we'd need to store full Resource data
-	var resources []types.Resource
-	for _, state := range states {
-		resource := types.Resource{
-			ID:   state.ResourceID,
-			Type: state.Type,
+	// Store change events in MVCC storage
+	if len(changeEvents) > 0 {
+		if err := store.StoreChangeEventBatch(ctx, changeEvents); err != nil {
+			// Log but continue - events are in memory and will be displayed
+			fmt.Printf("Warning: failed to store change events: %v\n", err)
 		}
-		resources = append(resources, resource)
 	}
 
-	return resources, nil
+	// Convert ChangeEvents to ChangeSet for display
+	return convertToChangeSet(changeEvents)
 }
 
-// detectChanges compares current and previous resources to find differences - CLAUDE.md: Small focused function
-func detectChanges(current, previous []types.Resource) ChangeSet {
-	// Build lookup maps for efficient comparison
-	currentMap := types.BuildResourceMap(current)
-	previousMap := types.BuildResourceMap(previous)
-
+// convertToChangeSet converts storage.ChangeEvents to display ChangeSet
+func convertToChangeSet(events []storage.ChangeEvent) ChangeSet {
 	changes := ChangeSet{}
 
-	// Find new resources
-	for id, resource := range currentMap {
-		if _, existed := previousMap[id]; !existed {
-			changes.New = append(changes.New, resource)
-		}
-	}
-
-	// Find disappeared resources
-	for id := range previousMap {
-		if _, exists := currentMap[id]; !exists {
-			changes.Disappeared = append(changes.Disappeared, id)
-		}
-	}
-
-	// Find modified resources
-	for id, currentResource := range currentMap {
-		if previousResource, existed := previousMap[id]; existed {
-			if resourceChanged(currentResource, previousResource) {
+	for _, event := range events {
+		switch event.ChangeType {
+		case "created":
+			if event.Current != nil {
+				changes.New = append(changes.New, *event.Current)
+			}
+		case "modified":
+			if event.Current != nil && event.Previous != nil {
 				changes.Modified = append(changes.Modified, ResourceChange{
-					Current:  currentResource,
-					Previous: previousResource,
+					Current:  *event.Current,
+					Previous: *event.Previous,
 				})
 			}
+		case "disappeared":
+			changes.Disappeared = append(changes.Disappeared, event.ResourceID)
 		}
 	}
 
 	return changes
-}
-
-// resourceChanged checks if resource has meaningful changes - CLAUDE.md: Small helper function
-func resourceChanged(current, previous types.Resource) bool {
-	// Compare key fields that indicate meaningful changes
-	return current.Status != previous.Status ||
-		current.Tags.ElavaOwner != previous.Tags.ElavaOwner ||
-		current.Tags.Environment != previous.Tags.Environment ||
-		current.Region != previous.Region
 }
