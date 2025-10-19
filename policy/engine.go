@@ -27,7 +27,7 @@ type OpaExpressionValue map[string]interface{}
 // PolicyEngine evaluates OPA policies against resources with MVCC context
 //
 // OBSERVABILITY ONLY: PolicyEngine returns policy evaluation results
-// as recommendations. It does NOT execute actions or modify infrastructure.
+// as recommendations. It does not execute actions or modify infrastructure.
 // All operations are read-only evaluation and reporting.
 type PolicyEngine struct {
 	storage *storage.MVCCStorage
