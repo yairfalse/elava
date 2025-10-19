@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yairfalse/elava/analyzer"
 	"github.com/yairfalse/elava/storage"
@@ -37,16 +38,16 @@ func detectChanges(ctx context.Context, store *storage.MVCCStorage, current []ty
 	detector := analyzer.NewChangeDetector(store)
 	changeEvents, err := detector.DetectChanges(ctx, current)
 	if err != nil {
-		// Log error but continue
+		// Storage error during change detection
+		fmt.Printf("Warning: failed to detect changes: %v\n", err)
 		return ChangeSet{}
 	}
 
 	// Store change events in MVCC storage
 	if len(changeEvents) > 0 {
 		if err := store.StoreChangeEventBatch(ctx, changeEvents); err != nil {
-			// Ignore error - events detected but storage failed
-			// Changes still displayed to user from in-memory events
-			_ = err
+			// Log but continue - events are in memory and will be displayed
+			fmt.Printf("Warning: failed to store change events: %v\n", err)
 		}
 	}
 

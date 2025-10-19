@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/yairfalse/elava/storage"
@@ -22,15 +23,27 @@ func NewChangeDetector(store *storage.MVCCStorage) *ChangeDetectorImpl {
 
 // DetectChanges compares current scan with previous revision
 func (c *ChangeDetectorImpl) DetectChanges(ctx context.Context, currentScan []types.Resource) ([]storage.ChangeEvent, error) {
+	// Get current revision before comparison
+	revision := c.storage.CurrentRevision()
+
 	// Get previous resources from storage
 	previousStates, err := c.storage.GetAllCurrentResources()
 	if err != nil {
-		// First scan - no previous resources
-		return c.allCreated(currentScan), nil
+		// Check if this is truly a first scan (no resources stored)
+		resourceCount, _, _ := c.storage.Stats()
+		if resourceCount == 0 {
+			// First scan - all resources are new
+			return c.allCreated(currentScan, revision), nil
+		}
+		// Real storage error - return it
+		return nil, fmt.Errorf("failed to get previous resources: %w", err)
 	}
 
 	// Build maps for comparison
-	previousMap := c.buildResourceMapFromStates(previousStates)
+	previousMap, err := c.buildResourceMapFromStates(previousStates)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build resource map: %w", err)
+	}
 	currentMap := types.BuildResourceMap(currentScan)
 
 	var events []storage.ChangeEvent
@@ -40,18 +53,18 @@ func (c *ChangeDetectorImpl) DetectChanges(ctx context.Context, currentScan []ty
 		if previous, exists := previousMap[id]; exists {
 			// Resource existed - check if modified
 			if c.resourceChanged(previous, current) {
-				events = append(events, c.buildModifiedEvent(previous, current))
+				events = append(events, c.buildModifiedEvent(previous, current, revision))
 			}
 		} else {
 			// New resource
-			events = append(events, c.buildCreatedEvent(current))
+			events = append(events, c.buildCreatedEvent(current, revision))
 		}
 	}
 
 	// Check for disappeared resources
 	for id, previous := range previousMap {
 		if _, exists := currentMap[id]; !exists {
-			events = append(events, c.buildDisappearedEvent(previous))
+			events = append(events, c.buildDisappearedEvent(previous, revision))
 		}
 	}
 
@@ -59,10 +72,10 @@ func (c *ChangeDetectorImpl) DetectChanges(ctx context.Context, currentScan []ty
 }
 
 // allCreated generates created events for all resources (first scan)
-func (c *ChangeDetectorImpl) allCreated(resources []types.Resource) []storage.ChangeEvent {
+func (c *ChangeDetectorImpl) allCreated(resources []types.Resource, revision int64) []storage.ChangeEvent {
 	events := make([]storage.ChangeEvent, 0, len(resources))
 	for _, resource := range resources {
-		events = append(events, c.buildCreatedEvent(resource))
+		events = append(events, c.buildCreatedEvent(resource, revision))
 	}
 	return events
 }
@@ -123,43 +136,43 @@ func (c *ChangeDetectorImpl) metadataChanged(previous, current types.ResourceMet
 }
 
 // buildCreatedEvent creates a "created" event
-func (c *ChangeDetectorImpl) buildCreatedEvent(resource types.Resource) storage.ChangeEvent {
+func (c *ChangeDetectorImpl) buildCreatedEvent(resource types.Resource, revision int64) storage.ChangeEvent {
 	return storage.ChangeEvent{
 		ResourceID: resource.ID,
 		ChangeType: "created",
 		Timestamp:  time.Now(),
-		Revision:   c.storage.CurrentRevision(),
+		Revision:   revision,
 		Current:    &resource,
 		Previous:   nil,
 	}
 }
 
 // buildModifiedEvent creates a "modified" event
-func (c *ChangeDetectorImpl) buildModifiedEvent(previous, current types.Resource) storage.ChangeEvent {
+func (c *ChangeDetectorImpl) buildModifiedEvent(previous, current types.Resource, revision int64) storage.ChangeEvent {
 	return storage.ChangeEvent{
 		ResourceID: previous.ID,
 		ChangeType: "modified",
 		Timestamp:  time.Now(),
-		Revision:   c.storage.CurrentRevision(),
+		Revision:   revision,
 		Current:    &current,
 		Previous:   &previous,
 	}
 }
 
 // buildDisappearedEvent creates a "disappeared" event
-func (c *ChangeDetectorImpl) buildDisappearedEvent(resource types.Resource) storage.ChangeEvent {
+func (c *ChangeDetectorImpl) buildDisappearedEvent(resource types.Resource, revision int64) storage.ChangeEvent {
 	return storage.ChangeEvent{
 		ResourceID: resource.ID,
 		ChangeType: "disappeared",
 		Timestamp:  time.Now(),
-		Revision:   c.storage.CurrentRevision(),
+		Revision:   revision,
 		Current:    nil,
 		Previous:   &resource,
 	}
 }
 
 // buildResourceMapFromStates converts ResourceStates to Resource map
-func (c *ChangeDetectorImpl) buildResourceMapFromStates(states []*storage.ResourceState) map[string]types.Resource {
+func (c *ChangeDetectorImpl) buildResourceMapFromStates(states []*storage.ResourceState) (map[string]types.Resource, error) {
 	resourceMap := make(map[string]types.Resource)
 
 	for _, state := range states {
@@ -170,11 +183,14 @@ func (c *ChangeDetectorImpl) buildResourceMapFromStates(states []*storage.Resour
 		// Fetch full resource data from storage
 		resource, err := c.storage.GetLatestResource(state.ResourceID)
 		if err != nil {
-			continue // Resource not found, skip
+			// Check if it's a "not found" error vs real storage error
+			// For now, we'll skip not-found but that's a data inconsistency
+			// In production, consider logging this
+			continue
 		}
 
 		resourceMap[state.ResourceID] = *resource
 	}
 
-	return resourceMap
+	return resourceMap, nil
 }
