@@ -1,7 +1,4 @@
-# This workflow will build a golang project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
-
-name: Go
+name: Go CI
 
 on:
   push:
@@ -10,19 +7,144 @@ on:
     branches: [ "main" ]
 
 jobs:
-
-  build:
+  quality:
+    name: Code Quality
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for changed files detection
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.20'
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
 
-    - name: Build
-      run: go build -v ./...
+      - name: Get changed Go files
+        id: changed-files
+        run: |
+          if git rev-parse origin/main >/dev/null 2>&1; then
+            CHANGED_FILES=$(git diff --name-only --diff-filter=ACMRT origin/main...HEAD | grep '\.go$' || echo "")
+          else
+            # Fallback for first PR or no main branch
+            CHANGED_FILES=$(find . -name '*.go' -not -path './vendor/*')
+          fi
 
-    - name: Test
-      run: go test -v ./...
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "no_go_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "no_go_changes=false" >> $GITHUB_OUTPUT
+            echo "$CHANGED_FILES" > changed_files.txt
+          fi
+
+      - name: Format check
+        if: steps.changed-files.outputs.no_go_changes != 'true'
+        run: |
+          CHANGED_FILES=$(cat changed_files.txt)
+          UNFORMATTED=$(gofmt -l $CHANGED_FILES)
+
+          if [ -n "$UNFORMATTED" ]; then
+            echo "❌ The following files are not formatted:"
+            echo "$UNFORMATTED"
+            echo ""
+            echo "Run: go fmt ./..."
+            exit 1
+          fi
+          echo "✅ All changed files are properly formatted"
+
+      - name: Vet
+        if: steps.changed-files.outputs.no_go_changes != 'true'
+        run: |
+          # Get changed packages
+          CHANGED_FILES=$(cat changed_files.txt)
+          CHANGED_PKGS=$(echo "$CHANGED_FILES" | xargs -I {} dirname {} | sort -u | xargs -I {} echo "./{}")
+
+          if [ -n "$CHANGED_PKGS" ]; then
+            echo "Running go vet on changed packages:"
+            echo "$CHANGED_PKGS"
+            go vet $CHANGED_PKGS
+          fi
+
+      - name: Lint
+        if: steps.changed-files.outputs.no_go_changes != 'true'
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --new-from-rev=origin/main --timeout=5m
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Get changed packages
+        id: changed-pkgs
+        run: |
+          if git rev-parse origin/main >/dev/null 2>&1; then
+            CHANGED_FILES=$(git diff --name-only --diff-filter=ACMRT origin/main...HEAD | grep '\.go$' || echo "")
+
+            if [ -n "$CHANGED_FILES" ]; then
+              # Get packages containing changed files
+              CHANGED_PKGS=$(echo "$CHANGED_FILES" | xargs -I {} dirname {} | sort -u | xargs -I {} echo "./{}")
+
+              # Also check if go.mod/go.sum changed (requires full test)
+              if git diff --name-only origin/main...HEAD | grep -q 'go\.\(mod\|sum\)'; then
+                echo "test_all=true" >> $GITHUB_OUTPUT
+                echo "Go modules changed - running full test suite"
+              else
+                echo "test_all=false" >> $GITHUB_OUTPUT
+                echo "packages=$CHANGED_PKGS" >> $GITHUB_OUTPUT
+                echo "Testing changed packages: $CHANGED_PKGS"
+              fi
+            else
+              echo "test_all=false" >> $GITHUB_OUTPUT
+              echo "no_tests=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "test_all=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Test changed packages
+        if: steps.changed-pkgs.outputs.no_tests != 'true' && steps.changed-pkgs.outputs.test_all != 'true'
+        run: |
+          PKGS="${{ steps.changed-pkgs.outputs.packages }}"
+          go test -v -race -coverprofile=coverage.out $PKGS
+
+      - name: Test all packages
+        if: steps.changed-pkgs.outputs.test_all == 'true'
+        run: |
+          go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Coverage report
+        if: steps.changed-pkgs.outputs.no_tests != 'true'
+        run: |
+          echo "📊 Coverage Report:"
+          go tool cover -func=coverage.out | tail -n 1
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Build
+        run: |
+          echo "🔨 Building all packages..."
+          go build -v ./...
+          echo "✅ Build successful"
