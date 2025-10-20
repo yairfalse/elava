@@ -56,9 +56,9 @@ jobs:
       - name: Vet
         if: steps.changed-files.outputs.no_go_changes != 'true'
         run: |
-          # Get changed packages
+          # Get changed packages (space-separated)
           CHANGED_FILES=$(cat changed_files.txt)
-          CHANGED_PKGS=$(echo "$CHANGED_FILES" | xargs -I {} dirname {} | sort -u | xargs -I {} echo "./{}")
+          CHANGED_PKGS=$(echo "$CHANGED_FILES" | xargs dirname | sort -u | xargs -I {} echo "./{}" | xargs)
 
           if [ -n "$CHANGED_PKGS" ]; then
             echo "Running go vet on changed packages:"
@@ -94,8 +94,8 @@ jobs:
             CHANGED_FILES=$(git diff --name-only --diff-filter=ACMRT origin/main...HEAD | grep '\.go$' || echo "")
 
             if [ -n "$CHANGED_FILES" ]; then
-              # Get packages containing changed files
-              CHANGED_PKGS=$(echo "$CHANGED_FILES" | xargs -I {} dirname {} | sort -u | xargs -I {} echo "./{}")
+              # Get packages containing changed files (space-separated)
+              CHANGED_PKGS=$(echo "$CHANGED_FILES" | xargs dirname | sort -u | xargs -I {} echo "./{}" | xargs)
 
               # Also check if go.mod/go.sum changed (requires full test)
               if git diff --name-only origin/main...HEAD | grep -q 'go\.\(mod\|sum\)'; then
