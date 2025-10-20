@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/yairfalse/elava/observer"
 	"github.com/yairfalse/elava/providers"
 	_ "github.com/yairfalse/elava/providers/aws" // Register AWS provider
 	"github.com/yairfalse/elava/scanner"
@@ -162,8 +163,18 @@ func (cmd *ScanCommand) handleStateChanges(ctx context.Context, storage *storage
 		fmt.Printf("Stored observations at revision %d\n", revision)
 	}
 
-	// Detect changes using ChangeDetector analyzer
+	// Detect changes using ChangeDetector analyzer (from scan_storage.go)
 	changes := detectChanges(ctx, storage, resources)
+
+	// Record metrics for Prometheus
+	metrics, err := observer.NewChangeEventMetrics()
+	if err != nil {
+		fmt.Printf("Warning: failed to initialize metrics: %v\n", err)
+	} else if len(changes.New) > 0 || len(changes.Modified) > 0 || len(changes.Disappeared) > 0 {
+		// Convert ChangeSet back to ChangeEvents for metrics
+		events := convertChangeSetToEvents(changes)
+		metrics.RecordChangeEvents(ctx, events)
+	}
 
 	// Report changes to user
 	if len(changes.New) > 0 || len(changes.Modified) > 0 || len(changes.Disappeared) > 0 {
@@ -173,6 +184,37 @@ func (cmd *ScanCommand) handleStateChanges(ctx context.Context, storage *storage
 	}
 
 	return changes
+}
+
+// convertChangeSetToEvents converts ChangeSet to []ChangeEvent for metrics
+func convertChangeSetToEvents(changes ChangeSet) []storage.ChangeEvent {
+	var events []storage.ChangeEvent
+
+	for _, resource := range changes.New {
+		events = append(events, storage.ChangeEvent{
+			ResourceID: resource.ID,
+			ChangeType: "created",
+			Current:    &resource,
+		})
+	}
+
+	for _, change := range changes.Modified {
+		events = append(events, storage.ChangeEvent{
+			ResourceID: change.Current.ID,
+			ChangeType: "modified",
+			Current:    &change.Current,
+			Previous:   &change.Previous,
+		})
+	}
+
+	for _, resourceID := range changes.Disappeared {
+		events = append(events, storage.ChangeEvent{
+			ResourceID: resourceID,
+			ChangeType: "disappeared",
+		})
+	}
+
+	return events
 }
 
 // reportChanges displays detected changes
