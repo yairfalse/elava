@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/yairfalse/elava/observer"
 	"github.com/yairfalse/elava/providers"
 	_ "github.com/yairfalse/elava/providers/aws" // Register AWS provider
 	"github.com/yairfalse/elava/scanner"
@@ -71,8 +72,8 @@ func (cmd *ScanCommand) processResults(ctx context.Context, infra *scanInfra, re
 	// Log scan operation
 	cmd.logScanOperation(infra.wal, resources)
 
-	// Handle state changes
-	cmd.handleStateChanges(infra.storage, resources)
+	// Handle state changes (detect and store change events)
+	cmd.handleStateChanges(ctx, infra.storage, resources)
 
 	// Find untracked resources
 	tracker := scanner.NewTracker()
@@ -153,13 +154,8 @@ func (cmd *ScanCommand) logScanOperation(walInstance *wal.WAL, resources []types
 }
 
 // handleStateChanges manages storage and change detection
-func (cmd *ScanCommand) handleStateChanges(storage *storage.MVCCStorage, resources []types.Resource) ChangeSet {
-	previousResources, err := getPreviousState(storage)
-	if err != nil {
-		previousResources = []types.Resource{}
-		fmt.Printf("First scan - establishing baseline\n\n")
-	}
-
+func (cmd *ScanCommand) handleStateChanges(ctx context.Context, storage *storage.MVCCStorage, resources []types.Resource) ChangeSet {
+	// Store observations first
 	revision, err := storeObservations(storage, resources)
 	if err != nil {
 		fmt.Printf("Warning: failed to store observations: %v\n", err)
@@ -167,12 +163,58 @@ func (cmd *ScanCommand) handleStateChanges(storage *storage.MVCCStorage, resourc
 		fmt.Printf("Stored observations at revision %d\n", revision)
 	}
 
-	var changes ChangeSet
-	if len(previousResources) > 0 {
-		changes = detectChanges(resources, previousResources)
-		cmd.reportChanges(changes)
+	// Detect changes using ChangeDetector analyzer (from scan_storage.go)
+	changes := detectChanges(ctx, storage, resources)
+
+	// Record metrics for Prometheus
+	metrics, err := observer.NewChangeEventMetrics()
+	if err != nil {
+		fmt.Printf("Warning: failed to initialize metrics: %v\n", err)
+	} else if len(changes.New) > 0 || len(changes.Modified) > 0 || len(changes.Disappeared) > 0 {
+		// Convert ChangeSet back to ChangeEvents for metrics
+		events := convertChangeSetToEvents(changes)
+		metrics.RecordChangeEvents(ctx, events)
 	}
+
+	// Report changes to user
+	if len(changes.New) > 0 || len(changes.Modified) > 0 || len(changes.Disappeared) > 0 {
+		cmd.reportChanges(changes)
+	} else {
+		fmt.Printf("First scan - establishing baseline\n\n")
+	}
+
 	return changes
+}
+
+// convertChangeSetToEvents converts ChangeSet to []ChangeEvent for metrics
+func convertChangeSetToEvents(changes ChangeSet) []storage.ChangeEvent {
+	var events []storage.ChangeEvent
+
+	for _, resource := range changes.New {
+		events = append(events, storage.ChangeEvent{
+			ResourceID: resource.ID,
+			ChangeType: "created",
+			Current:    &resource,
+		})
+	}
+
+	for _, change := range changes.Modified {
+		events = append(events, storage.ChangeEvent{
+			ResourceID: change.Current.ID,
+			ChangeType: "modified",
+			Current:    &change.Current,
+			Previous:   &change.Previous,
+		})
+	}
+
+	for _, resourceID := range changes.Disappeared {
+		events = append(events, storage.ChangeEvent{
+			ResourceID: resourceID,
+			ChangeType: "disappeared",
+		})
+	}
+
+	return events
 }
 
 // reportChanges displays detected changes
