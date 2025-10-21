@@ -23,7 +23,7 @@ func TestNewDaemon(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, daemon)
 	assert.Equal(t, config.Interval, daemon.interval)
-	assert.Equal(t, config.MetricsPort, daemon.metricsPort)
+	assert.Equal(t, config.MetricsPort, daemon.configPort)
 }
 
 // Test daemon starts successfully
@@ -143,6 +143,35 @@ func TestDaemon_ReconciliationLoop(t *testing.T) {
 	// Verify reconciliation ran multiple times
 	count := daemon.ReconciliationCount()
 	assert.GreaterOrEqual(t, count, int64(2))
+
+	cancel()
+}
+
+// Test metrics server starts on configured port
+func TestDaemon_MetricsServer(t *testing.T) {
+	config := Config{
+		Interval:    5 * time.Minute,
+		MetricsPort: 0, // Random port
+		Region:      "us-east-1",
+		StoragePath: t.TempDir(),
+	}
+
+	daemon, err := NewDaemon(config)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = daemon.Start(ctx)
+	}()
+
+	// Give server time to start
+	time.Sleep(100 * time.Millisecond)
+
+	// Server should be accessible
+	port := daemon.MetricsPort()
+	assert.Greater(t, port, 0)
 
 	cancel()
 }

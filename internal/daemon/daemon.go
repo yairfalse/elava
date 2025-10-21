@@ -2,8 +2,14 @@ package daemon
 
 import (
 	"context"
+	"fmt"
+	"net"
+	"net/http"
 	"sync/atomic"
 	"time"
+
+	"github.com/oklog/run"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Config holds daemon configuration
@@ -17,7 +23,8 @@ type Config struct {
 // Daemon manages continuous reconciliation
 type Daemon struct {
 	interval       time.Duration
-	metricsPort    int
+	configPort     int
+	actualPort     atomic.Int32
 	region         string
 	storagePath    string
 	startTime      time.Time
@@ -28,7 +35,7 @@ type Daemon struct {
 func NewDaemon(config Config) (*Daemon, error) {
 	return &Daemon{
 		interval:    config.Interval,
-		metricsPort: config.MetricsPort,
+		configPort:  config.MetricsPort,
 		region:      config.Region,
 		storagePath: config.StoragePath,
 		startTime:   time.Now(),
@@ -37,6 +44,22 @@ func NewDaemon(config Config) (*Daemon, error) {
 
 // Start begins the daemon's reconciliation loop
 func (d *Daemon) Start(ctx context.Context) error {
+	var g run.Group
+
+	// Metrics HTTP server
+	g.Add(func() error {
+		return d.runMetricsServer(ctx)
+	}, func(error) {})
+
+	// Reconciliation loop
+	g.Add(func() error {
+		return d.runReconcileLoop(ctx)
+	}, func(error) {})
+
+	return g.Run()
+}
+
+func (d *Daemon) runReconcileLoop(ctx context.Context) error {
 	ticker := time.NewTicker(d.interval)
 	defer ticker.Stop()
 
@@ -48,6 +71,31 @@ func (d *Daemon) Start(ctx context.Context) error {
 			d.runReconciliation(ctx)
 		}
 	}
+}
+
+func (d *Daemon) runMetricsServer(ctx context.Context) error {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", d.configPort))
+	if err != nil {
+		return fmt.Errorf("metrics server listen: %w", err)
+	}
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	d.actualPort.Store(int32(port))
+
+	srv := &http.Server{Handler: mux}
+
+	go func() {
+		<-ctx.Done()
+		_ = srv.Close()
+	}()
+
+	if err := srv.Serve(listener); err != http.ErrServerClosed {
+		return fmt.Errorf("metrics server: %w", err)
+	}
+	return nil
 }
 
 func (d *Daemon) runReconciliation(ctx context.Context) {
@@ -71,4 +119,9 @@ type HealthStatus struct {
 // ReconciliationCount returns total reconciliations run
 func (d *Daemon) ReconciliationCount() int64 {
 	return d.reconcileCount.Load()
+}
+
+// MetricsPort returns the actual port metrics server is listening on
+func (d *Daemon) MetricsPort() int {
+	return int(d.actualPort.Load())
 }
