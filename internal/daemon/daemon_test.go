@@ -117,3 +117,32 @@ func TestDaemon_Health(t *testing.T) {
 	assert.NotEmpty(t, health.Status)
 	assert.GreaterOrEqual(t, health.Uptime, int64(0))
 }
+
+// Test reconciliation loop runs at interval
+func TestDaemon_ReconciliationLoop(t *testing.T) {
+	config := Config{
+		Interval:    100 * time.Millisecond,
+		MetricsPort: 0,
+		Region:      "us-east-1",
+		StoragePath: t.TempDir(),
+	}
+
+	daemon, err := NewDaemon(config)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = daemon.Start(ctx)
+	}()
+
+	// Wait for at least 2 reconciliation cycles
+	time.Sleep(250 * time.Millisecond)
+
+	// Verify reconciliation ran multiple times
+	count := daemon.ReconciliationCount()
+	assert.GreaterOrEqual(t, count, int64(2))
+
+	cancel()
+}

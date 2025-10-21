@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 )
 
@@ -15,11 +16,12 @@ type Config struct {
 
 // Daemon manages continuous reconciliation
 type Daemon struct {
-	interval    time.Duration
-	metricsPort int
-	region      string
-	storagePath string
-	startTime   time.Time
+	interval       time.Duration
+	metricsPort    int
+	region         string
+	storagePath    string
+	startTime      time.Time
+	reconcileCount atomic.Int64
 }
 
 // NewDaemon creates a new daemon instance
@@ -35,9 +37,21 @@ func NewDaemon(config Config) (*Daemon, error) {
 
 // Start begins the daemon's reconciliation loop
 func (d *Daemon) Start(ctx context.Context) error {
-	// Wait for context cancellation
-	<-ctx.Done()
-	return nil
+	ticker := time.NewTicker(d.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			d.runReconciliation(ctx)
+		}
+	}
+}
+
+func (d *Daemon) runReconciliation(ctx context.Context) {
+	d.reconcileCount.Add(1)
 }
 
 // Health returns daemon health status
@@ -52,4 +66,9 @@ func (d *Daemon) Health() HealthStatus {
 type HealthStatus struct {
 	Status string
 	Uptime int64
+}
+
+// ReconciliationCount returns total reconciliations run
+func (d *Daemon) ReconciliationCount() int64 {
+	return d.reconcileCount.Load()
 }
