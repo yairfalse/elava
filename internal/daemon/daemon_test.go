@@ -16,7 +16,7 @@ func TestNewDaemon(t *testing.T) {
 		MetricsPort: 2112,
 		Region:      "us-east-1",
 		StoragePath: t.TempDir(),
-		Provider:    "aws",
+		// No provider in tests (would need AWS credentials)
 	}
 
 	daemon, err := NewDaemon(config)
@@ -29,6 +29,7 @@ func TestNewDaemon(t *testing.T) {
 	assert.NotNil(t, daemon.storage)
 	assert.NotNil(t, daemon.changeDetector)
 	assert.NotNil(t, daemon.metrics)
+	// cloudProvider is nil in tests (no AWS credentials)
 }
 
 // Test daemon starts successfully
@@ -38,7 +39,6 @@ func TestDaemon_Start(t *testing.T) {
 		MetricsPort: 0, // Random port
 		Region:      "us-east-1",
 		StoragePath: t.TempDir(),
-		Provider:    "aws",
 	}
 
 	daemon, err := NewDaemon(config)
@@ -79,7 +79,6 @@ func TestDaemon_GracefulShutdown(t *testing.T) {
 		MetricsPort: 0,
 		Region:      "us-east-1",
 		StoragePath: t.TempDir(),
-		Provider:    "aws",
 	}
 
 	daemon, err := NewDaemon(config)
@@ -116,7 +115,6 @@ func TestDaemon_Health(t *testing.T) {
 		MetricsPort: 0,
 		Region:      "us-east-1",
 		StoragePath: t.TempDir(),
-		Provider:    "aws",
 	}
 
 	daemon, err := NewDaemon(config)
@@ -136,7 +134,6 @@ func TestDaemon_ReconciliationLoop(t *testing.T) {
 		MetricsPort: 0,
 		Region:      "us-east-1",
 		StoragePath: t.TempDir(),
-		Provider:    "aws",
 	}
 
 	daemon, err := NewDaemon(config)
@@ -167,7 +164,6 @@ func TestDaemon_MetricsServer(t *testing.T) {
 		MetricsPort: 0, // Random port
 		Region:      "us-east-1",
 		StoragePath: t.TempDir(),
-		Provider:    "aws",
 	}
 
 	daemon, err := NewDaemon(config)

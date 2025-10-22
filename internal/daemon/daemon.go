@@ -13,17 +13,19 @@ import (
 	"github.com/yairfalse/elava/analyzer"
 	"github.com/yairfalse/elava/observer"
 	"github.com/yairfalse/elava/providers"
+	_ "github.com/yairfalse/elava/providers/aws" // Register AWS provider
 	"github.com/yairfalse/elava/storage"
 	"github.com/yairfalse/elava/types"
 )
 
 // Config holds daemon configuration
 type Config struct {
-	Interval    time.Duration
-	MetricsPort int
-	Region      string
-	StoragePath string
-	Provider    string // Cloud provider type (e.g., "aws")
+	Interval      time.Duration
+	MetricsPort   int
+	Region        string
+	StoragePath   string
+	Provider      string                  // Cloud provider type (e.g., "aws")
+	CloudProvider providers.CloudProvider // Optional: inject for testing
 }
 
 // Daemon manages continuous reconciliation
@@ -62,6 +64,23 @@ func NewDaemon(config Config) (*Daemon, error) {
 		return nil, fmt.Errorf("failed to create metrics: %w", err)
 	}
 
+	// Initialize cloud provider (use injected or create new)
+	var cloudProvider providers.CloudProvider
+	if config.CloudProvider != nil {
+		cloudProvider = config.CloudProvider
+	} else if config.Provider != "" {
+		providerConfig := providers.ProviderConfig{
+			Type:   config.Provider,
+			Region: config.Region,
+		}
+		var err error
+		cloudProvider, err = providers.GetProvider(context.Background(), config.Provider, providerConfig)
+		if err != nil {
+			_ = store.Close()
+			return nil, fmt.Errorf("failed to create provider: %w", err)
+		}
+	}
+
 	return &Daemon{
 		interval:       config.Interval,
 		configPort:     config.MetricsPort,
@@ -72,6 +91,7 @@ func NewDaemon(config Config) (*Daemon, error) {
 		storage:        store,
 		changeDetector: detector,
 		metrics:        metrics,
+		cloudProvider:  cloudProvider,
 	}, nil
 }
 
@@ -140,9 +160,9 @@ func (d *Daemon) runMetricsServer(ctx context.Context) error {
 func (d *Daemon) runReconciliation(ctx context.Context) {
 	d.reconcileCount.Add(1)
 
-	// Cloud provider will be initialized on first use (lazy init)
+	// Skip if no provider configured (testing mode)
 	if d.cloudProvider == nil {
-		return // Skip if no provider configured yet
+		return
 	}
 
 	// List all resources from cloud
