@@ -10,6 +10,7 @@ import (
 
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/zerolog"
 	"github.com/yairfalse/elava/analyzer"
 	"github.com/yairfalse/elava/observer"
 	"github.com/yairfalse/elava/providers"
@@ -44,42 +45,40 @@ type Daemon struct {
 	changeDetector *analyzer.ChangeDetectorImpl
 	metrics        *observer.ChangeEventMetrics
 	cloudProvider  providers.CloudProvider
+	logger         zerolog.Logger
 }
 
 // NewDaemon creates a new daemon instance
 func NewDaemon(config Config) (*Daemon, error) {
-	// Open MVCC storage
+	logger := newLogger(config.Region)
+	logger.Info().
+		Dur("interval", config.Interval).
+		Int("metrics_port", config.MetricsPort).
+		Str("provider", config.Provider).
+		Msg("initializing daemon")
+
 	store, err := storage.NewMVCCStorage(config.StoragePath)
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to open storage")
 		return nil, fmt.Errorf("failed to open storage: %w", err)
 	}
 
-	// Create change detector
 	detector := analyzer.NewChangeDetector(store)
 
-	// Create metrics observer
 	metrics, err := observer.NewChangeEventMetrics()
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to create metrics")
 		_ = store.Close()
 		return nil, fmt.Errorf("failed to create metrics: %w", err)
 	}
 
-	// Initialize cloud provider (use injected or create new)
-	var cloudProvider providers.CloudProvider
-	if config.CloudProvider != nil {
-		cloudProvider = config.CloudProvider
-	} else if config.Provider != "" {
-		providerConfig := providers.ProviderConfig{
-			Type:   config.Provider,
-			Region: config.Region,
-		}
-		var err error
-		cloudProvider, err = providers.GetProvider(context.Background(), config.Provider, providerConfig)
-		if err != nil {
-			_ = store.Close()
-			return nil, fmt.Errorf("failed to create provider: %w", err)
-		}
+	cloudProvider, err := initCloudProvider(config, logger)
+	if err != nil {
+		_ = store.Close()
+		return nil, err
 	}
+
+	logger.Info().Msg("daemon initialized successfully")
 
 	return &Daemon{
 		interval:       config.Interval,
@@ -92,33 +91,88 @@ func NewDaemon(config Config) (*Daemon, error) {
 		changeDetector: detector,
 		metrics:        metrics,
 		cloudProvider:  cloudProvider,
+		logger:         logger,
 	}, nil
+}
+
+func newLogger(region string) zerolog.Logger {
+	return zerolog.New(zerolog.NewConsoleWriter()).
+		With().
+		Timestamp().
+		Str("service", "elava-daemon").
+		Str("region", region).
+		Logger()
+}
+
+func initCloudProvider(config Config, logger zerolog.Logger) (providers.CloudProvider, error) {
+	if config.CloudProvider != nil {
+		logger.Info().Msg("using injected cloud provider")
+		return config.CloudProvider, nil
+	}
+
+	if config.Provider == "" {
+		logger.Warn().Msg("no cloud provider configured - reconciliation will be skipped")
+		return nil, nil
+	}
+
+	logger.Info().Str("provider", config.Provider).Msg("initializing cloud provider")
+	providerConfig := providers.ProviderConfig{
+		Type:   config.Provider,
+		Region: config.Region,
+	}
+
+	cloudProvider, err := providers.GetProvider(context.Background(), config.Provider, providerConfig)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to create provider")
+		return nil, fmt.Errorf("failed to create provider: %w", err)
+	}
+
+	logger.Info().Msg("cloud provider initialized successfully")
+	return cloudProvider, nil
 }
 
 // Start begins the daemon's reconciliation loop
 func (d *Daemon) Start(ctx context.Context) error {
+	d.logger.Info().Msg("starting daemon")
+
 	var g run.Group
 
 	// Metrics HTTP server
 	g.Add(func() error {
 		return d.runMetricsServer(ctx)
-	}, func(error) {})
+	}, func(error) {
+		d.logger.Info().Msg("metrics server shutting down")
+	})
 
 	// Reconciliation loop
 	g.Add(func() error {
 		return d.runReconcileLoop(ctx)
-	}, func(error) {})
+	}, func(error) {
+		d.logger.Info().Msg("reconciliation loop shutting down")
+	})
 
-	return g.Run()
+	d.logger.Info().Msg("all actors started")
+	err := g.Run()
+
+	if err != nil {
+		d.logger.Error().Err(err).Msg("daemon stopped with error")
+	} else {
+		d.logger.Info().Msg("daemon stopped gracefully")
+	}
+
+	return err
 }
 
 func (d *Daemon) runReconcileLoop(ctx context.Context) error {
+	d.logger.Info().Dur("interval", d.interval).Msg("reconciliation loop started")
+
 	ticker := time.NewTicker(d.interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
+			d.logger.Info().Msg("reconciliation loop stopped by context")
 			return nil
 		case <-ticker.C:
 			d.runReconciliation(ctx)
@@ -132,6 +186,7 @@ func (d *Daemon) runMetricsServer(ctx context.Context) error {
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", d.configPort))
 	if err != nil {
+		d.logger.Error().Err(err).Int("port", d.configPort).Msg("failed to listen")
 		return fmt.Errorf("metrics server listen: %w", err)
 	}
 
@@ -141,6 +196,8 @@ func (d *Daemon) runMetricsServer(ctx context.Context) error {
 	}
 	d.actualPort.Store(int32(port))
 
+	d.logger.Info().Int("port", port).Msg("metrics server listening")
+
 	srv := &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
@@ -148,47 +205,97 @@ func (d *Daemon) runMetricsServer(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
+		d.logger.Info().Msg("shutting down metrics server")
 		_ = srv.Close()
 	}()
 
 	if err := srv.Serve(listener); err != http.ErrServerClosed {
+		d.logger.Error().Err(err).Msg("metrics server error")
 		return fmt.Errorf("metrics server: %w", err)
 	}
 	return nil
 }
 
 func (d *Daemon) runReconciliation(ctx context.Context) {
-	d.reconcileCount.Add(1)
+	runNum := d.reconcileCount.Add(1)
+	logger := d.logger.With().Int64("run", runNum).Logger()
+	logger.Debug().Msg("reconciliation started")
+	startTime := time.Now()
 
-	// Skip if no provider configured (testing mode)
 	if d.cloudProvider == nil {
+		logger.Debug().Msg("no cloud provider - skipping reconciliation")
 		return
 	}
 
-	// List all resources from cloud
 	resources, err := d.listResources(ctx)
 	if err != nil {
-		return // Errors logged internally
+		logger.Error().Err(err).Msg("failed to list resources from cloud")
+		return
+	}
+	logger.Info().Int("count", len(resources)).Msg("resources discovered")
+
+	if err := d.storeObservations(resources, logger); err != nil {
+		return
 	}
 
-	// Store observations
-	if _, err := d.storage.RecordObservationBatch(resources); err != nil {
-		return // Errors logged internally
+	events, err := d.detectAndLogChanges(ctx, resources, logger)
+	if err != nil {
+		return
 	}
 
-	// Detect changes
+	d.storeAndRecordMetrics(ctx, events, logger)
+
+	logger.Info().Dur("duration", time.Since(startTime)).Msg("reconciliation completed")
+}
+
+func (d *Daemon) storeObservations(resources []types.Resource, logger zerolog.Logger) error {
+	revision, err := d.storage.RecordObservationBatch(resources)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to store observations")
+		return err
+	}
+	logger.Debug().Int64("revision", revision).Msg("observations stored")
+	return nil
+}
+
+func (d *Daemon) detectAndLogChanges(ctx context.Context, resources []types.Resource, logger zerolog.Logger) ([]storage.ChangeEvent, error) {
 	events, err := d.changeDetector.DetectChanges(ctx, resources)
 	if err != nil {
-		return // Errors logged internally
+		logger.Error().Err(err).Msg("failed to detect changes")
+		return nil, err
 	}
 
-	// Store change events
+	created, modified, disappeared := d.countChangeEvents(events)
+	logger.Info().
+		Int("created", created).
+		Int("modified", modified).
+		Int("disappeared", disappeared).
+		Msg("changes detected")
+
+	return events, nil
+}
+
+func (d *Daemon) storeAndRecordMetrics(ctx context.Context, events []storage.ChangeEvent, logger zerolog.Logger) {
 	if len(events) > 0 {
-		_ = d.storage.StoreChangeEventBatch(ctx, events)
+		if err := d.storage.StoreChangeEventBatch(ctx, events); err != nil {
+			logger.Error().Err(err).Msg("failed to store change events")
+		}
 	}
-
-	// Record metrics
 	d.metrics.RecordChangeEvents(ctx, events)
+}
+
+func (d *Daemon) countChangeEvents(events []storage.ChangeEvent) (created, modified, disappeared int) {
+	for _, e := range events {
+		switch e.ChangeType {
+		case "created":
+			created++
+		case "modified":
+			modified++
+		case "disappeared":
+			disappeared++
+		}
+	}
+	return
 }
 
 func (d *Daemon) listResources(ctx context.Context) ([]types.Resource, error) {
