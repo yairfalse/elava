@@ -16,14 +16,19 @@ func TestNewDaemon(t *testing.T) {
 		MetricsPort: 2112,
 		Region:      "us-east-1",
 		StoragePath: t.TempDir(),
+		Provider:    "aws",
 	}
 
 	daemon, err := NewDaemon(config)
-
 	require.NoError(t, err)
+	defer func() { _ = daemon.Close() }()
+
 	assert.NotNil(t, daemon)
 	assert.Equal(t, config.Interval, daemon.interval)
 	assert.Equal(t, config.MetricsPort, daemon.configPort)
+	assert.NotNil(t, daemon.storage)
+	assert.NotNil(t, daemon.changeDetector)
+	assert.NotNil(t, daemon.metrics)
 }
 
 // Test daemon starts successfully
@@ -33,10 +38,12 @@ func TestDaemon_Start(t *testing.T) {
 		MetricsPort: 0, // Random port
 		Region:      "us-east-1",
 		StoragePath: t.TempDir(),
+		Provider:    "aws",
 	}
 
 	daemon, err := NewDaemon(config)
 	require.NoError(t, err)
+	defer func() { _ = daemon.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -72,10 +79,12 @@ func TestDaemon_GracefulShutdown(t *testing.T) {
 		MetricsPort: 0,
 		Region:      "us-east-1",
 		StoragePath: t.TempDir(),
+		Provider:    "aws",
 	}
 
 	daemon, err := NewDaemon(config)
 	require.NoError(t, err)
+	defer func() { _ = daemon.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -107,10 +116,12 @@ func TestDaemon_Health(t *testing.T) {
 		MetricsPort: 0,
 		Region:      "us-east-1",
 		StoragePath: t.TempDir(),
+		Provider:    "aws",
 	}
 
 	daemon, err := NewDaemon(config)
 	require.NoError(t, err)
+	defer func() { _ = daemon.Close() }()
 
 	health := daemon.Health()
 
@@ -125,10 +136,12 @@ func TestDaemon_ReconciliationLoop(t *testing.T) {
 		MetricsPort: 0,
 		Region:      "us-east-1",
 		StoragePath: t.TempDir(),
+		Provider:    "aws",
 	}
 
 	daemon, err := NewDaemon(config)
 	require.NoError(t, err)
+	defer func() { _ = daemon.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -154,10 +167,12 @@ func TestDaemon_MetricsServer(t *testing.T) {
 		MetricsPort: 0, // Random port
 		Region:      "us-east-1",
 		StoragePath: t.TempDir(),
+		Provider:    "aws",
 	}
 
 	daemon, err := NewDaemon(config)
 	require.NoError(t, err)
+	defer func() { _ = daemon.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
