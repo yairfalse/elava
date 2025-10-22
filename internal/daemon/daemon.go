@@ -10,6 +10,11 @@ import (
 
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/yairfalse/elava/analyzer"
+	"github.com/yairfalse/elava/observer"
+	"github.com/yairfalse/elava/providers"
+	"github.com/yairfalse/elava/storage"
+	"github.com/yairfalse/elava/types"
 )
 
 // Config holds daemon configuration
@@ -18,6 +23,7 @@ type Config struct {
 	MetricsPort int
 	Region      string
 	StoragePath string
+	Provider    string // Cloud provider type (e.g., "aws")
 }
 
 // Daemon manages continuous reconciliation
@@ -26,19 +32,46 @@ type Daemon struct {
 	configPort     int
 	actualPort     atomic.Int32
 	region         string
+	provider       string
 	storagePath    string
 	startTime      time.Time
 	reconcileCount atomic.Int64
+
+	// Infrastructure components
+	storage        *storage.MVCCStorage
+	changeDetector *analyzer.ChangeDetectorImpl
+	metrics        *observer.ChangeEventMetrics
+	cloudProvider  providers.CloudProvider
 }
 
 // NewDaemon creates a new daemon instance
 func NewDaemon(config Config) (*Daemon, error) {
+	// Open MVCC storage
+	store, err := storage.NewMVCCStorage(config.StoragePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open storage: %w", err)
+	}
+
+	// Create change detector
+	detector := analyzer.NewChangeDetector(store)
+
+	// Create metrics observer
+	metrics, err := observer.NewChangeEventMetrics()
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("failed to create metrics: %w", err)
+	}
+
 	return &Daemon{
-		interval:    config.Interval,
-		configPort:  config.MetricsPort,
-		region:      config.Region,
-		storagePath: config.StoragePath,
-		startTime:   time.Now(),
+		interval:       config.Interval,
+		configPort:     config.MetricsPort,
+		region:         config.Region,
+		provider:       config.Provider,
+		storagePath:    config.StoragePath,
+		startTime:      time.Now(),
+		storage:        store,
+		changeDetector: detector,
+		metrics:        metrics,
 	}, nil
 }
 
@@ -83,9 +116,15 @@ func (d *Daemon) runMetricsServer(ctx context.Context) error {
 	}
 
 	port := listener.Addr().(*net.TCPAddr).Port
+	if port < 0 || port > 65535 {
+		return fmt.Errorf("invalid port: %d", port)
+	}
 	d.actualPort.Store(int32(port))
 
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	go func() {
 		<-ctx.Done()
@@ -100,6 +139,41 @@ func (d *Daemon) runMetricsServer(ctx context.Context) error {
 
 func (d *Daemon) runReconciliation(ctx context.Context) {
 	d.reconcileCount.Add(1)
+
+	// Cloud provider will be initialized on first use (lazy init)
+	if d.cloudProvider == nil {
+		return // Skip if no provider configured yet
+	}
+
+	// List all resources from cloud
+	resources, err := d.listResources(ctx)
+	if err != nil {
+		return // Errors logged internally
+	}
+
+	// Store observations
+	if _, err := d.storage.RecordObservationBatch(resources); err != nil {
+		return // Errors logged internally
+	}
+
+	// Detect changes
+	events, err := d.changeDetector.DetectChanges(ctx, resources)
+	if err != nil {
+		return // Errors logged internally
+	}
+
+	// Store change events
+	if len(events) > 0 {
+		_ = d.storage.StoreChangeEventBatch(ctx, events)
+	}
+
+	// Record metrics
+	d.metrics.RecordChangeEvents(ctx, events)
+}
+
+func (d *Daemon) listResources(ctx context.Context) ([]types.Resource, error) {
+	filter := types.ResourceFilter{} // Empty filter = all resources
+	return d.cloudProvider.ListResources(ctx, filter)
 }
 
 // Health returns daemon health status
@@ -124,4 +198,12 @@ func (d *Daemon) ReconciliationCount() int64 {
 // MetricsPort returns the actual port metrics server is listening on
 func (d *Daemon) MetricsPort() int {
 	return int(d.actualPort.Load())
+}
+
+// Close shuts down daemon and releases resources
+func (d *Daemon) Close() error {
+	if d.storage != nil {
+		return d.storage.Close()
+	}
+	return nil
 }
