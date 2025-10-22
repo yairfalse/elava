@@ -28,7 +28,8 @@ func TestNewDaemon(t *testing.T) {
 	assert.Equal(t, config.MetricsPort, daemon.configPort)
 	assert.NotNil(t, daemon.storage)
 	assert.NotNil(t, daemon.changeDetector)
-	assert.NotNil(t, daemon.metrics)
+	assert.NotNil(t, daemon.changeMetrics)
+	assert.NotNil(t, daemon.daemonMetrics)
 	// cloudProvider is nil in tests (no AWS credentials)
 }
 

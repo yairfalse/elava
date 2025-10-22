@@ -11,6 +11,9 @@ import (
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+
 	"github.com/yairfalse/elava/analyzer"
 	"github.com/yairfalse/elava/observer"
 	"github.com/yairfalse/elava/providers"
@@ -43,7 +46,8 @@ type Daemon struct {
 	// Infrastructure components
 	storage        *storage.MVCCStorage
 	changeDetector *analyzer.ChangeDetectorImpl
-	metrics        *observer.ChangeEventMetrics
+	changeMetrics  *observer.ChangeEventMetrics
+	daemonMetrics  *DaemonMetrics
 	cloudProvider  providers.CloudProvider
 	logger         zerolog.Logger
 }
@@ -65,11 +69,18 @@ func NewDaemon(config Config) (*Daemon, error) {
 
 	detector := analyzer.NewChangeDetector(store)
 
-	metrics, err := observer.NewChangeEventMetrics()
+	changeMetrics, err := observer.NewChangeEventMetrics()
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to create metrics")
+		logger.Error().Err(err).Msg("failed to create change metrics")
 		_ = store.Close()
-		return nil, fmt.Errorf("failed to create metrics: %w", err)
+		return nil, fmt.Errorf("failed to create change metrics: %w", err)
+	}
+
+	daemonMetrics, err := NewDaemonMetrics()
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to create daemon metrics")
+		_ = store.Close()
+		return nil, fmt.Errorf("failed to create daemon metrics: %w", err)
 	}
 
 	cloudProvider, err := initCloudProvider(config, logger)
@@ -89,7 +100,8 @@ func NewDaemon(config Config) (*Daemon, error) {
 		startTime:      time.Now(),
 		storage:        store,
 		changeDetector: detector,
-		metrics:        metrics,
+		changeMetrics:  changeMetrics,
+		daemonMetrics:  daemonMetrics,
 		cloudProvider:  cloudProvider,
 		logger:         logger,
 	}, nil
@@ -222,6 +234,9 @@ func (d *Daemon) runReconciliation(ctx context.Context) {
 	logger.Debug().Msg("reconciliation started")
 	startTime := time.Now()
 
+	// Record run attempt
+	d.daemonMetrics.reconcileRunsTotal.Add(ctx, 1)
+
 	if d.cloudProvider == nil {
 		logger.Debug().Msg("no cloud provider - skipping reconciliation")
 		return
@@ -230,28 +245,35 @@ func (d *Daemon) runReconciliation(ctx context.Context) {
 	resources, err := d.listResources(ctx)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to list resources from cloud")
+		d.daemonMetrics.reconcileFailuresTotal.Add(ctx, 1)
 		return
 	}
 	logger.Info().Int("count", len(resources)).Msg("resources discovered")
+	d.daemonMetrics.resourcesDiscovered.Record(ctx, int64(len(resources)))
 
 	if err := d.storeObservations(resources, logger); err != nil {
+		d.daemonMetrics.reconcileFailuresTotal.Add(ctx, 1)
 		return
 	}
 
 	events, err := d.detectAndLogChanges(ctx, resources, logger)
 	if err != nil {
+		d.daemonMetrics.reconcileFailuresTotal.Add(ctx, 1)
 		return
 	}
 
 	d.storeAndRecordMetrics(ctx, events, logger)
 
-	logger.Info().Dur("duration", time.Since(startTime)).Msg("reconciliation completed")
+	duration := time.Since(startTime)
+	d.daemonMetrics.reconcileDuration.Record(ctx, duration.Seconds())
+	logger.Info().Dur("duration", duration).Msg("reconciliation completed")
 }
 
 func (d *Daemon) storeObservations(resources []types.Resource, logger zerolog.Logger) error {
 	revision, err := d.storage.RecordObservationBatch(resources)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to store observations")
+		d.daemonMetrics.storageWritesFailed.Add(context.Background(), 1)
 		return err
 	}
 	logger.Debug().Int64("revision", revision).Msg("observations stored")
@@ -279,9 +301,21 @@ func (d *Daemon) storeAndRecordMetrics(ctx context.Context, events []storage.Cha
 	if len(events) > 0 {
 		if err := d.storage.StoreChangeEventBatch(ctx, events); err != nil {
 			logger.Error().Err(err).Msg("failed to store change events")
+			d.daemonMetrics.storageWritesFailed.Add(ctx, 1)
 		}
 	}
-	d.metrics.RecordChangeEvents(ctx, events)
+
+	// Record change events in both metrics systems
+	d.changeMetrics.RecordChangeEvents(ctx, events)
+
+	// Record counts by type in daemon metrics
+	for _, event := range events {
+		d.daemonMetrics.changeEventsTotal.Add(ctx, 1,
+			metric.WithAttributes(
+				attribute.String("type", event.ChangeType),
+			),
+		)
+	}
 }
 
 func (d *Daemon) countChangeEvents(events []storage.ChangeEvent) (created, modified, disappeared int) {
