@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -184,6 +186,53 @@ func TestDaemon_MetricsServer(t *testing.T) {
 	// Server should be accessible
 	port := daemon.MetricsPort()
 	assert.Greater(t, port, 0)
+
+	cancel()
+}
+
+// Test health endpoints are accessible
+func TestDaemon_HealthEndpoints(t *testing.T) {
+	config := Config{
+		Interval:    5 * time.Minute,
+		MetricsPort: 0, // Random port
+		Region:      "us-east-1",
+		StoragePath: t.TempDir(),
+	}
+
+	daemon, err := NewDaemon(config)
+	require.NoError(t, err)
+	defer func() { _ = daemon.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		_ = daemon.Start(ctx)
+	}()
+
+	// Give server time to start
+	time.Sleep(100 * time.Millisecond)
+
+	port := daemon.MetricsPort()
+	assert.Greater(t, port, 0)
+
+	// Test /health endpoint
+	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/health", port))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Test /-/healthy endpoint (Prometheus pattern)
+	resp, err = http.Get(fmt.Sprintf("http://localhost:%d/-/healthy", port))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Test /-/ready endpoint
+	resp, err = http.Get(fmt.Sprintf("http://localhost:%d/-/ready", port))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	cancel()
 }
