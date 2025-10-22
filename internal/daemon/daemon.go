@@ -195,6 +195,9 @@ func (d *Daemon) runReconcileLoop(ctx context.Context) error {
 func (d *Daemon) runMetricsServer(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/health", d.handleHealth)
+	mux.HandleFunc("/-/healthy", d.handleHealth)
+	mux.HandleFunc("/-/ready", d.handleReady)
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", d.configPort))
 	if err != nil {
@@ -367,4 +370,27 @@ func (d *Daemon) Close() error {
 		return d.storage.Close()
 	}
 	return nil
+}
+
+// handleHealth returns daemon health status (Prometheus pattern: /-/healthy)
+func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	health := d.Health()
+	fmt.Fprintf(w, `{"status":"%s","uptime":%d}`, health.Status, health.Uptime)
+}
+
+// handleReady returns readiness status (Prometheus pattern: /-/ready)
+func (d *Daemon) handleReady(w http.ResponseWriter, r *http.Request) {
+	// Check if storage is accessible
+	if d.storage == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprint(w, "storage not initialized")
+		return
+	}
+
+	// Daemon is ready if storage is open
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, "ready")
 }
