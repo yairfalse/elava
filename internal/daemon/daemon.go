@@ -206,8 +206,9 @@ func (d *Daemon) runMetricsServer(ctx context.Context) error {
 	}
 
 	port := listener.Addr().(*net.TCPAddr).Port
-	if port == 0 {
-		return fmt.Errorf("invalid port: system assigned port 0")
+
+	if port < 0 || port > 65535 {
+		return fmt.Errorf("invalid port: %d", port)
 	}
 	d.actualPort.Store(int32(port))
 

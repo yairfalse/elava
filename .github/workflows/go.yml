@@ -56,6 +56,7 @@ jobs:
       - name: Vet
         if: steps.changed-files.outputs.no_go_changes != 'true'
         run: |
+
           # Get changed packages
           CHANGED_FILES=$(cat changed_files.txt)
           CHANGED_PKGS=$(echo "$CHANGED_FILES" | xargs -I {} dirname {} | sort -u | xargs -I {} echo "./{}")
@@ -94,6 +95,7 @@ jobs:
             CHANGED_FILES=$(git diff --name-only --diff-filter=ACMRT origin/main...HEAD | grep '\.go$' || echo "")
 
             if [ -n "$CHANGED_FILES" ]; then
+
               # Get packages containing changed files
               CHANGED_PKGS=$(echo "$CHANGED_FILES" | xargs -I {} dirname {} | sort -u | xargs -I {} echo "./{}")
 
