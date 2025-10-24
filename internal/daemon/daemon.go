@@ -11,8 +11,6 @@ import (
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
 
 	"github.com/yairfalse/elava/analyzer"
 	"github.com/yairfalse/elava/observer"
@@ -237,49 +235,56 @@ func (d *Daemon) runReconciliation(ctx context.Context) {
 	logger.Debug().Msg("reconciliation started")
 	startTime := time.Now()
 
-	// Record run attempt
-	d.daemonMetrics.reconcileRunsTotal.Add(ctx, 1)
+	// Track success/failure status
+	status := "success"
+	defer func() {
+		duration := time.Since(startTime)
+		d.daemonMetrics.RecordReconciliation(ctx, status, d.provider, d.region)
+		d.daemonMetrics.RecordReconciliationDuration(ctx, duration.Seconds(), status)
+		logger.Info().Str("status", status).Dur("duration", duration).Msg("reconciliation completed")
+	}()
 
 	if d.cloudProvider == nil {
 		logger.Debug().Msg("no cloud provider - skipping reconciliation")
+		status = "skipped"
 		return
 	}
 
 	resources, err := d.listResources(ctx)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to list resources from cloud")
-		d.daemonMetrics.reconcileFailuresTotal.Add(ctx, 1)
+		status = "failure"
 		return
 	}
 	logger.Info().Int("count", len(resources)).Msg("resources discovered")
-	d.daemonMetrics.resourcesDiscovered.Record(ctx, int64(len(resources)))
+
+	// Record discovered resources - for now use generic "resource" type
+	// In future, we can break this down by resource type (ec2, rds, etc.)
+	d.daemonMetrics.RecordResourcesDiscovered(ctx, int64(len(resources)), "resource", d.provider, d.region)
 
 	if err := d.storeObservations(resources, logger); err != nil {
-		d.daemonMetrics.reconcileFailuresTotal.Add(ctx, 1)
+		status = "failure"
 		return
 	}
 
 	events, err := d.detectAndLogChanges(ctx, resources, logger)
 	if err != nil {
-		d.daemonMetrics.reconcileFailuresTotal.Add(ctx, 1)
+		status = "failure"
 		return
 	}
 
 	d.storeAndRecordMetrics(ctx, events, logger)
-
-	duration := time.Since(startTime)
-	d.daemonMetrics.reconcileDuration.Record(ctx, duration.Seconds())
-	logger.Info().Dur("duration", duration).Msg("reconciliation completed")
 }
 
 func (d *Daemon) storeObservations(resources []types.Resource, logger zerolog.Logger) error {
 	revision, err := d.storage.RecordObservationBatch(resources)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to store observations")
-		d.daemonMetrics.storageWritesFailed.Add(context.Background(), 1)
+		d.daemonMetrics.RecordStorageOperation(context.Background(), "write", "failure", "batch_write_failed")
 		return err
 	}
 	logger.Debug().Int64("revision", revision).Msg("observations stored")
+	d.daemonMetrics.RecordStorageOperation(context.Background(), "write", "success", "")
 	return nil
 }
 
@@ -304,7 +309,9 @@ func (d *Daemon) storeAndRecordMetrics(ctx context.Context, events []storage.Cha
 	if len(events) > 0 {
 		if err := d.storage.StoreChangeEventBatch(ctx, events); err != nil {
 			logger.Error().Err(err).Msg("failed to store change events")
-			d.daemonMetrics.storageWritesFailed.Add(ctx, 1)
+			d.daemonMetrics.RecordStorageOperation(ctx, "write", "failure", "batch_write_failed")
+		} else {
+			d.daemonMetrics.RecordStorageOperation(ctx, "write", "success", "")
 		}
 	}
 
@@ -313,11 +320,8 @@ func (d *Daemon) storeAndRecordMetrics(ctx context.Context, events []storage.Cha
 
 	// Record counts by type in daemon metrics
 	for _, event := range events {
-		d.daemonMetrics.changeEventsTotal.Add(ctx, 1,
-			metric.WithAttributes(
-				attribute.String("type", event.ChangeType),
-			),
-		)
+		// Use generic "resource" type for now - in future we can parse resource type from ARN
+		d.daemonMetrics.RecordChangeEvent(ctx, event.ChangeType, "resource", d.region)
 	}
 }
 
@@ -378,7 +382,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	health := d.Health()
-	fmt.Fprintf(w, `{"status":"%s","uptime":%d}`, health.Status, health.Uptime)
+	_, _ = fmt.Fprintf(w, `{"status":"%s","uptime":%d}`, health.Status, health.Uptime)
 }
 
 // handleReady returns readiness status (Prometheus pattern: /-/ready)
@@ -386,11 +390,11 @@ func (d *Daemon) handleReady(w http.ResponseWriter, r *http.Request) {
 	// Check if storage is accessible
 	if d.storage == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Fprint(w, "storage not initialized")
+		_, _ = fmt.Fprint(w, "storage not initialized")
 		return
 	}
 
 	// Daemon is ready if storage is open
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, "ready")
+	_, _ = fmt.Fprint(w, "ready")
 }
