@@ -219,19 +219,19 @@ func TestDaemon_HealthEndpoints(t *testing.T) {
 	// Test /health endpoint
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/health", port))
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Test /-/healthy endpoint (Prometheus pattern)
 	resp, err = http.Get(fmt.Sprintf("http://localhost:%d/-/healthy", port))
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Test /-/ready endpoint
 	resp, err = http.Get(fmt.Sprintf("http://localhost:%d/-/ready", port))
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	cancel()
