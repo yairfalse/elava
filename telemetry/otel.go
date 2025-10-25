@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -18,6 +19,8 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	promclient "github.com/prometheus/client_golang/prometheus"
 )
 
 // Global telemetry handles - CLAUDE.md: Direct OTEL, no wrappers
@@ -27,6 +30,10 @@ var (
 
 	// Meter for metrics
 	Meter = otel.Meter("github.com/yairfalse/elava")
+
+	// PrometheusRegistry for Prometheus scraping (dual export pattern)
+	// The OTEL exporter automatically registers itself with this registry
+	PrometheusRegistry *promclient.Registry
 
 	// Metrics - following OTEL naming conventions
 	ResourcesScanned   metric.Int64Counter
@@ -165,9 +172,54 @@ func setupTraceProvider(ctx context.Context, cfg Config, res *resource.Resource)
 	return provider.Shutdown, nil
 }
 
-// setupMetricProvider configures metric provider with OTLP exporter
+// setupMetricProvider configures metric provider with dual export (Prometheus + OTLP)
+// Following Beyla pattern: Prometheus for pull-based scraping + OTLP for push-based export
 func setupMetricProvider(ctx context.Context, cfg Config, res *resource.Resource) (func(context.Context) error, error) {
-	// Configure connection
+	var readers []sdkmetric.Reader
+
+	// 1. Prometheus exporter (pull-based)
+	// Create a custom registry for the OTEL exporter
+	registry := promclient.NewRegistry()
+	PrometheusRegistry = registry
+
+	prometheusExporter, err := prometheus.New(
+		prometheus.WithRegisterer(registry),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create prometheus exporter: %w", err)
+	}
+	readers = append(readers, prometheusExporter)
+
+	// 2. OTLP exporter (push-based) - optional, controlled by env var
+	if cfg.OTELEndpoint != "" {
+		otlpReader, err := createOTLPReader(ctx, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OTLP reader: %w", err)
+		}
+		readers = append(readers, otlpReader)
+	}
+
+	// Create metric provider with both readers
+	providerOpts := []sdkmetric.Option{
+		sdkmetric.WithResource(res),
+	}
+	for _, reader := range readers {
+		providerOpts = append(providerOpts, sdkmetric.WithReader(reader))
+	}
+
+	provider := sdkmetric.NewMeterProvider(providerOpts...)
+
+	// Set global provider
+	otel.SetMeterProvider(provider)
+
+	// Update global meter
+	Meter = provider.Meter("github.com/yairfalse/elava")
+
+	return provider.Shutdown, nil
+}
+
+// createOTLPReader creates an OTLP periodic reader for push-based export
+func createOTLPReader(ctx context.Context, cfg Config) (sdkmetric.Reader, error) {
 	opts := []otlpmetricgrpc.Option{
 		otlpmetricgrpc.WithEndpoint(cfg.OTELEndpoint),
 	}
@@ -178,29 +230,14 @@ func setupMetricProvider(ctx context.Context, cfg Config, res *resource.Resource
 		))
 	}
 
-	// Create OTLP metric exporter
 	exporter, err := otlpmetricgrpc.New(ctx, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
+		return nil, fmt.Errorf("failed to create OTLP exporter: %w", err)
 	}
 
-	// Create metric provider
-	provider := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(
-			sdkmetric.NewPeriodicReader(exporter,
-				sdkmetric.WithInterval(10*time.Second), // Export every 10s
-			),
-		),
-		sdkmetric.WithResource(res),
-	)
-
-	// Set global provider
-	otel.SetMeterProvider(provider)
-
-	// Update global meter
-	Meter = provider.Meter("github.com/yairfalse/elava")
-
-	return provider.Shutdown, nil
+	return sdkmetric.NewPeriodicReader(exporter,
+		sdkmetric.WithInterval(10*time.Second), // Export every 10s
+	), nil
 }
 
 // initMetrics initializes all metric instruments

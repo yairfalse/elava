@@ -17,6 +17,7 @@ import (
 	"github.com/yairfalse/elava/providers"
 	_ "github.com/yairfalse/elava/providers/aws" // Register AWS provider
 	"github.com/yairfalse/elava/storage"
+	"github.com/yairfalse/elava/telemetry"
 	"github.com/yairfalse/elava/types"
 )
 
@@ -192,7 +193,19 @@ func (d *Daemon) runReconcileLoop(ctx context.Context) error {
 
 func (d *Daemon) runMetricsServer(ctx context.Context) error {
 	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.Handler())
+
+	// Use OTEL Prometheus registry if available (dual export mode)
+	// The OTEL exporter automatically registers itself with the registry
+	if telemetry.PrometheusRegistry != nil {
+		mux.Handle("/metrics", promhttp.HandlerFor(telemetry.PrometheusRegistry, promhttp.HandlerOpts{}))
+	} else {
+		// Telemetry not initialized - provide stub endpoint
+		mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("# Telemetry not initialized\n"))
+		})
+	}
+
 	mux.HandleFunc("/health", d.handleHealth)
 	mux.HandleFunc("/-/healthy", d.handleHealth)
 	mux.HandleFunc("/-/ready", d.handleReady)
