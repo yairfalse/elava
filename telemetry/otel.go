@@ -194,7 +194,7 @@ func setupMetricProvider(ctx context.Context, cfg Config, res *resource.Resource
 	if cfg.OTELEndpoint != "" {
 		otlpReader, err := createOTLPReader(ctx, cfg)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create OTLP reader: %w", err)
+			return nil, fmt.Errorf("failed to create OTLP metric reader: %w", err)
 		}
 		readers = append(readers, otlpReader)
 	}
