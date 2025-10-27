@@ -11,6 +11,8 @@ import (
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/yairfalse/elava/analyzer"
 	"github.com/yairfalse/elava/observer"
@@ -295,10 +297,19 @@ func (d *Daemon) runReconciliation(ctx context.Context) {
 }
 
 func (d *Daemon) storeObservations(resources []types.Resource, logger zerolog.Logger) error {
+	ctx := context.Background()
+	ctx, span := telemetry.Tracer.Start(ctx, "store_observations")
+	span.SetAttributes(
+		attribute.Int("resource_count", len(resources)),
+	)
+	defer span.End()
+
 	revision, err := d.storage.RecordObservationBatch(resources)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to store observations")
-		d.daemonMetrics.RecordStorageOperation(context.Background(), "write", "failure", "batch_write_failed")
+		d.daemonMetrics.RecordStorageOperation(ctx, "write", "failure", "batch_write_failed")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to store observations")
 		return err
 	}
 	logger.Debug().Int64("revision", revision).Msg("observations stored")
@@ -307,13 +318,24 @@ func (d *Daemon) storeObservations(resources []types.Resource, logger zerolog.Lo
 }
 
 func (d *Daemon) detectAndLogChanges(ctx context.Context, resources []types.Resource, logger zerolog.Logger) ([]storage.ChangeEvent, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "detect_changes")
+	defer span.End()
+
 	events, err := d.changeDetector.DetectChanges(ctx, resources)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to detect changes")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to detect changes")
 		return nil, err
 	}
 
 	created, modified, disappeared := d.countChangeEvents(events)
+	span.SetAttributes(
+		attribute.Int("changes.created", created),
+		attribute.Int("changes.modified", modified),
+		attribute.Int("changes.disappeared", disappeared),
+	)
+
 	logger.Info().
 		Int("created", created).
 		Int("modified", modified).
@@ -358,8 +380,23 @@ func (d *Daemon) countChangeEvents(events []storage.ChangeEvent) (created, modif
 }
 
 func (d *Daemon) listResources(ctx context.Context) ([]types.Resource, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "list_resources")
+	span.SetAttributes(
+		attribute.String("cloud.provider", d.provider),
+		attribute.String("cloud.region", d.region),
+	)
+	defer span.End()
+
 	filter := types.ResourceFilter{} // Empty filter = all resources
-	return d.cloudProvider.ListResources(ctx, filter)
+	resources, err := d.cloudProvider.ListResources(ctx, filter)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to list resources")
+		return nil, err
+	}
+
+	span.SetAttributes(attribute.Int("resource_count", len(resources)))
+	return resources, nil
 }
 
 // Health returns daemon health status
