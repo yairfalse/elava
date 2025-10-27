@@ -244,6 +244,10 @@ func (d *Daemon) runMetricsServer(ctx context.Context) error {
 }
 
 func (d *Daemon) runReconciliation(ctx context.Context) {
+	// Create trace span for reconciliation
+	ctx, span := telemetry.Tracer.Start(ctx, "reconciliation")
+	defer span.End()
+
 	runNum := d.reconcileCount.Add(1)
 	logger := d.logger.With().Int64("run", runNum).Logger()
 	logger.Debug().Msg("reconciliation started")

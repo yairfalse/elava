@@ -70,6 +70,14 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 		StoragePath: daemonStoragePath,
 	}
 
+	// Setup context first
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Initialize telemetry
+	shutdownTelemetry := initTelemetry(ctx)
+	defer shutdownTelemetry()
+
 	// Initialize daemon
 	d, err := daemon.NewDaemon(config)
 	if err != nil {
@@ -78,9 +86,6 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	defer func() { _ = d.Close() }()
 
 	// Setup signal handling
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 

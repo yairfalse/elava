@@ -16,7 +16,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -142,9 +142,12 @@ func setupTraceProvider(ctx context.Context, cfg Config, res *resource.Resource)
 	}
 
 	if cfg.Insecure {
-		opts = append(opts, otlptracegrpc.WithDialOption(
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		))
+		opts = append(opts,
+			otlptracegrpc.WithInsecure(),
+			otlptracegrpc.WithDialOption(
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+			),
+		)
 	}
 
 	// Create OTLP trace exporter
@@ -172,12 +175,13 @@ func setupTraceProvider(ctx context.Context, cfg Config, res *resource.Resource)
 	return provider.Shutdown, nil
 }
 
-// setupMetricProvider configures metric provider with dual export (Prometheus + OTLP)
-// Following Beyla pattern: Prometheus for pull-based scraping + OTLP for push-based export
+// setupMetricProvider configures metric provider with Prometheus export only
+// Note: OTLP metrics are not sent to Jaeger (it only accepts traces)
+// Metrics are exposed via Prometheus /metrics endpoint for scraping
 func setupMetricProvider(ctx context.Context, cfg Config, res *resource.Resource) (func(context.Context) error, error) {
 	var readers []sdkmetric.Reader
 
-	// 1. Prometheus exporter (pull-based)
+	// Prometheus exporter (pull-based)
 	// Create a custom registry for the OTEL exporter
 	registry := promclient.NewRegistry()
 	PrometheusRegistry = registry
@@ -189,15 +193,6 @@ func setupMetricProvider(ctx context.Context, cfg Config, res *resource.Resource
 		return nil, fmt.Errorf("failed to create prometheus exporter: %w", err)
 	}
 	readers = append(readers, prometheusExporter)
-
-	// 2. OTLP exporter (push-based) - optional, controlled by env var
-	if cfg.OTELEndpoint != "" {
-		otlpReader, err := createOTLPReader(ctx, cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create OTLP metric reader: %w", err)
-		}
-		readers = append(readers, otlpReader)
-	}
 
 	// Create metric provider with both readers
 	providerOpts := []sdkmetric.Option{
@@ -225,9 +220,12 @@ func createOTLPReader(ctx context.Context, cfg Config) (sdkmetric.Reader, error)
 	}
 
 	if cfg.Insecure {
-		opts = append(opts, otlpmetricgrpc.WithDialOption(
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		))
+		opts = append(opts,
+			otlpmetricgrpc.WithInsecure(),
+			otlpmetricgrpc.WithDialOption(
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+			),
+		)
 	}
 
 	exporter, err := otlpmetricgrpc.New(ctx, opts...)
