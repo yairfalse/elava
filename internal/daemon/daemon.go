@@ -408,7 +408,9 @@ func (d *Daemon) recordChangeMetrics(ctx context.Context, events []storage.Chang
 
 	for resourceType, changes := range eventCounts {
 		for changeType, count := range changes {
-			d.daemonMetrics.RecordChangeEvent(ctx, changeType, resourceType, d.region, int64(count))
+			for i := 0; i < count; i++ {
+				d.daemonMetrics.RecordChangeEvent(ctx, changeType, resourceType, d.region)
+			}
 		}
 	}
 }
