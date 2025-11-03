@@ -278,9 +278,8 @@ func (d *Daemon) runReconciliation(ctx context.Context) {
 	}
 	logger.Info().Int("count", len(resources)).Msg("resources discovered")
 
-	// Record discovered resources - for now use generic "resource" type
-	// In future, we can break this down by resource type (ec2, rds, etc.)
-	d.daemonMetrics.RecordResourcesDiscovered(ctx, int64(len(resources)), "resource", d.provider, d.region)
+	// Record discovered resources by type
+	d.recordResourceMetrics(ctx, resources)
 
 	if err := d.storeObservations(resources, logger); err != nil {
 		status = "failure"
@@ -358,11 +357,8 @@ func (d *Daemon) storeAndRecordMetrics(ctx context.Context, events []storage.Cha
 	// Record change events in both metrics systems
 	d.changeMetrics.RecordChangeEvents(ctx, events)
 
-	// Record counts by type in daemon metrics
-	for _, event := range events {
-		// Use generic "resource" type for now - in future we can parse resource type from ARN
-		d.daemonMetrics.RecordChangeEvent(ctx, event.ChangeType, "resource", d.region)
-	}
+	// Record counts by resource type and change type
+	d.recordChangeMetrics(ctx, events)
 }
 
 func (d *Daemon) countChangeEvents(events []storage.ChangeEvent) (created, modified, disappeared int) {
@@ -377,6 +373,46 @@ func (d *Daemon) countChangeEvents(events []storage.ChangeEvent) (created, modif
 		}
 	}
 	return
+}
+
+func (d *Daemon) recordResourceMetrics(ctx context.Context, resources []types.Resource) {
+	resourcesByType := make(map[string]int)
+	for _, r := range resources {
+		resourcesByType[r.Type]++
+	}
+
+	for resourceType, count := range resourcesByType {
+		d.daemonMetrics.RecordResourcesDiscovered(ctx, int64(count), resourceType, d.provider, d.region)
+	}
+}
+
+func (d *Daemon) recordChangeMetrics(ctx context.Context, events []storage.ChangeEvent) {
+	eventCounts := make(map[string]map[string]int)
+
+	for _, event := range events {
+		// Get resource type from Current (for created/modified) or Previous (for disappeared)
+		var resourceType string
+		if event.Current != nil {
+			resourceType = event.Current.Type
+		} else if event.Previous != nil {
+			resourceType = event.Previous.Type
+		} else {
+			resourceType = "unknown"
+		}
+
+		if eventCounts[resourceType] == nil {
+			eventCounts[resourceType] = make(map[string]int)
+		}
+		eventCounts[resourceType][event.ChangeType]++
+	}
+
+	for resourceType, changes := range eventCounts {
+		for changeType, count := range changes {
+			for i := 0; i < count; i++ {
+				d.daemonMetrics.RecordChangeEvent(ctx, changeType, resourceType, d.region)
+			}
+		}
+	}
 }
 
 func (d *Daemon) listResources(ctx context.Context) ([]types.Resource, error) {
