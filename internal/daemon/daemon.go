@@ -11,6 +11,8 @@ import (
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/yairfalse/elava/analyzer"
 	"github.com/yairfalse/elava/observer"
@@ -276,9 +278,8 @@ func (d *Daemon) runReconciliation(ctx context.Context) {
 	}
 	logger.Info().Int("count", len(resources)).Msg("resources discovered")
 
-	// Record discovered resources - for now use generic "resource" type
-	// In future, we can break this down by resource type (ec2, rds, etc.)
-	d.daemonMetrics.RecordResourcesDiscovered(ctx, int64(len(resources)), "resource", d.provider, d.region)
+	// Record discovered resources by type
+	d.recordResourceMetrics(ctx, resources)
 
 	if err := d.storeObservations(resources, logger); err != nil {
 		status = "failure"
@@ -295,10 +296,19 @@ func (d *Daemon) runReconciliation(ctx context.Context) {
 }
 
 func (d *Daemon) storeObservations(resources []types.Resource, logger zerolog.Logger) error {
+	ctx := context.Background()
+	ctx, span := telemetry.Tracer.Start(ctx, "store_observations")
+	span.SetAttributes(
+		attribute.Int("resource_count", len(resources)),
+	)
+	defer span.End()
+
 	revision, err := d.storage.RecordObservationBatch(resources)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to store observations")
-		d.daemonMetrics.RecordStorageOperation(context.Background(), "write", "failure", "batch_write_failed")
+		d.daemonMetrics.RecordStorageOperation(ctx, "write", "failure", "batch_write_failed")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to store observations")
 		return err
 	}
 	logger.Debug().Int64("revision", revision).Msg("observations stored")
@@ -307,13 +317,24 @@ func (d *Daemon) storeObservations(resources []types.Resource, logger zerolog.Lo
 }
 
 func (d *Daemon) detectAndLogChanges(ctx context.Context, resources []types.Resource, logger zerolog.Logger) ([]storage.ChangeEvent, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "detect_changes")
+	defer span.End()
+
 	events, err := d.changeDetector.DetectChanges(ctx, resources)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to detect changes")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to detect changes")
 		return nil, err
 	}
 
 	created, modified, disappeared := d.countChangeEvents(events)
+	span.SetAttributes(
+		attribute.Int("changes.created", created),
+		attribute.Int("changes.modified", modified),
+		attribute.Int("changes.disappeared", disappeared),
+	)
+
 	logger.Info().
 		Int("created", created).
 		Int("modified", modified).
@@ -336,11 +357,8 @@ func (d *Daemon) storeAndRecordMetrics(ctx context.Context, events []storage.Cha
 	// Record change events in both metrics systems
 	d.changeMetrics.RecordChangeEvents(ctx, events)
 
-	// Record counts by type in daemon metrics
-	for _, event := range events {
-		// Use generic "resource" type for now - in future we can parse resource type from ARN
-		d.daemonMetrics.RecordChangeEvent(ctx, event.ChangeType, "resource", d.region)
-	}
+	// Record counts by resource type and change type
+	d.recordChangeMetrics(ctx, events)
 }
 
 func (d *Daemon) countChangeEvents(events []storage.ChangeEvent) (created, modified, disappeared int) {
@@ -357,9 +375,64 @@ func (d *Daemon) countChangeEvents(events []storage.ChangeEvent) (created, modif
 	return
 }
 
+func (d *Daemon) recordResourceMetrics(ctx context.Context, resources []types.Resource) {
+	resourcesByType := make(map[string]int)
+	for _, r := range resources {
+		resourcesByType[r.Type]++
+	}
+
+	for resourceType, count := range resourcesByType {
+		d.daemonMetrics.RecordResourcesDiscovered(ctx, int64(count), resourceType, d.provider, d.region)
+	}
+}
+
+func (d *Daemon) recordChangeMetrics(ctx context.Context, events []storage.ChangeEvent) {
+	eventCounts := make(map[string]map[string]int)
+
+	for _, event := range events {
+		// Get resource type from Current (for created/modified) or Previous (for disappeared)
+		var resourceType string
+		if event.Current != nil {
+			resourceType = event.Current.Type
+		} else if event.Previous != nil {
+			resourceType = event.Previous.Type
+		} else {
+			resourceType = "unknown"
+		}
+
+		if eventCounts[resourceType] == nil {
+			eventCounts[resourceType] = make(map[string]int)
+		}
+		eventCounts[resourceType][event.ChangeType]++
+	}
+
+	for resourceType, changes := range eventCounts {
+		for changeType, count := range changes {
+			for i := 0; i < count; i++ {
+				d.daemonMetrics.RecordChangeEvent(ctx, changeType, resourceType, d.region)
+			}
+		}
+	}
+}
+
 func (d *Daemon) listResources(ctx context.Context) ([]types.Resource, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "list_resources")
+	span.SetAttributes(
+		attribute.String("cloud.provider", d.provider),
+		attribute.String("cloud.region", d.region),
+	)
+	defer span.End()
+
 	filter := types.ResourceFilter{} // Empty filter = all resources
-	return d.cloudProvider.ListResources(ctx, filter)
+	resources, err := d.cloudProvider.ListResources(ctx, filter)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to list resources")
+		return nil, err
+	}
+
+	span.SetAttributes(attribute.Int("resource_count", len(resources)))
+	return resources, nil
 }
 
 // Health returns daemon health status

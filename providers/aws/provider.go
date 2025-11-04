@@ -27,8 +27,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/yairfalse/elava/providers"
+	"github.com/yairfalse/elava/telemetry"
 	"github.com/yairfalse/elava/types"
 )
 
@@ -143,6 +146,14 @@ func (p *RealAWSProvider) ListResources(ctx context.Context, filter types.Resour
 
 // listEC2Instances discovers EC2 instances
 func (p *RealAWSProvider) listEC2Instances(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "aws.ec2.describe_instances")
+	span.SetAttributes(
+		attribute.String("aws.service", "ec2"),
+		attribute.String("aws.operation", "DescribeInstances"),
+		attribute.String("aws.region", p.region),
+	)
+	defer span.End()
+
 	var resources []types.Resource
 
 	input := &ec2.DescribeInstancesInput{}
@@ -150,15 +161,20 @@ func (p *RealAWSProvider) listEC2Instances(ctx context.Context, filter types.Res
 	// Add filters if specified
 	if len(filter.IDs) > 0 {
 		input.InstanceIds = filter.IDs
+		span.SetAttributes(attribute.Int("filter.id_count", len(filter.IDs)))
 	}
 
 	paginator := ec2.NewDescribeInstancesPaginator(p.ec2Client, input)
+	pageCount := 0
 
 	for paginator.HasMorePages() {
 		output, err := paginator.NextPage(ctx)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to describe EC2 instances")
 			return nil, fmt.Errorf("failed to describe EC2 instances: %w", err)
 		}
+		pageCount++
 
 		for _, reservation := range output.Reservations {
 			for _, instance := range reservation.Instances {
@@ -168,22 +184,39 @@ func (p *RealAWSProvider) listEC2Instances(ctx context.Context, filter types.Res
 		}
 	}
 
+	span.SetAttributes(
+		attribute.Int("aws.pages", pageCount),
+		attribute.Int("resources.count", len(resources)),
+	)
+
 	return resources, nil
 }
 
 // listRDSInstances discovers RDS instances
 func (p *RealAWSProvider) listRDSInstances(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "aws.rds.describe_db_instances")
+	span.SetAttributes(
+		attribute.String("aws.service", "rds"),
+		attribute.String("aws.operation", "DescribeDBInstances"),
+		attribute.String("aws.region", p.region),
+	)
+	defer span.End()
+
 	var resources []types.Resource
 
 	input := &rds.DescribeDBInstancesInput{}
 
 	paginator := rds.NewDescribeDBInstancesPaginator(p.rdsClient, input)
+	pageCount := 0
 
 	for paginator.HasMorePages() {
 		output, err := paginator.NextPage(ctx)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to describe RDS instances")
 			return nil, fmt.Errorf("failed to describe RDS instances: %w", err)
 		}
+		pageCount++
 
 		for _, instance := range output.DBInstances {
 			resource := p.convertRDSInstance(instance)
@@ -191,28 +224,50 @@ func (p *RealAWSProvider) listRDSInstances(ctx context.Context, filter types.Res
 		}
 	}
 
+	span.SetAttributes(
+		attribute.Int("aws.pages", pageCount),
+		attribute.Int("resources.count", len(resources)),
+	)
+
 	return resources, nil
 }
 
 // listLoadBalancers discovers ELBv2 load balancers
 func (p *RealAWSProvider) listLoadBalancers(ctx context.Context, filter types.ResourceFilter) ([]types.Resource, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "aws.elbv2.describe_load_balancers")
+	span.SetAttributes(
+		attribute.String("aws.service", "elbv2"),
+		attribute.String("aws.operation", "DescribeLoadBalancers"),
+		attribute.String("aws.region", p.region),
+	)
+	defer span.End()
+
 	var resources []types.Resource
 
 	input := &elasticloadbalancingv2.DescribeLoadBalancersInput{}
 
 	paginator := elasticloadbalancingv2.NewDescribeLoadBalancersPaginator(p.elbv2Client, input)
+	pageCount := 0
 
 	for paginator.HasMorePages() {
 		output, err := paginator.NextPage(ctx)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to describe load balancers")
 			return nil, fmt.Errorf("failed to describe load balancers: %w", err)
 		}
+		pageCount++
 
 		for _, lb := range output.LoadBalancers {
 			resource := p.convertLoadBalancer(lb)
 			resources = append(resources, resource)
 		}
 	}
+
+	span.SetAttributes(
+		attribute.Int("aws.pages", pageCount),
+		attribute.Int("resources.count", len(resources)),
+	)
 
 	return resources, nil
 }
