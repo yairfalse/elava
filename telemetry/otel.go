@@ -75,7 +75,7 @@ func applyConfigDefaults(cfg Config) Config {
 	}
 
 	if cfg.ServiceName == "" {
-		cfg.ServiceName = "ovi"
+		cfg.ServiceName = "elava"
 	}
 
 	return cfg
@@ -255,7 +255,7 @@ func initMetrics() error {
 func initCounters() error {
 	var err error
 
-	ResourcesScanned, err = Meter.Int64Counter("ovi.resources.scanned.total",
+	ResourcesScanned, err = Meter.Int64Counter("elava.resources.scanned.total",
 		metric.WithDescription("Total number of resources scanned"),
 		metric.WithUnit("1"),
 	)
@@ -263,7 +263,7 @@ func initCounters() error {
 		return fmt.Errorf("failed to create resources_scanned counter: %w", err)
 	}
 
-	UntrackedFound, err = Meter.Int64Counter("ovi.untracked.found.total",
+	UntrackedFound, err = Meter.Int64Counter("elava.untracked.found.total",
 		metric.WithDescription("Total number of untracked resources found"),
 		metric.WithUnit("1"),
 	)
@@ -271,7 +271,7 @@ func initCounters() error {
 		return fmt.Errorf("failed to create untracked_found counter: %w", err)
 	}
 
-	StorageWrites, err = Meter.Int64Counter("ovi.storage.writes.total",
+	StorageWrites, err = Meter.Int64Counter("elava.storage.writes.total",
 		metric.WithDescription("Total number of storage write operations"),
 		metric.WithUnit("1"),
 	)
@@ -286,7 +286,7 @@ func initCounters() error {
 func initHistograms() error {
 	var err error
 
-	ScanDuration, err = Meter.Float64Histogram("ovi.scan.duration.seconds",
+	ScanDuration, err = Meter.Float64Histogram("elava.scan.duration.seconds",
 		metric.WithDescription("Duration of scan operations"),
 		metric.WithUnit("s"),
 	)
@@ -301,7 +301,7 @@ func initHistograms() error {
 func initGauges() error {
 	var err error
 
-	StorageRevision, err = Meter.Int64Gauge("ovi.storage.revision.current",
+	StorageRevision, err = Meter.Int64Gauge("elava.storage.revision.current",
 		metric.WithDescription("Current storage revision number"),
 		metric.WithUnit("1"),
 	)
@@ -309,7 +309,7 @@ func initGauges() error {
 		return fmt.Errorf("failed to create storage_revision gauge: %w", err)
 	}
 
-	ResourcesInStorage, err = Meter.Int64Gauge("ovi.storage.resources.current",
+	ResourcesInStorage, err = Meter.Int64Gauge("elava.storage.resources.current",
 		metric.WithDescription("Current number of resources in storage"),
 		metric.WithUnit("1"),
 	)
