@@ -49,3 +49,8 @@ func Names() []string {
 	}
 	return names
 }
+
+// Clear removes all plugins from the registry. Used for testing.
+func Clear() {
+	registry = make(map[string]Plugin)
+}
