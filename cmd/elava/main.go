@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"flag"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -24,79 +25,106 @@ import (
 	"github.com/yairfalse/elava/pkg/resource"
 )
 
-func main() {
-	// Flags
-	var (
-		region      = flag.String("region", "us-east-1", "AWS region to scan")
-		interval    = flag.Duration("interval", 5*time.Minute, "Scan interval")
-		metricsAddr = flag.String("metrics", ":9090", "Metrics server address")
-		oneShot     = flag.Bool("once", false, "Run once and exit")
-		debug       = flag.Bool("debug", false, "Enable debug logging")
-	)
-	flag.Parse()
+type config struct {
+	region      string
+	interval    time.Duration
+	metricsAddr string
+	oneShot     bool
+	debug       bool
+}
 
-	// Setup logging
+func parseFlags() config {
+	cfg := config{}
+	flag.StringVar(&cfg.region, "region", "us-east-1", "AWS region to scan")
+	flag.DurationVar(&cfg.interval, "interval", 5*time.Minute, "Scan interval")
+	flag.StringVar(&cfg.metricsAddr, "metrics", ":9090", "Metrics server address")
+	flag.BoolVar(&cfg.oneShot, "once", false, "Run once and exit")
+	flag.BoolVar(&cfg.debug, "debug", false, "Enable debug logging")
+	flag.Parse()
+	return cfg
+}
+
+func setupLogging(debug bool) {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	if *debug {
+	if debug {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	} else {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+}
 
-	// Setup context with signal handling
+func setupMetrics() error {
+	promExporter, err := prometheus.New()
+	if err != nil {
+		return err
+	}
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(promExporter))
+	otel.SetMeterProvider(provider)
+	return nil
+}
+
+func startMetricsServer(addr string) {
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           promhttp.Handler(),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	log.Info().Str("addr", addr).Msg("starting metrics server")
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Error().Err(err).Msg("metrics server error")
+	}
+}
+
+func closeEmitter(emit io.Closer) {
+	if err := emit.Close(); err != nil {
+		log.Error().Err(err).Msg("emitter close error")
+	}
+}
+
+func main() {
+	cfg := parseFlags()
+	setupLogging(cfg.debug)
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	// Initialize OTEL metrics with Prometheus exporter
-	promExporter, err := prometheus.New()
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create prometheus exporter")
+	if err := setupMetrics(); err != nil {
+		log.Fatal().Err(err).Msg("failed to setup metrics")
 	}
 
-	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(promExporter))
-	otel.SetMeterProvider(provider)
+	go startMetricsServer(cfg.metricsAddr)
 
-	// Start metrics server
-	go func() {
-		http.Handle("/metrics", promhttp.Handler())
-		log.Info().Str("addr", *metricsAddr).Msg("starting metrics server")
-		if err := http.ListenAndServe(*metricsAddr, nil); err != nil && err != http.ErrServerClosed {
-			log.Error().Err(err).Msg("metrics server error")
-		}
-	}()
-
-	// Initialize plugins
-	awsPlugin, err := aws.New(ctx, aws.Config{Region: *region})
+	awsPlugin, err := aws.New(ctx, aws.Config{Region: cfg.region})
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create aws plugin")
 	}
 	plugin.Register(awsPlugin)
 
-	// Initialize emitter
 	emit, err := emitter.NewPrometheusEmitter()
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create emitter")
 	}
-	defer emit.Close()
+	defer closeEmitter(emit)
 
 	log.Info().
-		Str("region", *region).
-		Dur("interval", *interval).
-		Bool("one_shot", *oneShot).
+		Str("region", cfg.region).
+		Dur("interval", cfg.interval).
+		Bool("one_shot", cfg.oneShot).
 		Msg("elava starting")
 
-	// Run initial scan
 	scan(ctx, plugin.All(), emit)
 
-	// One-shot mode
-	if *oneShot {
+	if cfg.oneShot {
 		log.Info().Msg("one-shot mode, exiting")
 		return
 	}
 
-	// Daemon mode - scan on interval
-	ticker := time.NewTicker(*interval)
+	runDaemon(ctx, cfg.interval, emit)
+}
+
+func runDaemon(ctx context.Context, interval time.Duration, emit emitter.Emitter) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
@@ -110,19 +138,17 @@ func main() {
 	}
 }
 
-// scan runs all plugins and emits results
 func scan(ctx context.Context, plugins []plugin.Plugin, emit emitter.Emitter) {
 	log.Info().Int("plugins", len(plugins)).Msg("starting scan")
 
 	for _, p := range plugins {
 		start := time.Now()
-
 		resources, err := p.Scan(ctx)
 		duration := time.Since(start)
 
 		result := resource.ScanResult{
 			Provider:  p.Name(),
-			Region:    "", // Plugin knows its region
+			Region:    "",
 			Resources: resources,
 			Duration:  duration,
 			Error:     err,
