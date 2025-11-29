@@ -70,7 +70,6 @@ func startMetricsServer(addr string) {
 		Handler:           promhttp.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	http.Handle("/metrics", promhttp.Handler())
 	log.Info().Str("addr", addr).Msg("starting metrics server")
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Error().Err(err).Msg("metrics server error")
