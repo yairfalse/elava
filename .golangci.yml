@@ -1,3 +1,8 @@
+# golangci-lint configuration for elava
+run:
+  timeout: 5m
+  go: '1.24'
+
 linters:
   enable:
     - gofmt
@@ -11,6 +16,7 @@ linters:
     - gocognit
     - bodyclose
     - gosec
+    - funlen
 
 linters-settings:
   gocyclo:
@@ -25,10 +31,3 @@ issues:
   exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-files:
-    # Legacy code with complexity issues - will refactor later
-    - "providers/aws/.*"
-    - "cmd/elava/scan.go"
-    - "cmd/elava/otel_init.go"
-    - "telemetry/otel.go"
-    - "storage/mvcc_test.go"

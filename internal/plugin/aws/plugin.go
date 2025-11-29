@@ -107,19 +107,13 @@ func (p *Plugin) Name() string {
 	return "aws"
 }
 
-// Scan scans all AWS resources and returns them in unified format.
-func (p *Plugin) Scan(ctx context.Context) ([]resource.Resource, error) {
-	var (
-		mu        sync.Mutex
-		resources []resource.Resource
-		wg        sync.WaitGroup
-	)
+type scanner struct {
+	name string
+	fn   func(context.Context) ([]resource.Resource, error)
+}
 
-	// Define scanners
-	scanners := []struct {
-		name string
-		fn   func(context.Context) ([]resource.Resource, error)
-	}{
+func (p *Plugin) scanners() []scanner {
+	return []scanner{
 		{"ec2", p.scanEC2},
 		{"rds", p.scanRDS},
 		{"elb", p.scanELB},
@@ -140,25 +134,30 @@ func (p *Plugin) Scan(ctx context.Context) ([]resource.Resource, error) {
 		{"route53", p.scanRoute53},
 		{"cloudwatch_logs", p.scanCloudWatchLogs},
 	}
+}
 
-	// Run scanners concurrently
-	for _, scanner := range scanners {
+// Scan scans all AWS resources and returns them in unified format.
+func (p *Plugin) Scan(ctx context.Context) ([]resource.Resource, error) {
+	var (
+		mu        sync.Mutex
+		resources []resource.Resource
+		wg        sync.WaitGroup
+	)
+
+	for _, s := range p.scanners() {
 		wg.Add(1)
-		go func(name string, fn func(context.Context) ([]resource.Resource, error)) {
+		go func(s scanner) {
 			defer wg.Done()
-
-			result, err := fn(ctx)
+			result, err := s.fn(ctx)
 			if err != nil {
-				log.Warn().Err(err).Str("scanner", name).Msg("scan failed")
+				log.Warn().Err(err).Str("scanner", s.name).Msg("scan failed")
 				return
 			}
-
 			mu.Lock()
 			resources = append(resources, result...)
 			mu.Unlock()
-
-			log.Debug().Str("scanner", name).Int("count", len(result)).Msg("scan complete")
-		}(scanner.name, scanner.fn)
+			log.Debug().Str("scanner", s.name).Int("count", len(result)).Msg("scan complete")
+		}(s)
 	}
 
 	wg.Wait()
