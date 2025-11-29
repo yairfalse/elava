@@ -1,5 +1,0 @@
-version: "1.0"
-provider: aws
-region: us-east-1
-
-# No policies configured - scan and store only, no enforcement

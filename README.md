@@ -1,66 +1,123 @@
 # Elava
 
-Infrastructure scanner with memory. Scans your account, tracks changes over time.
+**Stateless cloud resource scanner. Scan, emit, done.**
 
-## What it does
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Scans AWS resources and remembers what changed.
+---
 
-- **Discovers resources** - EC2, RDS, S3, Lambda, VPCs, and more
-- **Tracks changes** - Stores every observation with timestamps
-- **Detects drift** - Shows what changed between scans
-- **Finds waste** - Orphaned volumes, idle instances, untagged resources
+## What is this?
 
-Read-only. No modifications to your infrastructure.
+Elava scans cloud resources and emits metrics/logs. No state. No database. Just scanning.
 
-## Quick start
+```
+Cloud APIs (AWS/GCP/Azure)
+         |
+         v
+    ELAVA DAEMON
+    (scan -> emit -> repeat)
+         |
+         v
+   OTEL / Prometheus / NATS
+         |
+         v
+   Your observability stack
+```
+
+**Drift detection happens at the query layer** (Prometheus/Grafana), not in Elava.
+
+## Key Design
+
+- **Stateless** - No database, no files, no persistence
+- **Plugin-based** - Add cloud providers via plugins
+- **Mega small** - ~2000 lines of Go
+- **OTEL-native** - Emits metrics and logs via OpenTelemetry
+- **Daemon mode** - Runs continuously, scans on interval
+
+## Quick Start
 
 ```bash
 # Build
 go build ./cmd/elava
 
-# Scan your AWS account
-./elava scan
+# Run daemon (scans every 5 minutes)
+./elava --provider aws --region us-east-1
 
-# Scan specific region
-./elava scan --region us-west-2
+# One-shot scan
+./elava scan --provider aws --region us-east-1
 
-# Show untracked resources only
-./elava scan --risk-only
+# With OTEL endpoint
+./elava --otel-endpoint http://localhost:4317
+
+# Standalone mode (bundled VictoriaMetrics)
+./elava --standalone --port 9090
 ```
-
-## How it works
-
-```
-  AWS Account
-      │
-      │ Read-only API calls
-      ▼
-  elava scan
-      │
-      ▼
-  BadgerDB (MVCC)
-  • Timestamp per observation
-  • Revision history
-  • Tombstones for disappeared resources
-```
-
-1. Scan AWS resources via read-only APIs
-2. Store observations with timestamps
-3. Compare to previous scans
-4. Detect changes, drift, and waste
 
 ## What it scans
 
-- **Compute**: EC2, Lambda, EKS, ECS, Auto Scaling Groups
-- **Databases**: RDS, Aurora, DynamoDB
-- **Storage**: S3, EBS volumes, snapshots
-- **Network**: VPCs, subnets, load balancers, NAT gateways, security groups
-- **Other**: IAM roles, CloudWatch logs, KMS keys
+**AWS:**
+- EC2, Lambda, EKS, ECS, Auto Scaling Groups
+- RDS, Aurora, DynamoDB
+- S3, EBS volumes
+- VPCs, subnets, security groups, load balancers
+- IAM roles (optional)
 
-## AWS permissions
+**GCP:** (coming soon)
+- Compute instances, GKE, Cloud SQL, GCS
 
-Read-only access. Attach `ReadOnlyAccess` managed policy or use this minimal policy:
+**Azure:** (coming soon)
+- VMs, AKS, Azure SQL, Storage accounts
+
+## Output
+
+**Prometheus metrics:**
+```prometheus
+elava_resource_info{id="i-abc123", type="ec2", region="us-east-1", status="running"} 1
+elava_resource_cpu_cores{id="i-abc123", type="ec2"} 2
+elava_scan_duration_seconds{provider="aws", region="us-east-1"} 12.5
+elava_scan_resources_total{provider="aws", region="us-east-1"} 847
+```
+
+**Drift detection via PromQL:**
+```promql
+# Resources that changed in last hour
+changes(elava_resource_info[1h]) > 0
+
+# Resources that disappeared
+absent_over_time(elava_resource_info{id="i-abc123"}[10m])
+```
+
+## Modes
+
+| Mode | Storage | Use Case |
+|------|---------|----------|
+| **External** | Your Prometheus/Loki | Production |
+| **Standalone** | Bundled VictoriaMetrics | Quick start |
+| **NATS** | Ahti integration | Enterprise |
+
+## Configuration
+
+```yaml
+# elava.yaml
+scan:
+  interval: 5m
+  timeout: 2m
+
+providers:
+  aws:
+    enabled: true
+    regions:
+      - us-east-1
+      - eu-west-1
+
+output:
+  otel:
+    endpoint: http://localhost:4317
+```
+
+## AWS Permissions
+
+Read-only access only:
 
 ```json
 {
@@ -71,52 +128,50 @@ Read-only access. Attach `ReadOnlyAccess` managed policy or use this minimal pol
       "ec2:Describe*",
       "rds:Describe*",
       "s3:List*",
-      "s3:GetBucketTagging",
-      "lambda:List*",
-      "eks:Describe*",
-      "elasticloadbalancing:Describe*",
-      "autoscaling:Describe*",
-      "iam:List*",
-      "dynamodb:Describe*"
+      "lambda:List*"
     ],
     "Resource": "*"
   }]
 }
 ```
 
-## Configuration
+## Architecture
 
-Optional `elava.yaml`:
-
-```yaml
-provider: aws
-region: us-east-1
-
-scanning:
-  interval: 15m
-
-policies:
-  path: ./policies  # Optional: OPA policy enforcement
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        ELAVA                                │
+│                                                             │
+│   ┌─────────────┐    ┌─────────────┐    ┌──────────────┐   │
+│   │   Scanner   │───>│  Normalizer │───>│   Emitter    │   │
+│   │  (Plugins)  │    │  (Unified   │    │  (OTEL/NATS) │   │
+│   │             │    │   Format)   │    │              │   │
+│   └─────────────┘    └─────────────┘    └──────────────┘   │
+│                                                             │
+│   State: NONE                                               │
+│   Storage: NONE                                             │
+│   Drift: QUERY LAYER                                        │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-Defaults work fine. Config is optional.
+## Related Projects
 
-## Policy enforcement (optional)
-
-Elava includes OPA policy support. Policies in `policies/` directory are loaded automatically.
-
-Example policies included:
-- `ownership.rego` - Require owner tags
-- `security.rego` - Enforce encryption, public access rules
-- `waste.rego` - Detect idle resources
-- `compliance.rego` - Tag standards, naming conventions
-
-Skip the `policies.path` config to disable policy enforcement.
+- **TAPIO** - Kubernetes + eBPF observability
+- **AHTI** - Universal graph-based observability backend
+- **RAUTA** - Gateway API controller with WASM plugins
+- **KULTA** - Progressive delivery controller
 
 ## Status
 
-Early development. Storage and core types are stable. AWS scanner in progress.
+**Rewriting** - Simplifying to stateless architecture.
+
+## Name
+
+**Elava** = Finnish for "living" - your infrastructure, alive and visible.
 
 ## License
 
 MIT
+
+---
+
+**Scan. Emit. Done.** 🇫🇮

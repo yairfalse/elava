@@ -22,8 +22,7 @@ RUN apk --no-cache add ca-certificates
 COPY --from=builder /build/elava /usr/local/bin/elava
 
 # Expose metrics port
-EXPOSE 2112
+EXPOSE 9090
 
 # Run the daemon by default
 ENTRYPOINT ["/usr/local/bin/elava"]
-CMD ["daemon"]
