@@ -7,13 +7,19 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"github.com/yairfalse/elava/pkg/resource"
 )
@@ -293,4 +299,457 @@ func extractNameTag(tags []ec2types.Tag) string {
 		}
 	}
 	return ""
+}
+
+// scanVPC scans VPCs.
+func (p *Plugin) scanVPC(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+
+	paginator := ec2.NewDescribeVpcsPaginator(p.ec2Client, &ec2.DescribeVpcsInput{})
+
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe vpcs: %w", err)
+		}
+
+		for _, vpc := range output.Vpcs {
+			r := p.newResource(
+				aws.ToString(vpc.VpcId),
+				"vpc",
+				string(vpc.State),
+				extractNameTag(vpc.Tags),
+			)
+
+			for _, tag := range vpc.Tags {
+				r.Labels[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+			}
+
+			r.Attrs["cidr"] = aws.ToString(vpc.CidrBlock)
+			r.Attrs["is_default"] = strconv.FormatBool(aws.ToBool(vpc.IsDefault))
+
+			resources = append(resources, r)
+		}
+	}
+
+	return resources, nil
+}
+
+// scanSubnets scans VPC subnets.
+func (p *Plugin) scanSubnets(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+
+	paginator := ec2.NewDescribeSubnetsPaginator(p.ec2Client, &ec2.DescribeSubnetsInput{})
+
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe subnets: %w", err)
+		}
+
+		for _, subnet := range output.Subnets {
+			r := p.newResource(
+				aws.ToString(subnet.SubnetId),
+				"subnet",
+				string(subnet.State),
+				extractNameTag(subnet.Tags),
+			)
+
+			for _, tag := range subnet.Tags {
+				r.Labels[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+			}
+
+			r.Attrs["vpc_id"] = aws.ToString(subnet.VpcId)
+			r.Attrs["cidr"] = aws.ToString(subnet.CidrBlock)
+			r.Attrs["az"] = aws.ToString(subnet.AvailabilityZone)
+			r.Attrs["public"] = strconv.FormatBool(aws.ToBool(subnet.MapPublicIpOnLaunch))
+
+			resources = append(resources, r)
+		}
+	}
+
+	return resources, nil
+}
+
+// scanSecurityGroups scans security groups.
+func (p *Plugin) scanSecurityGroups(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+
+	paginator := ec2.NewDescribeSecurityGroupsPaginator(p.ec2Client, &ec2.DescribeSecurityGroupsInput{})
+
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe security groups: %w", err)
+		}
+
+		for _, sg := range output.SecurityGroups {
+			r := p.newResource(
+				aws.ToString(sg.GroupId),
+				"security_group",
+				"active",
+				aws.ToString(sg.GroupName),
+			)
+
+			for _, tag := range sg.Tags {
+				r.Labels[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+			}
+
+			r.Attrs["vpc_id"] = aws.ToString(sg.VpcId)
+			r.Attrs["description"] = aws.ToString(sg.Description)
+			r.Attrs["inbound_rules"] = strconv.Itoa(len(sg.IpPermissions))
+			r.Attrs["outbound_rules"] = strconv.Itoa(len(sg.IpPermissionsEgress))
+
+			resources = append(resources, r)
+		}
+	}
+
+	return resources, nil
+}
+
+// scanDynamoDB scans DynamoDB tables.
+func (p *Plugin) scanDynamoDB(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+
+	paginator := dynamodb.NewListTablesPaginator(p.dynamodbClient, &dynamodb.ListTablesInput{})
+
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list tables: %w", err)
+		}
+
+		for _, tableName := range output.TableNames {
+			desc, err := p.dynamodbClient.DescribeTable(ctx, &dynamodb.DescribeTableInput{
+				TableName: aws.String(tableName),
+			})
+			if err != nil {
+				continue
+			}
+
+			table := desc.Table
+			r := p.newResource(
+				aws.ToString(table.TableArn),
+				"dynamodb",
+				string(table.TableStatus),
+				tableName,
+			)
+
+			r.Attrs["items"] = strconv.FormatInt(aws.ToInt64(table.ItemCount), 10)
+			r.Attrs["size_bytes"] = strconv.FormatInt(aws.ToInt64(table.TableSizeBytes), 10)
+			if table.BillingModeSummary != nil {
+				r.Attrs["billing_mode"] = string(table.BillingModeSummary.BillingMode)
+			}
+
+			resources = append(resources, r)
+		}
+	}
+
+	return resources, nil
+}
+
+// scanSQS scans SQS queues.
+func (p *Plugin) scanSQS(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+
+	paginator := sqs.NewListQueuesPaginator(p.sqsClient, &sqs.ListQueuesInput{})
+
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list queues: %w", err)
+		}
+
+		for _, queueURL := range output.QueueUrls {
+			r := p.newResource(
+				queueURL,
+				"sqs",
+				"active",
+				extractQueueName(queueURL),
+			)
+
+			r.Attrs["url"] = queueURL
+
+			resources = append(resources, r)
+		}
+	}
+
+	return resources, nil
+}
+
+// scanEBSVolumes scans EBS volumes.
+func (p *Plugin) scanEBSVolumes(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+
+	paginator := ec2.NewDescribeVolumesPaginator(p.ec2Client, &ec2.DescribeVolumesInput{})
+
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe volumes: %w", err)
+		}
+
+		for _, vol := range output.Volumes {
+			r := p.newResource(
+				aws.ToString(vol.VolumeId),
+				"ebs",
+				string(vol.State),
+				extractNameTag(vol.Tags),
+			)
+
+			for _, tag := range vol.Tags {
+				r.Labels[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+			}
+
+			r.Attrs["size_gb"] = strconv.Itoa(int(aws.ToInt32(vol.Size)))
+			r.Attrs["type"] = string(vol.VolumeType)
+			r.Attrs["az"] = aws.ToString(vol.AvailabilityZone)
+			r.Attrs["encrypted"] = strconv.FormatBool(aws.ToBool(vol.Encrypted))
+			r.Attrs["attached"] = strconv.FormatBool(len(vol.Attachments) > 0)
+
+			resources = append(resources, r)
+		}
+	}
+
+	return resources, nil
+}
+
+// scanElasticIPs scans Elastic IPs.
+func (p *Plugin) scanElasticIPs(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+
+	output, err := p.ec2Client.DescribeAddresses(ctx, &ec2.DescribeAddressesInput{})
+	if err != nil {
+		return nil, fmt.Errorf("describe addresses: %w", err)
+	}
+
+	for _, addr := range output.Addresses {
+		status := "unattached"
+		if addr.AssociationId != nil {
+			status = "attached"
+		}
+
+		r := p.newResource(
+			aws.ToString(addr.AllocationId),
+			"eip",
+			status,
+			aws.ToString(addr.PublicIp),
+		)
+
+		for _, tag := range addr.Tags {
+			r.Labels[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+		}
+
+		r.Attrs["public_ip"] = aws.ToString(addr.PublicIp)
+		r.Attrs["private_ip"] = aws.ToString(addr.PrivateIpAddress)
+		r.Attrs["instance_id"] = aws.ToString(addr.InstanceId)
+
+		resources = append(resources, r)
+	}
+
+	return resources, nil
+}
+
+// scanNATGateways scans NAT Gateways.
+func (p *Plugin) scanNATGateways(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+
+	paginator := ec2.NewDescribeNatGatewaysPaginator(p.ec2Client, &ec2.DescribeNatGatewaysInput{})
+
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe nat gateways: %w", err)
+		}
+
+		for _, nat := range output.NatGateways {
+			r := p.newResource(
+				aws.ToString(nat.NatGatewayId),
+				"nat_gateway",
+				string(nat.State),
+				extractNameTag(nat.Tags),
+			)
+
+			for _, tag := range nat.Tags {
+				r.Labels[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+			}
+
+			r.Attrs["vpc_id"] = aws.ToString(nat.VpcId)
+			r.Attrs["subnet_id"] = aws.ToString(nat.SubnetId)
+			if len(nat.NatGatewayAddresses) > 0 {
+				r.Attrs["public_ip"] = aws.ToString(nat.NatGatewayAddresses[0].PublicIp)
+			}
+
+			resources = append(resources, r)
+		}
+	}
+
+	return resources, nil
+}
+
+// scanIAMRoles scans IAM roles.
+func (p *Plugin) scanIAMRoles(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+
+	paginator := iam.NewListRolesPaginator(p.iamClient, &iam.ListRolesInput{})
+
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list roles: %w", err)
+		}
+
+		for _, role := range output.Roles {
+			r := p.newResource(
+				aws.ToString(role.Arn),
+				"iam_role",
+				"active",
+				aws.ToString(role.RoleName),
+			)
+
+			r.Attrs["path"] = aws.ToString(role.Path)
+			if role.Description != nil {
+				r.Attrs["description"] = aws.ToString(role.Description)
+			}
+
+			resources = append(resources, r)
+		}
+	}
+
+	return resources, nil
+}
+
+// scanECS scans ECS clusters and services.
+func (p *Plugin) scanECS(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+
+	listOutput, err := p.ecsClient.ListClusters(ctx, &ecs.ListClustersInput{})
+	if err != nil {
+		return nil, fmt.Errorf("list clusters: %w", err)
+	}
+
+	if len(listOutput.ClusterArns) == 0 {
+		return resources, nil
+	}
+
+	descOutput, err := p.ecsClient.DescribeClusters(ctx, &ecs.DescribeClustersInput{
+		Clusters: listOutput.ClusterArns,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("describe clusters: %w", err)
+	}
+
+	for _, cluster := range descOutput.Clusters {
+		r := p.newResource(
+			aws.ToString(cluster.ClusterArn),
+			"ecs",
+			aws.ToString(cluster.Status),
+			aws.ToString(cluster.ClusterName),
+		)
+
+		r.Attrs["services"] = strconv.Itoa(int(cluster.ActiveServicesCount))
+		r.Attrs["tasks_running"] = strconv.Itoa(int(cluster.RunningTasksCount))
+		r.Attrs["tasks_pending"] = strconv.Itoa(int(cluster.PendingTasksCount))
+
+		resources = append(resources, r)
+	}
+
+	return resources, nil
+}
+
+// scanRoute53 scans Route53 hosted zones.
+func (p *Plugin) scanRoute53(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+
+	paginator := route53.NewListHostedZonesPaginator(p.route53Client, &route53.ListHostedZonesInput{})
+
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list hosted zones: %w", err)
+		}
+
+		for _, zone := range output.HostedZones {
+			zoneType := "public"
+			if zone.Config != nil && zone.Config.PrivateZone {
+				zoneType = "private"
+			}
+
+			r := p.newResource(
+				aws.ToString(zone.Id),
+				"route53",
+				"active",
+				aws.ToString(zone.Name),
+			)
+
+			r.Attrs["type"] = zoneType
+			r.Attrs["records"] = strconv.FormatInt(aws.ToInt64(zone.ResourceRecordSetCount), 10)
+
+			resources = append(resources, r)
+		}
+	}
+
+	return resources, nil
+}
+
+// scanCloudWatchLogs scans CloudWatch Log Groups.
+func (p *Plugin) scanCloudWatchLogs(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+
+	paginator := cloudwatchlogs.NewDescribeLogGroupsPaginator(p.cwLogsClient, &cloudwatchlogs.DescribeLogGroupsInput{})
+
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("describe log groups: %w", err)
+		}
+
+		for _, lg := range output.LogGroups {
+			r := p.newResource(
+				aws.ToString(lg.Arn),
+				"cloudwatch_logs",
+				"active",
+				aws.ToString(lg.LogGroupName),
+			)
+
+			r.Attrs["stored_bytes"] = strconv.FormatInt(aws.ToInt64(lg.StoredBytes), 10)
+			if lg.RetentionInDays != nil {
+				r.Attrs["retention_days"] = strconv.Itoa(int(aws.ToInt32(lg.RetentionInDays)))
+			}
+
+			resources = append(resources, r)
+		}
+	}
+
+	return resources, nil
+}
+
+// extractQueueName extracts queue name from SQS URL.
+func extractQueueName(queueURL string) string {
+	// URL format: https://sqs.region.amazonaws.com/account/queue-name
+	parts := splitLast(queueURL, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return queueURL
+}
+
+func splitLast(s, sep string) []string {
+	var result []string
+	for s != "" {
+		idx := len(s)
+		for i := len(s) - 1; i >= 0; i-- {
+			if s[i] == sep[0] {
+				idx = i
+				break
+			}
+		}
+		if idx == len(s) {
+			result = append([]string{s}, result...)
+			break
+		}
+		result = append([]string{s[idx+1:]}, result...)
+		s = s[:idx]
+	}
+	return result
 }

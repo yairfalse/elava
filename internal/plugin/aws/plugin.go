@@ -10,12 +10,18 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/rs/zerolog/log"
 
 	"github.com/yairfalse/elava/pkg/resource"
@@ -27,13 +33,19 @@ type Plugin struct {
 	accountID string
 
 	// AWS clients
-	ec2Client    *ec2.Client
-	rdsClient    *rds.Client
-	elbClient    *elasticloadbalancingv2.Client
-	s3Client     *s3.Client
-	eksClient    *eks.Client
-	asgClient    *autoscaling.Client
-	lambdaClient *lambda.Client
+	ec2Client      *ec2.Client
+	rdsClient      *rds.Client
+	elbClient      *elasticloadbalancingv2.Client
+	s3Client       *s3.Client
+	eksClient      *eks.Client
+	asgClient      *autoscaling.Client
+	lambdaClient   *lambda.Client
+	dynamodbClient *dynamodb.Client
+	sqsClient      *sqs.Client
+	iamClient      *iam.Client
+	ecsClient      *ecs.Client
+	route53Client  *route53.Client
+	cwLogsClient   *cloudwatchlogs.Client
 }
 
 // Config holds AWS plugin configuration.
@@ -57,15 +69,21 @@ func New(ctx context.Context, cfg Config) (*Plugin, error) {
 	}
 
 	return &Plugin{
-		region:       cfg.Region,
-		accountID:    accountID,
-		ec2Client:    ec2Client,
-		rdsClient:    rds.NewFromConfig(awsCfg),
-		elbClient:    elasticloadbalancingv2.NewFromConfig(awsCfg),
-		s3Client:     s3.NewFromConfig(awsCfg),
-		eksClient:    eks.NewFromConfig(awsCfg),
-		asgClient:    autoscaling.NewFromConfig(awsCfg),
-		lambdaClient: lambda.NewFromConfig(awsCfg),
+		region:         cfg.Region,
+		accountID:      accountID,
+		ec2Client:      ec2Client,
+		rdsClient:      rds.NewFromConfig(awsCfg),
+		elbClient:      elasticloadbalancingv2.NewFromConfig(awsCfg),
+		s3Client:       s3.NewFromConfig(awsCfg),
+		eksClient:      eks.NewFromConfig(awsCfg),
+		asgClient:      autoscaling.NewFromConfig(awsCfg),
+		lambdaClient:   lambda.NewFromConfig(awsCfg),
+		dynamodbClient: dynamodb.NewFromConfig(awsCfg),
+		sqsClient:      sqs.NewFromConfig(awsCfg),
+		iamClient:      iam.NewFromConfig(awsCfg),
+		ecsClient:      ecs.NewFromConfig(awsCfg),
+		route53Client:  route53.NewFromConfig(awsCfg),
+		cwLogsClient:   cloudwatchlogs.NewFromConfig(awsCfg),
 	}, nil
 }
 
@@ -109,6 +127,18 @@ func (p *Plugin) Scan(ctx context.Context) ([]resource.Resource, error) {
 		{"eks", p.scanEKS},
 		{"asg", p.scanASG},
 		{"lambda", p.scanLambda},
+		{"vpc", p.scanVPC},
+		{"subnet", p.scanSubnets},
+		{"security_group", p.scanSecurityGroups},
+		{"dynamodb", p.scanDynamoDB},
+		{"sqs", p.scanSQS},
+		{"ebs", p.scanEBSVolumes},
+		{"eip", p.scanElasticIPs},
+		{"nat_gateway", p.scanNATGateways},
+		{"iam_role", p.scanIAMRoles},
+		{"ecs", p.scanECS},
+		{"route53", p.scanRoute53},
+		{"cloudwatch_logs", p.scanCloudWatchLogs},
 	}
 
 	// Run scanners concurrently
