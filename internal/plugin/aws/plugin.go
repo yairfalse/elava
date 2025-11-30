@@ -32,20 +32,20 @@ type Plugin struct {
 	region    string
 	accountID string
 
-	// AWS clients
-	ec2Client      *ec2.Client
-	rdsClient      *rds.Client
-	elbClient      *elasticloadbalancingv2.Client
-	s3Client       *s3.Client
-	eksClient      *eks.Client
-	asgClient      *autoscaling.Client
-	lambdaClient   *lambda.Client
-	dynamodbClient *dynamodb.Client
-	sqsClient      *sqs.Client
-	iamClient      *iam.Client
-	ecsClient      *ecs.Client
-	route53Client  *route53.Client
-	cwLogsClient   *cloudwatchlogs.Client
+	// AWS clients (interfaces for testability)
+	ec2Client      EC2API
+	rdsClient      RDSAPI
+	elbClient      ELBAPI
+	s3Client       S3API
+	eksClient      EKSAPI
+	asgClient      AutoScalingAPI
+	lambdaClient   LambdaAPI
+	dynamodbClient DynamoDBAPI
+	sqsClient      SQSAPI
+	iamClient      IAMAPI
+	ecsClient      ECSAPI
+	route53Client  Route53API
+	cwLogsClient   CloudWatchLogsAPI
 }
 
 // Config holds AWS plugin configuration.

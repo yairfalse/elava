@@ -27,11 +27,12 @@ import (
 // scanEC2 scans EC2 instances.
 func (p *Plugin) scanEC2(ctx context.Context) ([]resource.Resource, error) {
 	var resources []resource.Resource
+	var nextToken *string
 
-	paginator := ec2.NewDescribeInstancesPaginator(p.ec2Client, &ec2.DescribeInstancesInput{})
-
-	for paginator.HasMorePages() {
-		output, err := paginator.NextPage(ctx)
+	for {
+		output, err := p.ec2Client.DescribeInstances(ctx, &ec2.DescribeInstancesInput{
+			NextToken: nextToken,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("describe instances: %w", err)
 		}
@@ -63,6 +64,11 @@ func (p *Plugin) scanEC2(ctx context.Context) ([]resource.Resource, error) {
 				resources = append(resources, r)
 			}
 		}
+
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
 	}
 
 	return resources, nil
