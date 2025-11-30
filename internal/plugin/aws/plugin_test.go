@@ -49,7 +49,7 @@ func TestScanners(t *testing.T) {
 	scanners := p.scanners()
 
 	// Verify we have all expected scanners
-	assert.Len(t, scanners, 19)
+	assert.Len(t, scanners, len(expected))
 
 	// Verify scanner names
 	names := make(map[string]bool)
