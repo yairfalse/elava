@@ -48,6 +48,13 @@ func TestScanners(t *testing.T) {
 	p := &Plugin{}
 	scanners := p.scanners()
 
+	expected := []string{
+		"ec2", "rds", "elb", "s3", "eks", "asg", "lambda",
+		"vpc", "subnet", "security_group", "dynamodb", "sqs",
+		"ebs", "eip", "nat_gateway", "iam_role", "ecs",
+		"route53", "cloudwatch_logs",
+	}
+
 	// Verify we have all expected scanners
 	assert.Len(t, scanners, len(expected))
 
@@ -55,13 +62,6 @@ func TestScanners(t *testing.T) {
 	names := make(map[string]bool)
 	for _, s := range scanners {
 		names[s.name] = true
-	}
-
-	expected := []string{
-		"ec2", "rds", "elb", "s3", "eks", "asg", "lambda",
-		"vpc", "subnet", "security_group", "dynamodb", "sqs",
-		"ebs", "eip", "nat_gateway", "iam_role", "ecs",
-		"route53", "cloudwatch_logs",
 	}
 
 	for _, name := range expected {
