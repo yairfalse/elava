@@ -614,14 +614,24 @@ func (p *Plugin) scanECS(ctx context.Context) ([]resource.Resource, error) {
 		return nil, nil
 	}
 
-	descOutput, err := p.ecsClient.DescribeClusters(ctx, &ecs.DescribeClustersInput{Clusters: clusterArns})
-	if err != nil {
-		return nil, fmt.Errorf("describe clusters: %w", err)
-	}
-
+	// DescribeClusters has a limit of 100 clusters per call
 	var resources []resource.Resource
-	for _, cluster := range descOutput.Clusters {
-		resources = append(resources, p.convertECSCluster(cluster))
+	const batchSize = 100
+	for i := 0; i < len(clusterArns); i += batchSize {
+		end := i + batchSize
+		if end > len(clusterArns) {
+			end = len(clusterArns)
+		}
+		batch := clusterArns[i:end]
+
+		descOutput, err := p.ecsClient.DescribeClusters(ctx, &ecs.DescribeClustersInput{Clusters: batch})
+		if err != nil {
+			return nil, fmt.Errorf("describe clusters: %w", err)
+		}
+
+		for _, cluster := range descOutput.Clusters {
+			resources = append(resources, p.convertECSCluster(cluster))
+		}
 	}
 
 	return resources, nil

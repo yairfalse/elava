@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -610,6 +611,43 @@ func TestScanECS_Empty(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Empty(t, resources)
+}
+
+func TestScanECS_Batching(t *testing.T) {
+	// Generate 150 cluster ARNs to test batching (limit is 100 per call)
+	var clusterArns []string
+	for i := 0; i < 150; i++ {
+		clusterArns = append(clusterArns, fmt.Sprintf("arn:aws:ecs:us-east-1:123456789012:cluster/cluster-%d", i))
+	}
+
+	describeCalls := 0
+	mock := &mockECSClient{
+		ListClustersFunc: func(_ context.Context, _ *ecs.ListClustersInput, _ ...func(*ecs.Options)) (*ecs.ListClustersOutput, error) {
+			return &ecs.ListClustersOutput{ClusterArns: clusterArns}, nil
+		},
+		DescribeClustersFunc: func(_ context.Context, params *ecs.DescribeClustersInput, _ ...func(*ecs.Options)) (*ecs.DescribeClustersOutput, error) {
+			describeCalls++
+			// Verify batch size is <= 100
+			require.LessOrEqual(t, len(params.Clusters), 100)
+
+			var clusters []ecstypes.Cluster
+			for _, arn := range params.Clusters {
+				clusters = append(clusters, ecstypes.Cluster{
+					ClusterArn:  aws.String(arn),
+					ClusterName: aws.String("cluster"),
+					Status:      aws.String("ACTIVE"),
+				})
+			}
+			return &ecs.DescribeClustersOutput{Clusters: clusters}, nil
+		},
+	}
+
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", ecsClient: mock}
+	resources, err := p.scanECS(context.Background())
+
+	require.NoError(t, err)
+	assert.Len(t, resources, 150)
+	assert.Equal(t, 2, describeCalls, "should make 2 DescribeClusters calls for 150 clusters")
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
