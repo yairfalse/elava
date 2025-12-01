@@ -52,7 +52,8 @@ func TestScanners(t *testing.T) {
 		"ec2", "rds", "elb", "s3", "eks", "asg", "lambda",
 		"vpc", "subnet", "security_group", "dynamodb", "sqs",
 		"ebs", "eip", "nat_gateway", "iam_role", "ecs",
-		"route53", "cloudwatch_logs",
+		"route53", "cloudwatch_logs", "sns", "cloudfront",
+		"elasticache", "secretsmanager",
 	}
 
 	// Verify we have all expected scanners

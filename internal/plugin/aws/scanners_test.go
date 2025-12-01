@@ -9,6 +9,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	asgtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
+	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	cwltypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -19,6 +21,8 @@ import (
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
+	"github.com/aws/aws-sdk-go-v2/service/elasticache"
+	ectypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -31,6 +35,10 @@ import (
 	r53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
+	"github.com/aws/aws-sdk-go-v2/service/sns"
+	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -927,4 +935,195 @@ func TestScanNATGateways(t *testing.T) {
 	assert.Equal(t, "available", r.Status)
 	assert.Equal(t, "public-nat", r.Name)
 	assert.Equal(t, "54.1.2.3", r.Attrs["public_ip"])
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SNS Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+type mockSNSClient struct {
+	ListTopicsFunc func(ctx context.Context, params *sns.ListTopicsInput, optFns ...func(*sns.Options)) (*sns.ListTopicsOutput, error)
+}
+
+func (m *mockSNSClient) ListTopics(ctx context.Context, params *sns.ListTopicsInput, optFns ...func(*sns.Options)) (*sns.ListTopicsOutput, error) {
+	return m.ListTopicsFunc(ctx, params, optFns...)
+}
+
+func TestScanSNS(t *testing.T) {
+	mock := &mockSNSClient{
+		ListTopicsFunc: func(_ context.Context, _ *sns.ListTopicsInput, _ ...func(*sns.Options)) (*sns.ListTopicsOutput, error) {
+			return &sns.ListTopicsOutput{
+				Topics: []snstypes.Topic{
+					{TopicArn: aws.String("arn:aws:sns:us-east-1:123456789012:my-topic")},
+					{TopicArn: aws.String("arn:aws:sns:us-east-1:123456789012:alerts")},
+				},
+			}, nil
+		},
+	}
+
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", snsClient: mock}
+	resources, err := p.scanSNS(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, resources, 2)
+
+	assert.Equal(t, "sns", resources[0].Type)
+	assert.Equal(t, "my-topic", resources[0].Name)
+	assert.Equal(t, "active", resources[0].Status)
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CloudFront Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+type mockCloudFrontClient struct {
+	ListDistributionsFunc func(ctx context.Context, params *cloudfront.ListDistributionsInput, optFns ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error)
+}
+
+func (m *mockCloudFrontClient) ListDistributions(ctx context.Context, params *cloudfront.ListDistributionsInput, optFns ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error) {
+	return m.ListDistributionsFunc(ctx, params, optFns...)
+}
+
+func TestScanCloudFront(t *testing.T) {
+	mock := &mockCloudFrontClient{
+		ListDistributionsFunc: func(_ context.Context, _ *cloudfront.ListDistributionsInput, _ ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error) {
+			return &cloudfront.ListDistributionsOutput{
+				DistributionList: &cftypes.DistributionList{
+					Items: []cftypes.DistributionSummary{
+						{
+							Id:         aws.String("E123ABC"),
+							DomainName: aws.String("d123.cloudfront.net"),
+							Status:     aws.String("Deployed"),
+							Enabled:    aws.Bool(true),
+							Origins: &cftypes.Origins{
+								Items: []cftypes.Origin{
+									{DomainName: aws.String("mybucket.s3.amazonaws.com")},
+								},
+							},
+						},
+					},
+					IsTruncated: aws.Bool(false),
+				},
+			}, nil
+		},
+	}
+
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", cloudfrontClient: mock}
+	resources, err := p.scanCloudFront(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+
+	r := resources[0]
+	assert.Equal(t, "E123ABC", r.ID)
+	assert.Equal(t, "cloudfront", r.Type)
+	assert.Equal(t, "Deployed", r.Status)
+	assert.Equal(t, "d123.cloudfront.net", r.Attrs["domain"])
+	assert.Equal(t, "mybucket.s3.amazonaws.com", r.Attrs["origin"])
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ElastiCache Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+type mockElastiCacheClient struct {
+	DescribeCacheClustersFunc func(ctx context.Context, params *elasticache.DescribeCacheClustersInput, optFns ...func(*elasticache.Options)) (*elasticache.DescribeCacheClustersOutput, error)
+}
+
+func (m *mockElastiCacheClient) DescribeCacheClusters(ctx context.Context, params *elasticache.DescribeCacheClustersInput, optFns ...func(*elasticache.Options)) (*elasticache.DescribeCacheClustersOutput, error) {
+	return m.DescribeCacheClustersFunc(ctx, params, optFns...)
+}
+
+func TestScanElastiCache(t *testing.T) {
+	mock := &mockElastiCacheClient{
+		DescribeCacheClustersFunc: func(_ context.Context, _ *elasticache.DescribeCacheClustersInput, _ ...func(*elasticache.Options)) (*elasticache.DescribeCacheClustersOutput, error) {
+			return &elasticache.DescribeCacheClustersOutput{
+				CacheClusters: []ectypes.CacheCluster{
+					{
+						CacheClusterId:     aws.String("my-redis"),
+						CacheClusterStatus: aws.String("available"),
+						Engine:             aws.String("redis"),
+						EngineVersion:      aws.String("7.0"),
+						CacheNodeType:      aws.String("cache.t3.micro"),
+						NumCacheNodes:      aws.Int32(1),
+					},
+				},
+			}, nil
+		},
+	}
+
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", elasticacheClient: mock}
+	resources, err := p.scanElastiCache(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+
+	r := resources[0]
+	assert.Equal(t, "my-redis", r.ID)
+	assert.Equal(t, "elasticache", r.Type)
+	assert.Equal(t, "available", r.Status)
+	assert.Equal(t, "redis", r.Attrs["engine"])
+	assert.Equal(t, "cache.t3.micro", r.Attrs["node_type"])
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Secrets Manager Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+type mockSecretsManagerClient struct {
+	ListSecretsFunc func(ctx context.Context, params *secretsmanager.ListSecretsInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.ListSecretsOutput, error)
+}
+
+func (m *mockSecretsManagerClient) ListSecrets(ctx context.Context, params *secretsmanager.ListSecretsInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.ListSecretsOutput, error) {
+	return m.ListSecretsFunc(ctx, params, optFns...)
+}
+
+func TestScanSecretsManager(t *testing.T) {
+	mock := &mockSecretsManagerClient{
+		ListSecretsFunc: func(_ context.Context, _ *secretsmanager.ListSecretsInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.ListSecretsOutput, error) {
+			return &secretsmanager.ListSecretsOutput{
+				SecretList: []smtypes.SecretListEntry{
+					{
+						ARN:         aws.String("arn:aws:secretsmanager:us-east-1:123456789012:secret:db-password-abc123"),
+						Name:        aws.String("db-password"),
+						Description: aws.String("Database password"),
+					},
+				},
+			}, nil
+		},
+	}
+
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", secretsmanagerClient: mock}
+	resources, err := p.scanSecretsManager(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+
+	r := resources[0]
+	assert.Equal(t, "secretsmanager", r.Type)
+	assert.Equal(t, "db-password", r.Name)
+	assert.Equal(t, "active", r.Status)
+	assert.Equal(t, "Database password", r.Attrs["description"])
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// extractTopicName Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+func TestExtractTopicName(t *testing.T) {
+	tests := []struct {
+		arn  string
+		want string
+	}{
+		{"arn:aws:sns:us-east-1:123456789012:my-topic", "my-topic"},
+		{"arn:aws:sns:eu-west-1:987654321:alerts", "alerts"},
+		{"simple-name", "simple-name"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			got := extractTopicName(tt.arn)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
