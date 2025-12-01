@@ -1,5 +1,5 @@
 # Elava Configuration
-# Copy to elava.toml and customize
+# Copy to elava.toml in your project root (current directory) and customize
 
 [aws]
 regions = ["us-east-1"]
