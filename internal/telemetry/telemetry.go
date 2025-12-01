@@ -51,6 +51,9 @@ func NewProvider(ctx context.Context, cfg config.OTELConfig) (*Provider, error) 
 	}
 
 	if err := p.setupMetrics(ctx, cfg, res); err != nil {
+		if p.tracerProvider != nil {
+			_ = p.tracerProvider.Shutdown(ctx)
+		}
 		return nil, err
 	}
 
