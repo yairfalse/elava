@@ -122,7 +122,7 @@ func shutdownTelemetry(ctx context.Context, tp *telemetry.Provider) {
 	if tp == nil {
 		return
 	}
-	shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := tp.Shutdown(shutdownCtx); err != nil {
 		log.Error().Err(err).Msg("telemetry shutdown error")
