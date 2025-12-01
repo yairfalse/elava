@@ -861,10 +861,7 @@ func (p *Plugin) convertSecret(secret smtypes.SecretListEntry) resource.Resource
 // extractTopicName extracts topic name from SNS ARN.
 func extractTopicName(arn string) string {
 	parts := strings.Split(arn, ":")
-	if len(parts) > 0 {
-		return parts[len(parts)-1]
-	}
-	return arn
+	return parts[len(parts)-1]
 }
 
 // extractNameTag extracts the Name tag from EC2 tags.
