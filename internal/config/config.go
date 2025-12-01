@@ -102,5 +102,8 @@ func (c *Config) Validate() error {
 	if len(c.AWS.Regions) == 0 {
 		return fmt.Errorf("aws: at least one region required")
 	}
+	if c.OTEL.Traces.SampleRate < 0.0 || c.OTEL.Traces.SampleRate > 1.0 {
+		return fmt.Errorf("otel: traces.sample_rate must be between 0.0 and 1.0 (got %v)", c.OTEL.Traces.SampleRate)
+	}
 	return nil
 }
