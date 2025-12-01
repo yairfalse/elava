@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -58,6 +59,7 @@ func NewProvider(ctx context.Context, cfg config.OTELConfig) (*Provider, error) 
 	}
 
 	if err := p.initMetrics(); err != nil {
+		_ = p.Shutdown(ctx)
 		return nil, err
 	}
 
@@ -90,10 +92,18 @@ func (p *Provider) setupMetrics(ctx context.Context, cfg config.OTELConfig, res 
 		sdkmetric.WithResource(res),
 	}
 
+	// Always add Prometheus exporter for /metrics endpoint
+	promExporter, err := prometheus.New()
+	if err != nil {
+		return fmt.Errorf("create prometheus exporter: %w", err)
+	}
+	opts = append(opts, sdkmetric.WithReader(promExporter))
+
+	// Optionally add OTLP exporter for pushing to collector
 	if cfg.Metrics.Enabled && cfg.Endpoint != "" {
 		exp, err := createMetricExporter(ctx, cfg)
 		if err != nil {
-			return fmt.Errorf("create metric exporter: %w", err)
+			return fmt.Errorf("create otlp metric exporter: %w", err)
 		}
 		opts = append(opts, sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exp)))
 	}

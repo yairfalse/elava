@@ -104,6 +104,14 @@ func TestConfig_Validate_NoRegions(t *testing.T) {
 	assert.Contains(t, err.Error(), "at least one region")
 }
 
+func TestConfig_Validate_Valid(t *testing.T) {
+	cfg := &Config{
+		AWS: AWSConfig{Regions: []string{"us-east-1", "eu-west-1"}},
+	}
+	err := cfg.Validate()
+	require.NoError(t, err)
+}
+
 func writeTempConfig(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"io"
 	"net/http"
@@ -15,9 +16,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/prometheus"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
 	"github.com/yairfalse/elava/internal/config"
 	"github.com/yairfalse/elava/internal/emitter"
@@ -53,10 +51,8 @@ func main() {
 	}
 	defer shutdownTelemetry(ctx, tp)
 
-	if err := setupPrometheusMetrics(); err != nil {
-		log.Fatal().Err(err).Msg("failed to setup prometheus")
-	}
-	go startMetricsServer(*metricsAddr)
+	metricsSrv := startMetricsServer(*metricsAddr)
+	defer shutdownMetricsServer(metricsSrv)
 
 	if err := registerPlugins(ctx, cfg); err != nil {
 		log.Fatal().Err(err).Msg("failed to register plugins")
@@ -129,25 +125,26 @@ func shutdownTelemetry(ctx context.Context, tp *telemetry.Provider) {
 	}
 }
 
-func setupPrometheusMetrics() error {
-	promExporter, err := prometheus.New()
-	if err != nil {
-		return err
-	}
-	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(promExporter))
-	otel.SetMeterProvider(provider)
-	return nil
-}
-
-func startMetricsServer(addr string) {
+func startMetricsServer(addr string) *http.Server {
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           promhttp.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	log.Info().Str("addr", addr).Msg("starting metrics server")
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Error().Err(err).Msg("metrics server error")
+	go func() {
+		log.Info().Str("addr", addr).Msg("starting metrics server")
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error().Err(err).Msg("metrics server error")
+		}
+	}()
+	return srv
+}
+
+func shutdownMetricsServer(srv *http.Server) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Error().Err(err).Msg("metrics server shutdown error")
 	}
 }
 
