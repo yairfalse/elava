@@ -157,11 +157,20 @@ func registerPlugins(ctx context.Context, cfg *config.Config) error {
 		if err != nil {
 			return err
 		}
-		plugin.Register(awsPlugin)
+		plugin.Register(&awsPluginWithRegionName{Plugin: awsPlugin, Region: region})
 	}
 	return nil
 }
 
+// awsPluginWithRegionName wraps an AWS plugin and overrides Name() to include the region.
+type awsPluginWithRegionName struct {
+	plugin.Plugin
+	Region string
+}
+
+func (p *awsPluginWithRegionName) Name() string {
+	return "aws-" + p.Region
+}
 func closeEmitter(emit io.Closer) {
 	if err := emit.Close(); err != nil {
 		log.Error().Err(err).Msg("emitter close error")
