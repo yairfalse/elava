@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	asgtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
+	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	cwltypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -18,6 +21,8 @@ import (
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
+	"github.com/aws/aws-sdk-go-v2/service/elasticache"
+	ectypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -29,6 +34,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	r53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
+	"github.com/aws/aws-sdk-go-v2/service/sns"
+	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"github.com/yairfalse/elava/pkg/resource"
@@ -711,6 +720,148 @@ func (p *Plugin) convertLogGroup(lg cwltypes.LogGroup) resource.Resource {
 		r.Attrs["retention_days"] = strconv.Itoa(int(aws.ToInt32(lg.RetentionInDays)))
 	}
 	return r
+}
+
+// scanSNS scans SNS topics.
+func (p *Plugin) scanSNS(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+	var nextToken *string
+
+	for {
+		output, err := p.snsClient.ListTopics(ctx, &sns.ListTopicsInput{NextToken: nextToken})
+		if err != nil {
+			return nil, fmt.Errorf("list topics: %w", err)
+		}
+
+		for _, topic := range output.Topics {
+			resources = append(resources, p.convertSNSTopic(topic))
+		}
+
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return resources, nil
+}
+
+func (p *Plugin) convertSNSTopic(topic snstypes.Topic) resource.Resource {
+	arn := aws.ToString(topic.TopicArn)
+	name := extractTopicName(arn)
+	return p.newResource(arn, "sns", "active", name)
+}
+
+// scanCloudFront scans CloudFront distributions.
+func (p *Plugin) scanCloudFront(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+	var marker *string
+
+	for {
+		output, err := p.cloudfrontClient.ListDistributions(ctx, &cloudfront.ListDistributionsInput{Marker: marker})
+		if err != nil {
+			return nil, fmt.Errorf("list distributions: %w", err)
+		}
+
+		if output.DistributionList != nil {
+			for _, dist := range output.DistributionList.Items {
+				resources = append(resources, p.convertCloudFrontDistribution(dist))
+			}
+
+			if !aws.ToBool(output.DistributionList.IsTruncated) {
+				break
+			}
+			marker = output.DistributionList.NextMarker
+		} else {
+			break
+		}
+	}
+
+	return resources, nil
+}
+
+func (p *Plugin) convertCloudFrontDistribution(dist cftypes.DistributionSummary) resource.Resource {
+	r := p.newResource(aws.ToString(dist.Id), "cloudfront", aws.ToString(dist.Status), aws.ToString(dist.DomainName))
+	r.Attrs["domain"] = aws.ToString(dist.DomainName)
+	r.Attrs["enabled"] = strconv.FormatBool(aws.ToBool(dist.Enabled))
+	if dist.Origins != nil && len(dist.Origins.Items) > 0 {
+		r.Attrs["origin"] = aws.ToString(dist.Origins.Items[0].DomainName)
+	}
+	return r
+}
+
+// scanElastiCache scans ElastiCache clusters.
+func (p *Plugin) scanElastiCache(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+	var marker *string
+
+	for {
+		output, err := p.elasticacheClient.DescribeCacheClusters(ctx, &elasticache.DescribeCacheClustersInput{Marker: marker})
+		if err != nil {
+			return nil, fmt.Errorf("describe cache clusters: %w", err)
+		}
+
+		for _, cluster := range output.CacheClusters {
+			resources = append(resources, p.convertElastiCacheCluster(cluster))
+		}
+
+		if output.Marker == nil {
+			break
+		}
+		marker = output.Marker
+	}
+
+	return resources, nil
+}
+
+func (p *Plugin) convertElastiCacheCluster(cluster ectypes.CacheCluster) resource.Resource {
+	r := p.newResource(aws.ToString(cluster.CacheClusterId), "elasticache", aws.ToString(cluster.CacheClusterStatus), aws.ToString(cluster.CacheClusterId))
+	r.Attrs["engine"] = aws.ToString(cluster.Engine)
+	r.Attrs["engine_version"] = aws.ToString(cluster.EngineVersion)
+	r.Attrs["node_type"] = aws.ToString(cluster.CacheNodeType)
+	r.Attrs["num_nodes"] = strconv.Itoa(int(aws.ToInt32(cluster.NumCacheNodes)))
+	return r
+}
+
+// scanSecretsManager scans Secrets Manager secrets.
+func (p *Plugin) scanSecretsManager(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+	var nextToken *string
+
+	for {
+		output, err := p.secretsmanagerClient.ListSecrets(ctx, &secretsmanager.ListSecretsInput{NextToken: nextToken})
+		if err != nil {
+			return nil, fmt.Errorf("list secrets: %w", err)
+		}
+
+		for _, secret := range output.SecretList {
+			resources = append(resources, p.convertSecret(secret))
+		}
+
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return resources, nil
+}
+
+func (p *Plugin) convertSecret(secret smtypes.SecretListEntry) resource.Resource {
+	r := p.newResource(aws.ToString(secret.ARN), "secretsmanager", "active", aws.ToString(secret.Name))
+	if secret.Description != nil {
+		r.Attrs["description"] = aws.ToString(secret.Description)
+	}
+	if secret.LastRotatedDate != nil {
+		r.Attrs["last_rotated"] = secret.LastRotatedDate.Format("2006-01-02")
+	}
+	return r
+}
+
+// extractTopicName extracts topic name from SNS ARN.
+func extractTopicName(arn string) string {
+	parts := strings.Split(arn, ":")
+	return parts[len(parts)-1]
 }
 
 // extractNameTag extracts the Name tag from EC2 tags.

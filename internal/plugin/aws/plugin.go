@@ -10,17 +10,21 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
+	"github.com/aws/aws-sdk-go-v2/service/elasticache"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/rs/zerolog/log"
 
@@ -33,19 +37,23 @@ type Plugin struct {
 	accountID string
 
 	// AWS clients (interfaces for testability)
-	ec2Client      EC2API
-	rdsClient      RDSAPI
-	elbClient      ELBAPI
-	s3Client       S3API
-	eksClient      EKSAPI
-	asgClient      AutoScalingAPI
-	lambdaClient   LambdaAPI
-	dynamodbClient DynamoDBAPI
-	sqsClient      SQSAPI
-	iamClient      IAMAPI
-	ecsClient      ECSAPI
-	route53Client  Route53API
-	cwLogsClient   CloudWatchLogsAPI
+	ec2Client            EC2API
+	rdsClient            RDSAPI
+	elbClient            ELBAPI
+	s3Client             S3API
+	eksClient            EKSAPI
+	asgClient            AutoScalingAPI
+	lambdaClient         LambdaAPI
+	dynamodbClient       DynamoDBAPI
+	sqsClient            SQSAPI
+	iamClient            IAMAPI
+	ecsClient            ECSAPI
+	route53Client        Route53API
+	cwLogsClient         CloudWatchLogsAPI
+	snsClient            SNSAPI
+	cloudfrontClient     CloudFrontAPI
+	elasticacheClient    ElastiCacheAPI
+	secretsmanagerClient SecretsManagerAPI
 }
 
 // Config holds AWS plugin configuration.
@@ -69,21 +77,25 @@ func New(ctx context.Context, cfg Config) (*Plugin, error) {
 	}
 
 	return &Plugin{
-		region:         cfg.Region,
-		accountID:      accountID,
-		ec2Client:      ec2Client,
-		rdsClient:      rds.NewFromConfig(awsCfg),
-		elbClient:      elasticloadbalancingv2.NewFromConfig(awsCfg),
-		s3Client:       s3.NewFromConfig(awsCfg),
-		eksClient:      eks.NewFromConfig(awsCfg),
-		asgClient:      autoscaling.NewFromConfig(awsCfg),
-		lambdaClient:   lambda.NewFromConfig(awsCfg),
-		dynamodbClient: dynamodb.NewFromConfig(awsCfg),
-		sqsClient:      sqs.NewFromConfig(awsCfg),
-		iamClient:      iam.NewFromConfig(awsCfg),
-		ecsClient:      ecs.NewFromConfig(awsCfg),
-		route53Client:  route53.NewFromConfig(awsCfg),
-		cwLogsClient:   cloudwatchlogs.NewFromConfig(awsCfg),
+		region:               cfg.Region,
+		accountID:            accountID,
+		ec2Client:            ec2Client,
+		rdsClient:            rds.NewFromConfig(awsCfg),
+		elbClient:            elasticloadbalancingv2.NewFromConfig(awsCfg),
+		s3Client:             s3.NewFromConfig(awsCfg),
+		eksClient:            eks.NewFromConfig(awsCfg),
+		asgClient:            autoscaling.NewFromConfig(awsCfg),
+		lambdaClient:         lambda.NewFromConfig(awsCfg),
+		dynamodbClient:       dynamodb.NewFromConfig(awsCfg),
+		sqsClient:            sqs.NewFromConfig(awsCfg),
+		iamClient:            iam.NewFromConfig(awsCfg),
+		ecsClient:            ecs.NewFromConfig(awsCfg),
+		route53Client:        route53.NewFromConfig(awsCfg),
+		cwLogsClient:         cloudwatchlogs.NewFromConfig(awsCfg),
+		snsClient:            sns.NewFromConfig(awsCfg),
+		cloudfrontClient:     cloudfront.NewFromConfig(awsCfg),
+		elasticacheClient:    elasticache.NewFromConfig(awsCfg),
+		secretsmanagerClient: secretsmanager.NewFromConfig(awsCfg),
 	}, nil
 }
 
@@ -133,6 +145,10 @@ func (p *Plugin) scanners() []scanner {
 		{"ecs", p.scanECS},
 		{"route53", p.scanRoute53},
 		{"cloudwatch_logs", p.scanCloudWatchLogs},
+		{"sns", p.scanSNS},
+		{"cloudfront", p.scanCloudFront},
+		{"elasticache", p.scanElastiCache},
+		{"secretsmanager", p.scanSecretsManager},
 	}
 }
 
