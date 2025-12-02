@@ -60,6 +60,7 @@ func NewProvider(ctx context.Context, cfg config.OTELConfig) (*Provider, error) 
 
 	if err := p.initMetrics(); err != nil {
 		_ = p.Shutdown(ctx)
+		_ = p.Shutdown(ctx)
 		return nil, err
 	}
 
