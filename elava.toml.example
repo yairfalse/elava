@@ -1,0 +1,25 @@
+# Elava Configuration
+# Copy to elava.toml in your project root (current directory) and customize
+
+[aws]
+regions = ["us-east-1"]
+# profile = "default"  # AWS profile (optional)
+
+[otel]
+endpoint = "localhost:4317"
+insecure = true
+service_name = "elava"
+
+[otel.traces]
+enabled = true
+sample_rate = 1.0
+
+[otel.metrics]
+enabled = true
+
+[scanner]
+interval = "5m"
+one_shot = false
+
+[log]
+level = "info"  # debug, info, warn, error
