@@ -9,6 +9,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/acm"
+	"github.com/aws/aws-sdk-go-v2/service/apigatewayv2"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
@@ -18,12 +20,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	"github.com/aws/aws-sdk-go-v2/service/elasticache"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	"github.com/aws/aws-sdk-go-v2/service/glue"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/kinesis"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
+	"github.com/aws/aws-sdk-go-v2/service/redshift"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/sfn"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/rs/zerolog/log"
@@ -54,6 +60,12 @@ type Plugin struct {
 	cloudfrontClient     CloudFrontAPI
 	elasticacheClient    ElastiCacheAPI
 	secretsmanagerClient SecretsManagerAPI
+	acmClient            ACMAPI
+	apigatewayClient     APIGatewayAPI
+	kinesisClient        KinesisAPI
+	redshiftClient       RedshiftAPI
+	sfnClient            StepFunctionsAPI
+	glueClient           GlueAPI
 }
 
 // Config holds AWS plugin configuration.
@@ -96,6 +108,12 @@ func New(ctx context.Context, cfg Config) (*Plugin, error) {
 		cloudfrontClient:     cloudfront.NewFromConfig(awsCfg),
 		elasticacheClient:    elasticache.NewFromConfig(awsCfg),
 		secretsmanagerClient: secretsmanager.NewFromConfig(awsCfg),
+		acmClient:            acm.NewFromConfig(awsCfg),
+		apigatewayClient:     apigatewayv2.NewFromConfig(awsCfg),
+		kinesisClient:        kinesis.NewFromConfig(awsCfg),
+		redshiftClient:       redshift.NewFromConfig(awsCfg),
+		sfnClient:            sfn.NewFromConfig(awsCfg),
+		glueClient:           glue.NewFromConfig(awsCfg),
 	}, nil
 }
 
@@ -149,6 +167,12 @@ func (p *Plugin) scanners() []scanner {
 		{"cloudfront", p.scanCloudFront},
 		{"elasticache", p.scanElastiCache},
 		{"secretsmanager", p.scanSecretsManager},
+		{"acm", p.scanACM},
+		{"apigateway", p.scanAPIGateway},
+		{"kinesis", p.scanKinesis},
+		{"redshift", p.scanRedshift},
+		{"stepfunctions", p.scanStepFunctions},
+		{"glue", p.scanGlue},
 	}
 }
 

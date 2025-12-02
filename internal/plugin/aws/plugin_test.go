@@ -53,7 +53,8 @@ func TestScanners(t *testing.T) {
 		"vpc", "subnet", "security_group", "dynamodb", "sqs",
 		"ebs", "eip", "nat_gateway", "iam_role", "ecs",
 		"route53", "cloudwatch_logs", "sns", "cloudfront",
-		"elasticache", "secretsmanager",
+		"elasticache", "secretsmanager", "acm", "apigateway",
+		"kinesis", "redshift", "stepfunctions", "glue",
 	}
 
 	// Verify we have all expected scanners

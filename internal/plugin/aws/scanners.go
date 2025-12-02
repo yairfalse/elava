@@ -7,6 +7,10 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/acm"
+	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+	"github.com/aws/aws-sdk-go-v2/service/apigatewayv2"
+	apigwtypes "github.com/aws/aws-sdk-go-v2/service/apigatewayv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	asgtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
@@ -25,17 +29,25 @@ import (
 	ectypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+	"github.com/aws/aws-sdk-go-v2/service/glue"
+	gluetypes "github.com/aws/aws-sdk-go-v2/service/glue/types"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/kinesis"
+	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	"github.com/aws/aws-sdk-go-v2/service/redshift"
+	redshifttypes "github.com/aws/aws-sdk-go-v2/service/redshift/types"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	r53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
+	"github.com/aws/aws-sdk-go-v2/service/sfn"
+	sfntypes "github.com/aws/aws-sdk-go-v2/service/sfn/types"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
@@ -882,4 +894,192 @@ func extractQueueName(queueURL string) string {
 		}
 	}
 	return queueURL
+}
+
+// scanACM scans ACM certificates.
+func (p *Plugin) scanACM(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+	var nextToken *string
+
+	for {
+		output, err := p.acmClient.ListCertificates(ctx, &acm.ListCertificatesInput{NextToken: nextToken})
+		if err != nil {
+			return nil, fmt.Errorf("list certificates: %w", err)
+		}
+
+		for _, cert := range output.CertificateSummaryList {
+			resources = append(resources, p.convertACMCert(cert))
+		}
+
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return resources, nil
+}
+
+func (p *Plugin) convertACMCert(cert acmtypes.CertificateSummary) resource.Resource {
+	r := p.newResource(aws.ToString(cert.CertificateArn), "acm", string(cert.Status), aws.ToString(cert.DomainName))
+	r.Attrs["type"] = string(cert.Type)
+	return r
+}
+
+// scanAPIGateway scans API Gateway v2 APIs.
+func (p *Plugin) scanAPIGateway(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+	var nextToken *string
+
+	for {
+		output, err := p.apigatewayClient.GetApis(ctx, &apigatewayv2.GetApisInput{NextToken: nextToken})
+		if err != nil {
+			return nil, fmt.Errorf("get apis: %w", err)
+		}
+
+		for _, api := range output.Items {
+			resources = append(resources, p.convertAPIGateway(api))
+		}
+
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return resources, nil
+}
+
+func (p *Plugin) convertAPIGateway(api apigwtypes.Api) resource.Resource {
+	r := p.newResource(aws.ToString(api.ApiId), "apigateway", "active", aws.ToString(api.Name))
+	r.Attrs["protocol"] = string(api.ProtocolType)
+	if api.ApiEndpoint != nil {
+		r.Attrs["endpoint"] = aws.ToString(api.ApiEndpoint)
+	}
+	return r
+}
+
+// scanKinesis scans Kinesis streams.
+func (p *Plugin) scanKinesis(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+	var nextToken *string
+
+	for {
+		output, err := p.kinesisClient.ListStreams(ctx, &kinesis.ListStreamsInput{NextToken: nextToken})
+		if err != nil {
+			return nil, fmt.Errorf("list streams: %w", err)
+		}
+
+		for _, stream := range output.StreamSummaries {
+			resources = append(resources, p.convertKinesisStream(stream))
+		}
+
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return resources, nil
+}
+
+func (p *Plugin) convertKinesisStream(stream kinesistypes.StreamSummary) resource.Resource {
+	r := p.newResource(aws.ToString(stream.StreamARN), "kinesis", string(stream.StreamStatus), aws.ToString(stream.StreamName))
+	return r
+}
+
+// scanRedshift scans Redshift clusters.
+func (p *Plugin) scanRedshift(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+	var marker *string
+
+	for {
+		output, err := p.redshiftClient.DescribeClusters(ctx, &redshift.DescribeClustersInput{Marker: marker})
+		if err != nil {
+			return nil, fmt.Errorf("describe clusters: %w", err)
+		}
+
+		for _, cluster := range output.Clusters {
+			resources = append(resources, p.convertRedshiftCluster(cluster))
+		}
+
+		if output.Marker == nil {
+			break
+		}
+		marker = output.Marker
+	}
+
+	return resources, nil
+}
+
+func (p *Plugin) convertRedshiftCluster(cluster redshifttypes.Cluster) resource.Resource {
+	r := p.newResource(aws.ToString(cluster.ClusterIdentifier), "redshift", aws.ToString(cluster.ClusterStatus), aws.ToString(cluster.ClusterIdentifier))
+	r.Attrs["node_type"] = aws.ToString(cluster.NodeType)
+	r.Attrs["node_count"] = strconv.Itoa(int(aws.ToInt32(cluster.NumberOfNodes)))
+	if cluster.DBName != nil {
+		r.Attrs["db_name"] = aws.ToString(cluster.DBName)
+	}
+	return r
+}
+
+// scanStepFunctions scans Step Functions state machines.
+func (p *Plugin) scanStepFunctions(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+	var nextToken *string
+
+	for {
+		output, err := p.sfnClient.ListStateMachines(ctx, &sfn.ListStateMachinesInput{NextToken: nextToken})
+		if err != nil {
+			return nil, fmt.Errorf("list state machines: %w", err)
+		}
+
+		for _, sm := range output.StateMachines {
+			resources = append(resources, p.convertStateMachine(sm))
+		}
+
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return resources, nil
+}
+
+func (p *Plugin) convertStateMachine(sm sfntypes.StateMachineListItem) resource.Resource {
+	r := p.newResource(aws.ToString(sm.StateMachineArn), "stepfunctions", "active", aws.ToString(sm.Name))
+	r.Attrs["type"] = string(sm.Type)
+	return r
+}
+
+// scanGlue scans Glue databases.
+func (p *Plugin) scanGlue(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+	var nextToken *string
+
+	for {
+		output, err := p.glueClient.GetDatabases(ctx, &glue.GetDatabasesInput{NextToken: nextToken})
+		if err != nil {
+			return nil, fmt.Errorf("get databases: %w", err)
+		}
+
+		for _, db := range output.DatabaseList {
+			resources = append(resources, p.convertGlueDatabase(db))
+		}
+
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return resources, nil
+}
+
+func (p *Plugin) convertGlueDatabase(db gluetypes.Database) resource.Resource {
+	r := p.newResource(aws.ToString(db.Name), "glue_database", "active", aws.ToString(db.Name))
+	if db.Description != nil {
+		r.Attrs["description"] = aws.ToString(db.Description)
+	}
+	return r
 }

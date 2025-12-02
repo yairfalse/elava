@@ -6,6 +6,8 @@ require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/aws/aws-sdk-go-v2 v1.40.0
 	github.com/aws/aws-sdk-go-v2/config v1.28.7
+	github.com/aws/aws-sdk-go-v2/service/acm v1.37.15
+	github.com/aws/aws-sdk-go-v2/service/apigatewayv2 v1.33.2
 	github.com/aws/aws-sdk-go-v2/service/autoscaling v1.59.1
 	github.com/aws/aws-sdk-go-v2/service/cloudfront v1.58.1
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.61.1
@@ -15,12 +17,16 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/eks v1.73.3
 	github.com/aws/aws-sdk-go-v2/service/elasticache v1.51.5
 	github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2 v1.50.4
+	github.com/aws/aws-sdk-go-v2/service/glue v1.135.0
 	github.com/aws/aws-sdk-go-v2/service/iam v1.52.2
+	github.com/aws/aws-sdk-go-v2/service/kinesis v1.42.6
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.70.0
 	github.com/aws/aws-sdk-go-v2/service/rds v1.88.0
+	github.com/aws/aws-sdk-go-v2/service/redshift v1.61.1
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.61.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.68.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.40.2
+	github.com/aws/aws-sdk-go-v2/service/sfn v1.40.2
 	github.com/aws/aws-sdk-go-v2/service/sns v1.39.7
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.17
 	github.com/prometheus/client_golang v1.23.0
