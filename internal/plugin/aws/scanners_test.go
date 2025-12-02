@@ -7,6 +7,10 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/acm"
+	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+	"github.com/aws/aws-sdk-go-v2/service/apigatewayv2"
+	apigwtypes "github.com/aws/aws-sdk-go-v2/service/apigatewayv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	asgtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
@@ -25,18 +29,26 @@ import (
 	ectypes "github.com/aws/aws-sdk-go-v2/service/elasticache/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+	"github.com/aws/aws-sdk-go-v2/service/glue"
+	gluetypes "github.com/aws/aws-sdk-go-v2/service/glue/types"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/kinesis"
+	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	"github.com/aws/aws-sdk-go-v2/service/redshift"
+	redshifttypes "github.com/aws/aws-sdk-go-v2/service/redshift/types"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	r53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
+	"github.com/aws/aws-sdk-go-v2/service/sfn"
+	sfntypes "github.com/aws/aws-sdk-go-v2/service/sfn/types"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
@@ -1126,4 +1138,248 @@ func TestExtractTopicName(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ACM Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+type mockACMClient struct {
+	ListCertificatesFunc func(ctx context.Context, params *acm.ListCertificatesInput, optFns ...func(*acm.Options)) (*acm.ListCertificatesOutput, error)
+}
+
+func (m *mockACMClient) ListCertificates(ctx context.Context, params *acm.ListCertificatesInput, optFns ...func(*acm.Options)) (*acm.ListCertificatesOutput, error) {
+	return m.ListCertificatesFunc(ctx, params, optFns...)
+}
+
+func TestScanACM(t *testing.T) {
+	mock := &mockACMClient{
+		ListCertificatesFunc: func(_ context.Context, _ *acm.ListCertificatesInput, _ ...func(*acm.Options)) (*acm.ListCertificatesOutput, error) {
+			return &acm.ListCertificatesOutput{
+				CertificateSummaryList: []acmtypes.CertificateSummary{
+					{
+						CertificateArn: aws.String("arn:aws:acm:us-east-1:123456789012:certificate/abc-123"),
+						DomainName:     aws.String("example.com"),
+						Status:         acmtypes.CertificateStatusIssued,
+						Type:           acmtypes.CertificateTypeAmazonIssued,
+					},
+				},
+			}, nil
+		},
+	}
+
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", acmClient: mock}
+	resources, err := p.scanACM(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+
+	r := resources[0]
+	assert.Equal(t, "acm", r.Type)
+	assert.Equal(t, "example.com", r.Name)
+	assert.Equal(t, "ISSUED", r.Status)
+	assert.Equal(t, "AMAZON_ISSUED", r.Attrs["type"])
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// API Gateway Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+type mockAPIGatewayClient struct {
+	GetApisFunc func(ctx context.Context, params *apigatewayv2.GetApisInput, optFns ...func(*apigatewayv2.Options)) (*apigatewayv2.GetApisOutput, error)
+}
+
+func (m *mockAPIGatewayClient) GetApis(ctx context.Context, params *apigatewayv2.GetApisInput, optFns ...func(*apigatewayv2.Options)) (*apigatewayv2.GetApisOutput, error) {
+	return m.GetApisFunc(ctx, params, optFns...)
+}
+
+func TestScanAPIGateway(t *testing.T) {
+	mock := &mockAPIGatewayClient{
+		GetApisFunc: func(_ context.Context, _ *apigatewayv2.GetApisInput, _ ...func(*apigatewayv2.Options)) (*apigatewayv2.GetApisOutput, error) {
+			return &apigatewayv2.GetApisOutput{
+				Items: []apigwtypes.Api{
+					{
+						ApiId:        aws.String("abc123"),
+						Name:         aws.String("my-api"),
+						ProtocolType: apigwtypes.ProtocolTypeHttp,
+						ApiEndpoint:  aws.String("https://abc123.execute-api.us-east-1.amazonaws.com"),
+					},
+				},
+			}, nil
+		},
+	}
+
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", apigatewayClient: mock}
+	resources, err := p.scanAPIGateway(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+
+	r := resources[0]
+	assert.Equal(t, "apigateway", r.Type)
+	assert.Equal(t, "my-api", r.Name)
+	assert.Equal(t, "active", r.Status)
+	assert.Equal(t, "HTTP", r.Attrs["protocol"])
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Kinesis Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+type mockKinesisClient struct {
+	ListStreamsFunc func(ctx context.Context, params *kinesis.ListStreamsInput, optFns ...func(*kinesis.Options)) (*kinesis.ListStreamsOutput, error)
+}
+
+func (m *mockKinesisClient) ListStreams(ctx context.Context, params *kinesis.ListStreamsInput, optFns ...func(*kinesis.Options)) (*kinesis.ListStreamsOutput, error) {
+	return m.ListStreamsFunc(ctx, params, optFns...)
+}
+
+func TestScanKinesis(t *testing.T) {
+	mock := &mockKinesisClient{
+		ListStreamsFunc: func(_ context.Context, _ *kinesis.ListStreamsInput, _ ...func(*kinesis.Options)) (*kinesis.ListStreamsOutput, error) {
+			return &kinesis.ListStreamsOutput{
+				StreamSummaries: []kinesistypes.StreamSummary{
+					{
+						StreamName:   aws.String("my-stream"),
+						StreamARN:    aws.String("arn:aws:kinesis:us-east-1:123456789012:stream/my-stream"),
+						StreamStatus: kinesistypes.StreamStatusActive,
+					},
+				},
+			}, nil
+		},
+	}
+
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", kinesisClient: mock}
+	resources, err := p.scanKinesis(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+
+	r := resources[0]
+	assert.Equal(t, "kinesis", r.Type)
+	assert.Equal(t, "my-stream", r.Name)
+	assert.Equal(t, "ACTIVE", r.Status)
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Redshift Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+type mockRedshiftClient struct {
+	DescribeClustersFunc func(ctx context.Context, params *redshift.DescribeClustersInput, optFns ...func(*redshift.Options)) (*redshift.DescribeClustersOutput, error)
+}
+
+func (m *mockRedshiftClient) DescribeClusters(ctx context.Context, params *redshift.DescribeClustersInput, optFns ...func(*redshift.Options)) (*redshift.DescribeClustersOutput, error) {
+	return m.DescribeClustersFunc(ctx, params, optFns...)
+}
+
+func TestScanRedshift(t *testing.T) {
+	mock := &mockRedshiftClient{
+		DescribeClustersFunc: func(_ context.Context, _ *redshift.DescribeClustersInput, _ ...func(*redshift.Options)) (*redshift.DescribeClustersOutput, error) {
+			return &redshift.DescribeClustersOutput{
+				Clusters: []redshifttypes.Cluster{
+					{
+						ClusterIdentifier: aws.String("my-cluster"),
+						ClusterStatus:     aws.String("available"),
+						NodeType:          aws.String("dc2.large"),
+						NumberOfNodes:     aws.Int32(2),
+						DBName:            aws.String("mydb"),
+					},
+				},
+			}, nil
+		},
+	}
+
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", redshiftClient: mock}
+	resources, err := p.scanRedshift(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+
+	r := resources[0]
+	assert.Equal(t, "redshift", r.Type)
+	assert.Equal(t, "my-cluster", r.ID)
+	assert.Equal(t, "available", r.Status)
+	assert.Equal(t, "dc2.large", r.Attrs["node_type"])
+	assert.Equal(t, "2", r.Attrs["node_count"])
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Step Functions Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+type mockSFNClient struct {
+	ListStateMachinesFunc func(ctx context.Context, params *sfn.ListStateMachinesInput, optFns ...func(*sfn.Options)) (*sfn.ListStateMachinesOutput, error)
+}
+
+func (m *mockSFNClient) ListStateMachines(ctx context.Context, params *sfn.ListStateMachinesInput, optFns ...func(*sfn.Options)) (*sfn.ListStateMachinesOutput, error) {
+	return m.ListStateMachinesFunc(ctx, params, optFns...)
+}
+
+func TestScanStepFunctions(t *testing.T) {
+	mock := &mockSFNClient{
+		ListStateMachinesFunc: func(_ context.Context, _ *sfn.ListStateMachinesInput, _ ...func(*sfn.Options)) (*sfn.ListStateMachinesOutput, error) {
+			return &sfn.ListStateMachinesOutput{
+				StateMachines: []sfntypes.StateMachineListItem{
+					{
+						StateMachineArn: aws.String("arn:aws:states:us-east-1:123456789012:stateMachine:my-workflow"),
+						Name:            aws.String("my-workflow"),
+						Type:            sfntypes.StateMachineTypeStandard,
+					},
+				},
+			}, nil
+		},
+	}
+
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", sfnClient: mock}
+	resources, err := p.scanStepFunctions(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+
+	r := resources[0]
+	assert.Equal(t, "stepfunctions", r.Type)
+	assert.Equal(t, "my-workflow", r.Name)
+	assert.Equal(t, "active", r.Status)
+	assert.Equal(t, "STANDARD", r.Attrs["type"])
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Glue Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+type mockGlueClient struct {
+	GetDatabasesFunc func(ctx context.Context, params *glue.GetDatabasesInput, optFns ...func(*glue.Options)) (*glue.GetDatabasesOutput, error)
+}
+
+func (m *mockGlueClient) GetDatabases(ctx context.Context, params *glue.GetDatabasesInput, optFns ...func(*glue.Options)) (*glue.GetDatabasesOutput, error) {
+	return m.GetDatabasesFunc(ctx, params, optFns...)
+}
+
+func TestScanGlue(t *testing.T) {
+	mock := &mockGlueClient{
+		GetDatabasesFunc: func(_ context.Context, _ *glue.GetDatabasesInput, _ ...func(*glue.Options)) (*glue.GetDatabasesOutput, error) {
+			return &glue.GetDatabasesOutput{
+				DatabaseList: []gluetypes.Database{
+					{
+						Name:        aws.String("my-database"),
+						Description: aws.String("Analytics database"),
+						CatalogId:   aws.String("123456789012"),
+					},
+				},
+			}, nil
+		},
+	}
+
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", glueClient: mock}
+	resources, err := p.scanGlue(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, resources, 1)
+
+	r := resources[0]
+	assert.Equal(t, "glue_database", r.Type)
+	assert.Equal(t, "my-database", r.Name)
+	assert.Equal(t, "active", r.Status)
+	assert.Equal(t, "Analytics database", r.Attrs["description"])
 }
