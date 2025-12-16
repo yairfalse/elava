@@ -34,8 +34,10 @@ Download from [releases](https://github.com/yairfalse/elava/releases):
 
 ```bash
 # Linux amd64
-curl -LO https://github.com/yairfalse/elava/releases/latest/download/elava_linux_amd64.tar.gz
-tar xzf elava_linux_amd64.tar.gz
+# Download the latest version (fetches the latest tag and downloads the correct asset)
+LATEST_VERSION=$(curl -s https://api.github.com/repos/yairfalse/elava/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+curl -LO "https://github.com/yairfalse/elava/releases/download/${LATEST_VERSION}/elava_${LATEST_VERSION}_linux_amd64.tar.gz"
+tar xzf elava_${LATEST_VERSION}_linux_amd64.tar.gz
 ./elava --version
 ```
 
