@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -25,11 +26,24 @@ import (
 	"github.com/yairfalse/elava/pkg/resource"
 )
 
+// Version info set by goreleaser ldflags.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	configPath := flag.String("config", "", "Path to TOML config file")
 	metricsAddr := flag.String("metrics", ":9090", "Metrics server address")
 	debug := flag.Bool("debug", false, "Enable debug logging")
+	showVersion := flag.Bool("version", false, "Show version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("elava %s (commit: %s, built: %s)\n", version, commit, date)
+		return
+	}
 
 	setupLogging(*debug)
 
