@@ -56,7 +56,7 @@ func (f *Filter) ShouldIncludeResource(r resource.Resource) bool {
 
 // FilterResources returns only resources that pass the filter.
 func (f *Filter) FilterResources(resources []resource.Resource) []resource.Resource {
-	if f.IsEmpty() {
+	if len(f.includeTags) == 0 && len(f.excludeTags) == 0 {
 		return resources
 	}
 
