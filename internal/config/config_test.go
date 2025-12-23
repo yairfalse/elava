@@ -141,6 +141,8 @@ regions = ["us-east-1"]
 }
 
 func TestConfig_Validate_InvalidMaxConcurrency(t *testing.T) {
+	// Test Validate() directly (bypassing Load which applies defaults)
+	// to ensure validation catches invalid values
 	cfg := &Config{
 		AWS:     AWSConfig{Regions: []string{"us-east-1"}},
 		Scanner: ScannerConfig{MaxConcurrency: 0},

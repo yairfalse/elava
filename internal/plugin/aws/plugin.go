@@ -191,13 +191,15 @@ func (p *Plugin) Scan(ctx context.Context) ([]resource.Resource, error) {
 		mu        sync.Mutex
 		resources []resource.Resource
 		wg        sync.WaitGroup
+		scanErr   error
 	)
 
 	sem := semaphore.NewWeighted(p.maxConcurrency)
 
 	for _, s := range p.scanners() {
 		if err := sem.Acquire(ctx, 1); err != nil {
-			return resources, fmt.Errorf("acquire semaphore: %w", err)
+			scanErr = fmt.Errorf("acquire semaphore: %w", err)
+			break
 		}
 		wg.Add(1)
 		go func(s scanner) {
@@ -216,7 +218,7 @@ func (p *Plugin) Scan(ctx context.Context) ([]resource.Resource, error) {
 	}
 
 	wg.Wait()
-	return resources, nil
+	return resources, scanErr
 }
 
 // helper to create resource with common fields
