@@ -33,14 +33,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/yairfalse/elava/pkg/resource"
 )
 
 // Plugin implements the AWS scanner.
 type Plugin struct {
-	region    string
-	accountID string
+	region         string
+	accountID      string
+	maxConcurrency int64
 
 	// AWS clients (interfaces for testability)
 	ec2Client            EC2API
@@ -70,7 +72,8 @@ type Plugin struct {
 
 // Config holds AWS plugin configuration.
 type Config struct {
-	Region string
+	Region         string
+	MaxConcurrency int
 }
 
 // New creates a new AWS plugin.
@@ -88,9 +91,15 @@ func New(ctx context.Context, cfg Config) (*Plugin, error) {
 		return nil, fmt.Errorf("get account id: %w", err)
 	}
 
+	maxConcurrency := int64(cfg.MaxConcurrency)
+	if maxConcurrency <= 0 {
+		maxConcurrency = 5 // default
+	}
+
 	return &Plugin{
 		region:               cfg.Region,
 		accountID:            accountID,
+		maxConcurrency:       maxConcurrency,
 		ec2Client:            ec2Client,
 		rdsClient:            rds.NewFromConfig(awsCfg),
 		elbClient:            elasticloadbalancingv2.NewFromConfig(awsCfg),
@@ -182,11 +191,19 @@ func (p *Plugin) Scan(ctx context.Context) ([]resource.Resource, error) {
 		mu        sync.Mutex
 		resources []resource.Resource
 		wg        sync.WaitGroup
+		scanErr   error
 	)
 
+	sem := semaphore.NewWeighted(p.maxConcurrency)
+
 	for _, s := range p.scanners() {
+		if err := sem.Acquire(ctx, 1); err != nil {
+			scanErr = fmt.Errorf("acquire semaphore: %w", err)
+			break
+		}
 		wg.Add(1)
 		go func(s scanner) {
+			defer sem.Release(1)
 			defer wg.Done()
 			result, err := s.fn(ctx)
 			if err != nil {
@@ -201,7 +218,7 @@ func (p *Plugin) Scan(ctx context.Context) ([]resource.Resource, error) {
 	}
 
 	wg.Wait()
-	return resources, nil
+	return resources, scanErr
 }
 
 // helper to create resource with common fields

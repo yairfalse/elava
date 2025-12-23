@@ -20,6 +20,7 @@ enabled = true
 [scanner]
 interval = "5m"
 one_shot = false
+max_concurrency = 5  # limit concurrent AWS API calls to prevent throttling
 
 [log]
 level = "info"  # debug, info, warn, error

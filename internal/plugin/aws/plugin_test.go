@@ -70,3 +70,13 @@ func TestScanners(t *testing.T) {
 		assert.True(t, names[name], "missing scanner: %s", name)
 	}
 }
+
+func TestPlugin_MaxConcurrencyField(t *testing.T) {
+	// Verify the plugin struct accepts maxConcurrency configuration
+	p := &Plugin{
+		region:         "us-east-1",
+		accountID:      "123456789012",
+		maxConcurrency: 10,
+	}
+	assert.Equal(t, int64(10), p.maxConcurrency)
+}
