@@ -20,6 +20,7 @@ import (
 
 	"github.com/yairfalse/elava/internal/config"
 	"github.com/yairfalse/elava/internal/emitter"
+	"github.com/yairfalse/elava/internal/filter"
 	"github.com/yairfalse/elava/internal/plugin"
 	"github.com/yairfalse/elava/internal/plugin/aws"
 	"github.com/yairfalse/elava/internal/telemetry"
@@ -164,10 +165,18 @@ func shutdownMetricsServer(srv *http.Server) {
 }
 
 func registerPlugins(ctx context.Context, cfg *config.Config) error {
+	// Create filter from config
+	f := filter.New(
+		cfg.Scanner.ExcludeTypes,
+		cfg.Scanner.IncludeTags,
+		cfg.Scanner.ExcludeTags,
+	)
+
 	for _, region := range cfg.AWS.Regions {
 		awsPlugin, err := aws.New(ctx, aws.Config{
 			Region:         region,
 			MaxConcurrency: cfg.Scanner.MaxConcurrency,
+			Filter:         f,
 		})
 		if err != nil {
 			return err
