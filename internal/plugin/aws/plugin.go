@@ -223,7 +223,11 @@ func (p *Plugin) Scan(ctx context.Context) ([]resource.Resource, error) {
 
 			// Filter resources by tags
 			if p.filter != nil {
+				originalCount := len(result)
 				result = p.filter.FilterResources(result)
+				if originalCount != len(result) {
+					log.Debug().Str("scanner", s.name).Int("original", originalCount).Int("filtered", len(result)).Msg("resources filtered by tags")
+				}
 			}
 
 			mu.Lock()
