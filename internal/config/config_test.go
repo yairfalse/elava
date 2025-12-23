@@ -140,6 +140,44 @@ regions = ["us-east-1"]
 	assert.Equal(t, 5, cfg.Scanner.MaxConcurrency)
 }
 
+func TestLoad_FilterConfig(t *testing.T) {
+	content := `
+[aws]
+regions = ["us-east-1"]
+
+[scanner]
+exclude_types = ["cloudwatch_logs", "iam_role"]
+
+[scanner.include_tags]
+env = "prod"
+team = "platform"
+
+[scanner.exclude_tags]
+"do-not-scan" = "true"
+`
+	path := writeTempConfig(t, content)
+	cfg, err := Load(path)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cloudwatch_logs", "iam_role"}, cfg.Scanner.ExcludeTypes)
+	assert.Equal(t, map[string]string{"env": "prod", "team": "platform"}, cfg.Scanner.IncludeTags)
+	assert.Equal(t, map[string]string{"do-not-scan": "true"}, cfg.Scanner.ExcludeTags)
+}
+
+func TestLoad_FilterConfig_Empty(t *testing.T) {
+	content := `
+[aws]
+regions = ["us-east-1"]
+`
+	path := writeTempConfig(t, content)
+	cfg, err := Load(path)
+
+	require.NoError(t, err)
+	assert.Nil(t, cfg.Scanner.ExcludeTypes)
+	assert.Nil(t, cfg.Scanner.IncludeTags)
+	assert.Nil(t, cfg.Scanner.ExcludeTags)
+}
+
 func TestConfig_Validate_InvalidMaxConcurrency(t *testing.T) {
 	// Test Validate() directly (bypassing Load which applies defaults)
 	// to ensure validation catches invalid values

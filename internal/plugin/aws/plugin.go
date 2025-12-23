@@ -35,6 +35,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/semaphore"
 
+	"github.com/yairfalse/elava/internal/filter"
 	"github.com/yairfalse/elava/pkg/resource"
 )
 
@@ -43,6 +44,7 @@ type Plugin struct {
 	region         string
 	accountID      string
 	maxConcurrency int64
+	filter         *filter.Filter
 
 	// AWS clients (interfaces for testability)
 	ec2Client            EC2API
@@ -74,6 +76,7 @@ type Plugin struct {
 type Config struct {
 	Region         string
 	MaxConcurrency int
+	Filter         *filter.Filter
 }
 
 // New creates a new AWS plugin.
@@ -100,6 +103,7 @@ func New(ctx context.Context, cfg Config) (*Plugin, error) {
 		region:               cfg.Region,
 		accountID:            accountID,
 		maxConcurrency:       maxConcurrency,
+		filter:               cfg.Filter,
 		ec2Client:            ec2Client,
 		rdsClient:            rds.NewFromConfig(awsCfg),
 		elbClient:            elasticloadbalancingv2.NewFromConfig(awsCfg),
@@ -197,6 +201,12 @@ func (p *Plugin) Scan(ctx context.Context) ([]resource.Resource, error) {
 	sem := semaphore.NewWeighted(p.maxConcurrency)
 
 	for _, s := range p.scanners() {
+		// Skip scanner if type is excluded
+		if p.filter != nil && !p.filter.ShouldScanType(s.name) {
+			log.Debug().Str("scanner", s.name).Msg("skipped by filter")
+			continue
+		}
+
 		if err := sem.Acquire(ctx, 1); err != nil {
 			scanErr = fmt.Errorf("acquire semaphore: %w", err)
 			break
@@ -210,6 +220,12 @@ func (p *Plugin) Scan(ctx context.Context) ([]resource.Resource, error) {
 				log.Warn().Err(err).Str("scanner", s.name).Msg("scan failed")
 				return
 			}
+
+			// Filter resources by tags
+			if p.filter != nil {
+				result = p.filter.FilterResources(result)
+			}
+
 			mu.Lock()
 			resources = append(resources, result...)
 			mu.Unlock()

@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/yairfalse/elava/internal/filter"
 )
 
 func TestNewResource(t *testing.T) {
@@ -79,4 +81,17 @@ func TestPlugin_MaxConcurrencyField(t *testing.T) {
 		maxConcurrency: 10,
 	}
 	assert.Equal(t, int64(10), p.maxConcurrency)
+}
+
+func TestPlugin_FilterField(t *testing.T) {
+	// Verify the plugin struct accepts filter configuration
+	f := filter.New([]string{"iam_role"}, map[string]string{"env": "prod"}, nil)
+	p := &Plugin{
+		region:    "us-east-1",
+		accountID: "123456789012",
+		filter:    f,
+	}
+	assert.NotNil(t, p.filter)
+	assert.False(t, p.filter.ShouldScanType("iam_role"))
+	assert.True(t, p.filter.ShouldScanType("ec2"))
 }

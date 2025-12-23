@@ -22,5 +22,16 @@ interval = "5m"
 one_shot = false
 max_concurrency = 5  # limit concurrent AWS API calls to prevent throttling
 
+# Resource filtering (all optional)
+# exclude_types = ["cloudwatch_logs", "iam_role"]  # skip these resource types entirely
+
+# Tag-based filtering (resources must match ALL include tags, ANY exclude tag removes)
+# [scanner.include_tags]
+# env = "prod"
+# team = "platform"
+
+# [scanner.exclude_tags]
+# "do-not-scan" = "true"
+
 [log]
 level = "info"  # debug, info, warn, error

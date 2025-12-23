@@ -47,8 +47,11 @@ type MetricsConfig struct {
 type ScannerConfig struct {
 	IntervalStr    string `toml:"interval"`
 	Interval       time.Duration
-	OneShot        bool `toml:"one_shot"`
-	MaxConcurrency int  `toml:"max_concurrency"`
+	OneShot        bool              `toml:"one_shot"`
+	MaxConcurrency int               `toml:"max_concurrency"`
+	ExcludeTypes   []string          `toml:"exclude_types"`
+	IncludeTags    map[string]string `toml:"include_tags"`
+	ExcludeTags    map[string]string `toml:"exclude_tags"`
 }
 
 // LogConfig holds logging settings.
