@@ -106,10 +106,48 @@ func TestConfig_Validate_NoRegions(t *testing.T) {
 
 func TestConfig_Validate_Valid(t *testing.T) {
 	cfg := &Config{
-		AWS: AWSConfig{Regions: []string{"us-east-1", "eu-west-1"}},
+		AWS:     AWSConfig{Regions: []string{"us-east-1", "eu-west-1"}},
+		Scanner: ScannerConfig{MaxConcurrency: 5},
 	}
 	err := cfg.Validate()
 	require.NoError(t, err)
+}
+
+func TestLoad_MaxConcurrency(t *testing.T) {
+	content := `
+[aws]
+regions = ["us-east-1"]
+
+[scanner]
+max_concurrency = 10
+`
+	path := writeTempConfig(t, content)
+	cfg, err := Load(path)
+
+	require.NoError(t, err)
+	assert.Equal(t, 10, cfg.Scanner.MaxConcurrency)
+}
+
+func TestLoad_MaxConcurrency_Default(t *testing.T) {
+	content := `
+[aws]
+regions = ["us-east-1"]
+`
+	path := writeTempConfig(t, content)
+	cfg, err := Load(path)
+
+	require.NoError(t, err)
+	assert.Equal(t, 5, cfg.Scanner.MaxConcurrency)
+}
+
+func TestConfig_Validate_InvalidMaxConcurrency(t *testing.T) {
+	cfg := &Config{
+		AWS:     AWSConfig{Regions: []string{"us-east-1"}},
+		Scanner: ScannerConfig{MaxConcurrency: 0},
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "max_concurrency")
 }
 
 func writeTempConfig(t *testing.T, content string) string {

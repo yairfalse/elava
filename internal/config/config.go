@@ -45,9 +45,10 @@ type MetricsConfig struct {
 
 // ScannerConfig holds scanner settings.
 type ScannerConfig struct {
-	IntervalStr string `toml:"interval"`
-	Interval    time.Duration
-	OneShot     bool `toml:"one_shot"`
+	IntervalStr    string `toml:"interval"`
+	Interval       time.Duration
+	OneShot        bool `toml:"one_shot"`
+	MaxConcurrency int  `toml:"max_concurrency"`
 }
 
 // LogConfig holds logging settings.
@@ -83,6 +84,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.Scanner.IntervalStr == "" {
 		cfg.Scanner.IntervalStr = "5m"
 	}
+	if cfg.Scanner.MaxConcurrency == 0 {
+		cfg.Scanner.MaxConcurrency = 5
+	}
 	if cfg.Log.Level == "" {
 		cfg.Log.Level = "info"
 	}
@@ -104,6 +108,9 @@ func (c *Config) Validate() error {
 	}
 	if c.OTEL.Traces.SampleRate < 0.0 || c.OTEL.Traces.SampleRate > 1.0 {
 		return fmt.Errorf("otel: traces.sample_rate must be between 0.0 and 1.0 (got %v)", c.OTEL.Traces.SampleRate)
+	}
+	if c.Scanner.MaxConcurrency < 1 {
+		return fmt.Errorf("scanner: max_concurrency must be at least 1 (got %d)", c.Scanner.MaxConcurrency)
 	}
 	return nil
 }

@@ -81,6 +81,7 @@ func main() {
 	log.Info().
 		Strs("regions", cfg.AWS.Regions).
 		Dur("interval", cfg.Scanner.Interval).
+		Int("max_concurrency", cfg.Scanner.MaxConcurrency).
 		Bool("one_shot", cfg.Scanner.OneShot).
 		Msg("elava starting")
 
@@ -109,7 +110,7 @@ func loadConfig(path string) (*config.Config, error) {
 	return &config.Config{
 		AWS:     config.AWSConfig{Regions: []string{"us-east-1"}},
 		OTEL:    config.OTELConfig{ServiceName: "elava"},
-		Scanner: config.ScannerConfig{Interval: 5 * time.Minute},
+		Scanner: config.ScannerConfig{Interval: 5 * time.Minute, MaxConcurrency: 5},
 		Log:     config.LogConfig{Level: "info"},
 	}, nil
 }
@@ -164,7 +165,10 @@ func shutdownMetricsServer(srv *http.Server) {
 
 func registerPlugins(ctx context.Context, cfg *config.Config) error {
 	for _, region := range cfg.AWS.Regions {
-		awsPlugin, err := aws.New(ctx, aws.Config{Region: region})
+		awsPlugin, err := aws.New(ctx, aws.Config{
+			Region:         region,
+			MaxConcurrency: cfg.Scanner.MaxConcurrency,
+		})
 		if err != nil {
 			return err
 		}
