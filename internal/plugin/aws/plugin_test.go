@@ -57,6 +57,7 @@ func TestScanners(t *testing.T) {
 		"route53", "cloudwatch_logs", "sns", "cloudfront",
 		"elasticache", "secretsmanager", "acm", "apigateway",
 		"kinesis", "redshift", "stepfunctions", "glue",
+		"opensearch", "msk",
 	}
 
 	// Verify we have all expected scanners

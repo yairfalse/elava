@@ -22,8 +22,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/aws/aws-sdk-go-v2/service/glue"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/kafka"
 	"github.com/aws/aws-sdk-go-v2/service/kinesis"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	"github.com/aws/aws-sdk-go-v2/service/opensearch"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	"github.com/aws/aws-sdk-go-v2/service/redshift"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
@@ -70,6 +72,8 @@ type Plugin struct {
 	redshiftClient       RedshiftAPI
 	sfnClient            StepFunctionsAPI
 	glueClient           GlueAPI
+	opensearchClient     OpenSearchAPI
+	mskClient            MSKAPI
 }
 
 // Config holds AWS plugin configuration.
@@ -127,6 +131,8 @@ func New(ctx context.Context, cfg Config) (*Plugin, error) {
 		redshiftClient:       redshift.NewFromConfig(awsCfg),
 		sfnClient:            sfn.NewFromConfig(awsCfg),
 		glueClient:           glue.NewFromConfig(awsCfg),
+		opensearchClient:     opensearch.NewFromConfig(awsCfg),
+		mskClient:            kafka.NewFromConfig(awsCfg),
 	}, nil
 }
 
@@ -186,6 +192,8 @@ func (p *Plugin) scanners() []scanner {
 		{"redshift", p.scanRedshift},
 		{"stepfunctions", p.scanStepFunctions},
 		{"glue", p.scanGlue},
+		{"opensearch", p.scanOpenSearch},
+		{"msk", p.scanMSK},
 	}
 }
 

@@ -33,10 +33,14 @@ import (
 	gluetypes "github.com/aws/aws-sdk-go-v2/service/glue/types"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/kafka"
+	kafkatypes "github.com/aws/aws-sdk-go-v2/service/kafka/types"
 	"github.com/aws/aws-sdk-go-v2/service/kinesis"
 	kinesistypes "github.com/aws/aws-sdk-go-v2/service/kinesis/types"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	"github.com/aws/aws-sdk-go-v2/service/opensearch"
+	ostypes "github.com/aws/aws-sdk-go-v2/service/opensearch/types"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 	"github.com/aws/aws-sdk-go-v2/service/redshift"
@@ -1080,6 +1084,98 @@ func (p *Plugin) convertGlueDatabase(db gluetypes.Database) resource.Resource {
 	r := p.newResource(aws.ToString(db.Name), "glue_database", "active", aws.ToString(db.Name))
 	if db.Description != nil {
 		r.Attrs["description"] = aws.ToString(db.Description)
+	}
+	return r
+}
+
+// scanOpenSearch scans OpenSearch domains.
+func (p *Plugin) scanOpenSearch(ctx context.Context) ([]resource.Resource, error) {
+	output, err := p.opensearchClient.ListDomainNames(ctx, &opensearch.ListDomainNamesInput{})
+	if err != nil {
+		return nil, fmt.Errorf("list domain names: %w", err)
+	}
+
+	var resources []resource.Resource
+	for _, domainInfo := range output.DomainNames {
+		descOutput, err := p.opensearchClient.DescribeDomain(ctx, &opensearch.DescribeDomainInput{
+			DomainName: domainInfo.DomainName,
+		})
+		if err != nil {
+			continue
+		}
+		resources = append(resources, p.convertOpenSearchDomain(descOutput.DomainStatus))
+	}
+
+	return resources, nil
+}
+
+func (p *Plugin) convertOpenSearchDomain(domain *ostypes.DomainStatus) resource.Resource {
+	status := "active"
+	if aws.ToBool(domain.Processing) {
+		status = "processing"
+	}
+	if aws.ToBool(domain.Deleted) {
+		status = "deleted"
+	}
+
+	r := p.newResource(aws.ToString(domain.ARN), "opensearch", status, aws.ToString(domain.DomainName))
+	r.Attrs["engine_version"] = aws.ToString(domain.EngineVersion)
+	if domain.Endpoint != nil {
+		r.Attrs["endpoint"] = aws.ToString(domain.Endpoint)
+	}
+	if domain.ClusterConfig != nil {
+		r.Attrs["instance_type"] = string(domain.ClusterConfig.InstanceType)
+		r.Attrs["instance_count"] = strconv.Itoa(int(aws.ToInt32(domain.ClusterConfig.InstanceCount)))
+	}
+	if domain.EBSOptions != nil && aws.ToBool(domain.EBSOptions.EBSEnabled) {
+		r.Attrs["ebs_volume_size"] = strconv.Itoa(int(aws.ToInt32(domain.EBSOptions.VolumeSize)))
+	}
+	return r
+}
+
+// scanMSK scans MSK (Kafka) clusters.
+func (p *Plugin) scanMSK(ctx context.Context) ([]resource.Resource, error) {
+	var resources []resource.Resource
+	var nextToken *string
+
+	for {
+		output, err := p.mskClient.ListClustersV2(ctx, &kafka.ListClustersV2Input{NextToken: nextToken})
+		if err != nil {
+			return nil, fmt.Errorf("list clusters: %w", err)
+		}
+
+		for _, cluster := range output.ClusterInfoList {
+			resources = append(resources, p.convertMSKCluster(cluster))
+		}
+
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return resources, nil
+}
+
+func (p *Plugin) convertMSKCluster(cluster kafkatypes.Cluster) resource.Resource {
+	r := p.newResource(aws.ToString(cluster.ClusterArn), "msk", string(cluster.State), aws.ToString(cluster.ClusterName))
+	for k, v := range cluster.Tags {
+		r.Labels[k] = v
+	}
+	r.Attrs["type"] = string(cluster.ClusterType)
+	if cluster.Provisioned != nil {
+		r.Attrs["broker_nodes"] = strconv.Itoa(int(aws.ToInt32(cluster.Provisioned.NumberOfBrokerNodes)))
+		if cluster.Provisioned.BrokerNodeGroupInfo != nil {
+			r.Attrs["instance_type"] = aws.ToString(cluster.Provisioned.BrokerNodeGroupInfo.InstanceType)
+		}
+		if cluster.Provisioned.CurrentBrokerSoftwareInfo != nil {
+			r.Attrs["kafka_version"] = aws.ToString(cluster.Provisioned.CurrentBrokerSoftwareInfo.KafkaVersion)
+		}
+	}
+	if cluster.ClusterType == kafkatypes.ClusterTypeServerless {
+		r.Attrs["serverless"] = "true"
+	} else if cluster.ClusterType == kafkatypes.ClusterTypeProvisioned {
+		r.Attrs["serverless"] = "false"
 	}
 	return r
 }
