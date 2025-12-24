@@ -162,11 +162,13 @@ func startMetricsServer(addr string) *http.Server {
 }
 
 func handleHealthz(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
 }
 
 func handleReadyz(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	if len(plugin.All()) == 0 {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte("no plugins registered"))
