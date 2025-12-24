@@ -1,0 +1,161 @@
+# Elava Prometheus Alerting Rules
+# Add to your Prometheus configuration: rule_files: ["alerts.yaml"]
+
+groups:
+  - name: elava-scanner
+    rules:
+      # Scanner Health
+      - alert: ElavaScannerDown
+        expr: up{job="elava"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Elava scanner is down"
+          description: "Elava scanner {{ $labels.instance }} has been down for more than 2 minutes."
+
+      - alert: ElavaHighScanDuration
+        expr: histogram_quantile(0.95, rate(elava_scan_duration_seconds_bucket[5m])) > 120
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elava scan duration is high"
+          description: "95th percentile scan duration is {{ $value | printf \"%.1f\" }}s (threshold: 120s)."
+
+      - alert: ElavaScanErrors
+        expr: rate(elava_scan_errors_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elava is experiencing scan errors"
+          description: "Scan errors detected for provider={{ $labels.provider }} region={{ $labels.region }}."
+
+  - name: elava-resources
+    rules:
+      # Resource Changes
+      - alert: ElavaResourceDeleted
+        expr: increase(elava_resource_changes_total{change_type="deleted"}[10m]) > 5
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Multiple resources deleted"
+          description: "{{ $value | printf \"%.0f\" }} resources deleted in the last 10 minutes (type={{ $labels.type }}, region={{ $labels.region }})."
+
+      - alert: ElavaResourceMassChange
+        expr: increase(elava_resource_changes_total[10m]) > 20
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Large number of resource changes detected"
+          description: "{{ $value | printf \"%.0f\" }} resource changes in the last 10 minutes. Possible drift or unexpected activity."
+
+      - alert: ElavaNoResourcesScanned
+        expr: sum(elava_scan_resources_total) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No resources being scanned"
+          description: "Elava has not scanned any resources in the last 10 minutes. Check configuration and AWS credentials."
+
+  - name: elava-specific-resources
+    rules:
+      # EC2 Instance Changes
+      - alert: ElavaEC2InstanceTerminated
+        expr: increase(elava_resource_changes_total{type="ec2", change_type="deleted"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "EC2 instance terminated"
+          description: "{{ $value | printf \"%.0f\" }} EC2 instance(s) terminated in region={{ $labels.region }}."
+
+      - alert: ElavaEC2StatusChange
+        expr: increase(elava_resource_changes_total{type="ec2", change_type="modified"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "EC2 instance status changed"
+          description: "EC2 instance status changed in region={{ $labels.region }}. Check if this was expected."
+
+      # Security-sensitive Resources
+      - alert: ElavaSecurityGroupChanged
+        expr: increase(elava_resource_changes_total{type="security_group", change_type="modified"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Security group modified"
+          description: "Security group was modified in region={{ $labels.region }}. Review for security implications."
+
+      - alert: ElavaIAMRoleChanged
+        expr: increase(elava_resource_changes_total{type="iam_role"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "IAM role changed"
+          description: "IAM role was {{ $labels.change_type }} in account={{ $labels.account }}. Review for security implications."
+
+      - alert: ElavaSecretsManagerChanged
+        expr: increase(elava_resource_changes_total{type="secretsmanager"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "Secrets Manager secret changed"
+          description: "Secrets Manager secret was {{ $labels.change_type }}. Verify this change was authorized."
+
+      # Database Changes
+      - alert: ElavaRDSInstanceChanged
+        expr: increase(elava_resource_changes_total{type="rds"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "RDS instance changed"
+          description: "RDS instance was {{ $labels.change_type }} in region={{ $labels.region }}."
+
+      - alert: ElavaDynamoDBTableChanged
+        expr: increase(elava_resource_changes_total{type="dynamodb"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "DynamoDB table changed"
+          description: "DynamoDB table was {{ $labels.change_type }} in region={{ $labels.region }}."
+
+  - name: elava-cost-awareness
+    rules:
+      # New expensive resources
+      - alert: ElavaNewEKSCluster
+        expr: increase(elava_resource_changes_total{type="eks", change_type="added"}[1h]) > 0
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "New EKS cluster created"
+          description: "A new EKS cluster was created in region={{ $labels.region }}. Review for cost implications."
+
+      - alert: ElavaNewRDSInstance
+        expr: increase(elava_resource_changes_total{type="rds", change_type="added"}[1h]) > 0
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "New RDS instance created"
+          description: "A new RDS instance was created in region={{ $labels.region }}. Review for cost implications."
+
+      - alert: ElavaNewRedshiftCluster
+        expr: increase(elava_resource_changes_total{type="redshift", change_type="added"}[1h]) > 0
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "New Redshift cluster created"
+          description: "A new Redshift cluster was created in region={{ $labels.region }}. Review for cost implications."
