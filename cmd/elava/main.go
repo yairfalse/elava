@@ -142,9 +142,14 @@ func shutdownTelemetry(ctx context.Context, tp *telemetry.Provider) {
 }
 
 func startMetricsServer(addr string) *http.Server {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/healthz", handleHealthz)
+	mux.HandleFunc("/readyz", handleReadyz)
+
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           promhttp.Handler(),
+		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
@@ -154,6 +159,23 @@ func startMetricsServer(addr string) *http.Server {
 		}
 	}()
 	return srv
+}
+
+func handleHealthz(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok"))
+}
+
+func handleReadyz(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	if len(plugin.All()) == 0 {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("no plugins registered"))
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok"))
 }
 
 func shutdownMetricsServer(srv *http.Server) {
