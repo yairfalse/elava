@@ -1172,8 +1172,10 @@ func (p *Plugin) convertMSKCluster(cluster kafkatypes.Cluster) resource.Resource
 			r.Attrs["kafka_version"] = aws.ToString(cluster.Provisioned.CurrentBrokerSoftwareInfo.KafkaVersion)
 		}
 	}
-	if cluster.Serverless != nil {
+	if cluster.ClusterType == kafkatypes.ClusterTypeServerless {
 		r.Attrs["serverless"] = "true"
+	} else if cluster.ClusterType == kafkatypes.ClusterTypeProvisioned {
+		r.Attrs["serverless"] = "false"
 	}
 	return r
 }
