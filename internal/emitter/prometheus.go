@@ -18,14 +18,18 @@ type PrometheusEmitter struct {
 	meter metric.Meter
 
 	// Metrics
-	resourceInfo       metric.Int64ObservableGauge
-	scanDuration       metric.Float64Histogram
-	scanResourcesTotal metric.Int64Counter
-	scanErrorsTotal    metric.Int64Counter
+	resourceInfo         metric.Int64ObservableGauge
+	scanDuration         metric.Float64Histogram
+	scanResourcesTotal   metric.Int64Counter
+	scanErrorsTotal      metric.Int64Counter
+	resourceChangesTotal metric.Int64Counter
 
 	// State for observable gauge
 	mu        sync.RWMutex
 	resources []resource.Resource
+
+	// Diff tracking
+	diffTracker *DiffTracker
 }
 
 // NewPrometheusEmitter creates a Prometheus emitter.
@@ -33,8 +37,9 @@ func NewPrometheusEmitter() (*PrometheusEmitter, error) {
 	meter := otel.Meter("elava")
 
 	e := &PrometheusEmitter{
-		meter:     meter,
-		resources: make([]resource.Resource, 0),
+		meter:       meter,
+		resources:   make([]resource.Resource, 0),
+		diffTracker: NewDiffTracker(),
 	}
 
 	if err := e.initMetrics(); err != nil {
@@ -85,6 +90,15 @@ func (e *PrometheusEmitter) initMetrics() error {
 		return fmt.Errorf("create scan_errors counter: %w", err)
 	}
 
+	// Resource changes counter
+	e.resourceChangesTotal, err = e.meter.Int64Counter(
+		"elava_resource_changes_total",
+		metric.WithDescription("Total resource changes detected"),
+	)
+	if err != nil {
+		return fmt.Errorf("create resource_changes counter: %w", err)
+	}
+
 	return nil
 }
 
@@ -112,10 +126,16 @@ func (e *PrometheusEmitter) Emit(ctx context.Context, result resource.ScanResult
 	// Record resource count
 	e.scanResourcesTotal.Add(ctx, int64(len(result.Resources)), metric.WithAttributes(attrs...))
 
+	// Compute and emit diffs
+	e.emitDiffs(ctx, result)
+
 	// Update resources for observable gauge
 	e.mu.Lock()
 	e.resources = result.Resources
 	e.mu.Unlock()
+
+	// Update diff tracker state
+	e.diffTracker.Update(result.Resources)
 
 	log.Info().
 		Str("provider", result.Provider).
@@ -125,6 +145,44 @@ func (e *PrometheusEmitter) Emit(ctx context.Context, result resource.ScanResult
 		Msg("scan complete")
 
 	return nil
+}
+
+// emitDiffs computes diffs and emits metrics/logs for changes.
+func (e *PrometheusEmitter) emitDiffs(ctx context.Context, result resource.ScanResult) {
+	diffs := e.diffTracker.ComputeDiff(result.Resources)
+	if diffs == nil {
+		// First scan - baseline established
+		return
+	}
+
+	for _, diff := range diffs {
+		attrs := []attribute.KeyValue{
+			attribute.String("provider", diff.Resource.Provider),
+			attribute.String("type", diff.Resource.Type),
+			attribute.String("region", diff.Resource.Region),
+			attribute.String("change_type", string(diff.Type)),
+		}
+		e.resourceChangesTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
+
+		// Log the change
+		logEvent := log.Info().
+			Str("id", diff.Resource.ID).
+			Str("type", diff.Resource.Type).
+			Str("provider", diff.Resource.Provider).
+			Str("region", diff.Resource.Region).
+			Str("change", string(diff.Type))
+
+		// Add change details for modifications
+		if diff.Type == resource.DiffModified {
+			for field, change := range diff.Changes {
+				logEvent = logEvent.
+					Str(field+".from", change.Previous).
+					Str(field+".to", change.Current)
+			}
+		}
+
+		logEvent.Msg("resource changed")
+	}
 }
 
 // observeResources is the callback for the resource_info gauge.
