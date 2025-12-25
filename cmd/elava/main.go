@@ -194,11 +194,12 @@ func registerPlugins(ctx context.Context, cfg *config.Config) error {
 		cfg.Scanner.ExcludeTags,
 	)
 
-	for _, region := range cfg.AWS.Regions {
+	for i, region := range cfg.AWS.Regions {
 		awsPlugin, err := aws.New(ctx, aws.Config{
-			Region:         region,
-			MaxConcurrency: cfg.Scanner.MaxConcurrency,
-			Filter:         f,
+			Region:          region,
+			MaxConcurrency:  cfg.Scanner.MaxConcurrency,
+			Filter:          f,
+			ScanGlobalTypes: i == 0, // Only first region scans global types (IAM, Route53, CloudFront, S3)
 		})
 		if err != nil {
 			return err
