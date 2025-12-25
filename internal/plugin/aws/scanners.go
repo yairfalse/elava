@@ -55,6 +55,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/rs/zerolog/log"
 
 	"github.com/yairfalse/elava/pkg/resource"
 )
@@ -208,14 +209,14 @@ func (p *Plugin) scanS3(ctx context.Context) ([]resource.Resource, error) {
 }
 
 // getBucketRegion fetches the actual region where an S3 bucket resides.
-// Returns "us-east-1" if location is empty (AWS default) or on error.
+// Returns "us-east-1" if location is empty (AWS default) or "unknown" on error.
 func (p *Plugin) getBucketRegion(ctx context.Context, bucketName string) string {
 	locOutput, err := p.s3Client().GetBucketLocation(ctx, &s3.GetBucketLocationInput{
 		Bucket: aws.String(bucketName),
 	})
 	if err != nil {
-		// On error, fall back to plugin region
-		return p.region
+		log.Warn().Err(err).Str("bucket", bucketName).Msg("failed to get bucket location")
+		return "unknown"
 	}
 
 	// Empty location constraint means us-east-1 (AWS returns empty for us-east-1)
