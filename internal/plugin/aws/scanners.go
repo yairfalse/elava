@@ -65,7 +65,7 @@ func (p *Plugin) scanEC2(ctx context.Context) ([]resource.Resource, error) {
 	var nextToken *string
 
 	for {
-		output, err := p.ec2Client.DescribeInstances(ctx, &ec2.DescribeInstancesInput{NextToken: nextToken})
+		output, err := p.ec2Client().DescribeInstances(ctx, &ec2.DescribeInstancesInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("describe instances: %w", err)
 		}
@@ -109,7 +109,7 @@ func (p *Plugin) scanRDS(ctx context.Context) ([]resource.Resource, error) {
 	var marker *string
 
 	for {
-		output, err := p.rdsClient.DescribeDBInstances(ctx, &rds.DescribeDBInstancesInput{Marker: marker})
+		output, err := p.rdsClient().DescribeDBInstances(ctx, &rds.DescribeDBInstancesInput{Marker: marker})
 		if err != nil {
 			return nil, fmt.Errorf("describe db instances: %w", err)
 		}
@@ -150,7 +150,7 @@ func (p *Plugin) scanELB(ctx context.Context) ([]resource.Resource, error) {
 	var marker *string
 
 	for {
-		output, err := p.elbClient.DescribeLoadBalancers(ctx, &elasticloadbalancingv2.DescribeLoadBalancersInput{Marker: marker})
+		output, err := p.elbClient().DescribeLoadBalancers(ctx, &elasticloadbalancingv2.DescribeLoadBalancersInput{Marker: marker})
 		if err != nil {
 			return nil, fmt.Errorf("describe load balancers: %w", err)
 		}
@@ -182,15 +182,22 @@ func (p *Plugin) convertELB(lb elbtypes.LoadBalancer) resource.Resource {
 }
 
 // scanS3 scans S3 buckets (no pagination needed).
+// S3 is a global service, but buckets exist in specific regions.
 func (p *Plugin) scanS3(ctx context.Context) ([]resource.Resource, error) {
-	output, err := p.s3Client.ListBuckets(ctx, &s3.ListBucketsInput{})
+	output, err := p.s3Client().ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
 		return nil, fmt.Errorf("list buckets: %w", err)
 	}
 
 	var resources []resource.Resource
 	for _, bucket := range output.Buckets {
-		r := p.newResource(aws.ToString(bucket.Name), "s3", "active", aws.ToString(bucket.Name))
+		bucketName := aws.ToString(bucket.Name)
+
+		// Get actual bucket region
+		region := p.getBucketRegion(ctx, bucketName)
+
+		r := p.newResource(bucketName, "s3", "active", bucketName)
+		r.Region = region // Override with actual bucket region
 		if bucket.CreationDate != nil {
 			r.Attrs["created"] = bucket.CreationDate.Format("2006-01-02")
 		}
@@ -200,19 +207,37 @@ func (p *Plugin) scanS3(ctx context.Context) ([]resource.Resource, error) {
 	return resources, nil
 }
 
+// getBucketRegion fetches the actual region where an S3 bucket resides.
+// Returns "us-east-1" if location is empty (AWS default) or on error.
+func (p *Plugin) getBucketRegion(ctx context.Context, bucketName string) string {
+	locOutput, err := p.s3Client().GetBucketLocation(ctx, &s3.GetBucketLocationInput{
+		Bucket: aws.String(bucketName),
+	})
+	if err != nil {
+		// On error, fall back to plugin region
+		return p.region
+	}
+
+	// Empty location constraint means us-east-1 (AWS returns empty for us-east-1)
+	if locOutput.LocationConstraint == "" {
+		return "us-east-1"
+	}
+	return string(locOutput.LocationConstraint)
+}
+
 // scanEKS scans EKS clusters.
 func (p *Plugin) scanEKS(ctx context.Context) ([]resource.Resource, error) {
 	var resources []resource.Resource
 	var nextToken *string
 
 	for {
-		listOutput, err := p.eksClient.ListClusters(ctx, &eks.ListClustersInput{NextToken: nextToken})
+		listOutput, err := p.eksClient().ListClusters(ctx, &eks.ListClustersInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("list clusters: %w", err)
 		}
 
 		for _, clusterName := range listOutput.Clusters {
-			descOutput, err := p.eksClient.DescribeCluster(ctx, &eks.DescribeClusterInput{Name: aws.String(clusterName)})
+			descOutput, err := p.eksClient().DescribeCluster(ctx, &eks.DescribeClusterInput{Name: aws.String(clusterName)})
 			if err != nil {
 				continue
 			}
@@ -244,7 +269,7 @@ func (p *Plugin) scanASG(ctx context.Context) ([]resource.Resource, error) {
 	var nextToken *string
 
 	for {
-		output, err := p.asgClient.DescribeAutoScalingGroups(ctx, &autoscaling.DescribeAutoScalingGroupsInput{NextToken: nextToken})
+		output, err := p.asgClient().DescribeAutoScalingGroups(ctx, &autoscaling.DescribeAutoScalingGroupsInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("describe auto scaling groups: %w", err)
 		}
@@ -284,7 +309,7 @@ func (p *Plugin) scanLambda(ctx context.Context) ([]resource.Resource, error) {
 	var marker *string
 
 	for {
-		output, err := p.lambdaClient.ListFunctions(ctx, &lambda.ListFunctionsInput{Marker: marker})
+		output, err := p.lambdaClient().ListFunctions(ctx, &lambda.ListFunctionsInput{Marker: marker})
 		if err != nil {
 			return nil, fmt.Errorf("list functions: %w", err)
 		}
@@ -316,7 +341,7 @@ func (p *Plugin) scanVPC(ctx context.Context) ([]resource.Resource, error) {
 	var nextToken *string
 
 	for {
-		output, err := p.ec2Client.DescribeVpcs(ctx, &ec2.DescribeVpcsInput{NextToken: nextToken})
+		output, err := p.ec2Client().DescribeVpcs(ctx, &ec2.DescribeVpcsInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("describe vpcs: %w", err)
 		}
@@ -350,7 +375,7 @@ func (p *Plugin) scanSubnets(ctx context.Context) ([]resource.Resource, error) {
 	var nextToken *string
 
 	for {
-		output, err := p.ec2Client.DescribeSubnets(ctx, &ec2.DescribeSubnetsInput{NextToken: nextToken})
+		output, err := p.ec2Client().DescribeSubnets(ctx, &ec2.DescribeSubnetsInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("describe subnets: %w", err)
 		}
@@ -386,7 +411,7 @@ func (p *Plugin) scanSecurityGroups(ctx context.Context) ([]resource.Resource, e
 	var nextToken *string
 
 	for {
-		output, err := p.ec2Client.DescribeSecurityGroups(ctx, &ec2.DescribeSecurityGroupsInput{NextToken: nextToken})
+		output, err := p.ec2Client().DescribeSecurityGroups(ctx, &ec2.DescribeSecurityGroupsInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("describe security groups: %w", err)
 		}
@@ -422,13 +447,13 @@ func (p *Plugin) scanDynamoDB(ctx context.Context) ([]resource.Resource, error) 
 	var lastKey *string
 
 	for {
-		output, err := p.dynamodbClient.ListTables(ctx, &dynamodb.ListTablesInput{ExclusiveStartTableName: lastKey})
+		output, err := p.dynamodbClient().ListTables(ctx, &dynamodb.ListTablesInput{ExclusiveStartTableName: lastKey})
 		if err != nil {
 			return nil, fmt.Errorf("list tables: %w", err)
 		}
 
 		for _, tableName := range output.TableNames {
-			desc, err := p.dynamodbClient.DescribeTable(ctx, &dynamodb.DescribeTableInput{TableName: aws.String(tableName)})
+			desc, err := p.dynamodbClient().DescribeTable(ctx, &dynamodb.DescribeTableInput{TableName: aws.String(tableName)})
 			if err != nil {
 				continue
 			}
@@ -460,7 +485,7 @@ func (p *Plugin) scanSQS(ctx context.Context) ([]resource.Resource, error) {
 	var nextToken *string
 
 	for {
-		output, err := p.sqsClient.ListQueues(ctx, &sqs.ListQueuesInput{NextToken: nextToken})
+		output, err := p.sqsClient().ListQueues(ctx, &sqs.ListQueuesInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("list queues: %w", err)
 		}
@@ -486,7 +511,7 @@ func (p *Plugin) scanEBSVolumes(ctx context.Context) ([]resource.Resource, error
 	var nextToken *string
 
 	for {
-		output, err := p.ec2Client.DescribeVolumes(ctx, &ec2.DescribeVolumesInput{NextToken: nextToken})
+		output, err := p.ec2Client().DescribeVolumes(ctx, &ec2.DescribeVolumesInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("describe volumes: %w", err)
 		}
@@ -519,7 +544,7 @@ func (p *Plugin) convertEBSVolume(vol ec2types.Volume) resource.Resource {
 
 // scanElasticIPs scans Elastic IPs (no pagination needed).
 func (p *Plugin) scanElasticIPs(ctx context.Context) ([]resource.Resource, error) {
-	output, err := p.ec2Client.DescribeAddresses(ctx, &ec2.DescribeAddressesInput{})
+	output, err := p.ec2Client().DescribeAddresses(ctx, &ec2.DescribeAddressesInput{})
 	if err != nil {
 		return nil, fmt.Errorf("describe addresses: %w", err)
 	}
@@ -553,7 +578,7 @@ func (p *Plugin) scanNATGateways(ctx context.Context) ([]resource.Resource, erro
 	var nextToken *string
 
 	for {
-		output, err := p.ec2Client.DescribeNatGateways(ctx, &ec2.DescribeNatGatewaysInput{NextToken: nextToken})
+		output, err := p.ec2Client().DescribeNatGateways(ctx, &ec2.DescribeNatGatewaysInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("describe nat gateways: %w", err)
 		}
@@ -590,7 +615,7 @@ func (p *Plugin) scanIAMRoles(ctx context.Context) ([]resource.Resource, error) 
 	var marker *string
 
 	for {
-		output, err := p.iamClient.ListRoles(ctx, &iam.ListRolesInput{Marker: marker})
+		output, err := p.iamClient().ListRoles(ctx, &iam.ListRolesInput{Marker: marker})
 		if err != nil {
 			return nil, fmt.Errorf("list roles: %w", err)
 		}
@@ -609,7 +634,7 @@ func (p *Plugin) scanIAMRoles(ctx context.Context) ([]resource.Resource, error) 
 }
 
 func (p *Plugin) convertIAMRole(role iamtypes.Role) resource.Resource {
-	r := p.newResource(aws.ToString(role.Arn), "iam_role", "active", aws.ToString(role.RoleName))
+	r := p.newGlobalResource(aws.ToString(role.Arn), "iam_role", "active", aws.ToString(role.RoleName))
 	r.Attrs["path"] = aws.ToString(role.Path)
 	if role.Description != nil {
 		r.Attrs["description"] = aws.ToString(role.Description)
@@ -623,7 +648,7 @@ func (p *Plugin) scanECS(ctx context.Context) ([]resource.Resource, error) {
 	var nextToken *string
 
 	for {
-		listOutput, err := p.ecsClient.ListClusters(ctx, &ecs.ListClustersInput{NextToken: nextToken})
+		listOutput, err := p.ecsClient().ListClusters(ctx, &ecs.ListClustersInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("list clusters: %w", err)
 		}
@@ -649,7 +674,7 @@ func (p *Plugin) scanECS(ctx context.Context) ([]resource.Resource, error) {
 		}
 		batch := clusterArns[i:end]
 
-		descOutput, err := p.ecsClient.DescribeClusters(ctx, &ecs.DescribeClustersInput{Clusters: batch})
+		descOutput, err := p.ecsClient().DescribeClusters(ctx, &ecs.DescribeClustersInput{Clusters: batch})
 		if err != nil {
 			return nil, fmt.Errorf("describe clusters: %w", err)
 		}
@@ -676,7 +701,7 @@ func (p *Plugin) scanRoute53(ctx context.Context) ([]resource.Resource, error) {
 	var marker *string
 
 	for {
-		output, err := p.route53Client.ListHostedZones(ctx, &route53.ListHostedZonesInput{Marker: marker})
+		output, err := p.route53Client().ListHostedZones(ctx, &route53.ListHostedZonesInput{Marker: marker})
 		if err != nil {
 			return nil, fmt.Errorf("list hosted zones: %w", err)
 		}
@@ -699,7 +724,7 @@ func (p *Plugin) convertRoute53Zone(zone r53types.HostedZone) resource.Resource 
 	if zone.Config != nil && zone.Config.PrivateZone {
 		zoneType = "private"
 	}
-	r := p.newResource(aws.ToString(zone.Id), "route53", "active", aws.ToString(zone.Name))
+	r := p.newGlobalResource(aws.ToString(zone.Id), "route53", "active", aws.ToString(zone.Name))
 	r.Attrs["type"] = zoneType
 	r.Attrs["records"] = strconv.FormatInt(aws.ToInt64(zone.ResourceRecordSetCount), 10)
 	return r
@@ -711,7 +736,7 @@ func (p *Plugin) scanCloudWatchLogs(ctx context.Context) ([]resource.Resource, e
 	var nextToken *string
 
 	for {
-		output, err := p.cwLogsClient.DescribeLogGroups(ctx, &cloudwatchlogs.DescribeLogGroupsInput{NextToken: nextToken})
+		output, err := p.cwLogsClient().DescribeLogGroups(ctx, &cloudwatchlogs.DescribeLogGroupsInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("describe log groups: %w", err)
 		}
@@ -744,7 +769,7 @@ func (p *Plugin) scanSNS(ctx context.Context) ([]resource.Resource, error) {
 	var nextToken *string
 
 	for {
-		output, err := p.snsClient.ListTopics(ctx, &sns.ListTopicsInput{NextToken: nextToken})
+		output, err := p.snsClient().ListTopics(ctx, &sns.ListTopicsInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("list topics: %w", err)
 		}
@@ -774,7 +799,7 @@ func (p *Plugin) scanCloudFront(ctx context.Context) ([]resource.Resource, error
 	var marker *string
 
 	for {
-		output, err := p.cloudfrontClient.ListDistributions(ctx, &cloudfront.ListDistributionsInput{Marker: marker})
+		output, err := p.cloudfrontClient().ListDistributions(ctx, &cloudfront.ListDistributionsInput{Marker: marker})
 		if err != nil {
 			return nil, fmt.Errorf("list distributions: %w", err)
 		}
@@ -797,7 +822,7 @@ func (p *Plugin) scanCloudFront(ctx context.Context) ([]resource.Resource, error
 }
 
 func (p *Plugin) convertCloudFrontDistribution(dist cftypes.DistributionSummary) resource.Resource {
-	r := p.newResource(aws.ToString(dist.Id), "cloudfront", aws.ToString(dist.Status), aws.ToString(dist.DomainName))
+	r := p.newGlobalResource(aws.ToString(dist.Id), "cloudfront", aws.ToString(dist.Status), aws.ToString(dist.DomainName))
 	r.Attrs["domain"] = aws.ToString(dist.DomainName)
 	r.Attrs["enabled"] = strconv.FormatBool(aws.ToBool(dist.Enabled))
 	if dist.Origins != nil && len(dist.Origins.Items) > 0 {
@@ -812,7 +837,7 @@ func (p *Plugin) scanElastiCache(ctx context.Context) ([]resource.Resource, erro
 	var marker *string
 
 	for {
-		output, err := p.elasticacheClient.DescribeCacheClusters(ctx, &elasticache.DescribeCacheClustersInput{Marker: marker})
+		output, err := p.elasticacheClient().DescribeCacheClusters(ctx, &elasticache.DescribeCacheClustersInput{Marker: marker})
 		if err != nil {
 			return nil, fmt.Errorf("describe cache clusters: %w", err)
 		}
@@ -845,7 +870,7 @@ func (p *Plugin) scanSecretsManager(ctx context.Context) ([]resource.Resource, e
 	var nextToken *string
 
 	for {
-		output, err := p.secretsmanagerClient.ListSecrets(ctx, &secretsmanager.ListSecretsInput{NextToken: nextToken})
+		output, err := p.secretsmanagerClient().ListSecrets(ctx, &secretsmanager.ListSecretsInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("list secrets: %w", err)
 		}
@@ -906,7 +931,7 @@ func (p *Plugin) scanACM(ctx context.Context) ([]resource.Resource, error) {
 	var nextToken *string
 
 	for {
-		output, err := p.acmClient.ListCertificates(ctx, &acm.ListCertificatesInput{NextToken: nextToken})
+		output, err := p.acmClient().ListCertificates(ctx, &acm.ListCertificatesInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("list certificates: %w", err)
 		}
@@ -936,7 +961,7 @@ func (p *Plugin) scanAPIGateway(ctx context.Context) ([]resource.Resource, error
 	var nextToken *string
 
 	for {
-		output, err := p.apigatewayClient.GetApis(ctx, &apigatewayv2.GetApisInput{NextToken: nextToken})
+		output, err := p.apigatewayClient().GetApis(ctx, &apigatewayv2.GetApisInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("get apis: %w", err)
 		}
@@ -969,7 +994,7 @@ func (p *Plugin) scanKinesis(ctx context.Context) ([]resource.Resource, error) {
 	var nextToken *string
 
 	for {
-		output, err := p.kinesisClient.ListStreams(ctx, &kinesis.ListStreamsInput{NextToken: nextToken})
+		output, err := p.kinesisClient().ListStreams(ctx, &kinesis.ListStreamsInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("list streams: %w", err)
 		}
@@ -998,7 +1023,7 @@ func (p *Plugin) scanRedshift(ctx context.Context) ([]resource.Resource, error) 
 	var marker *string
 
 	for {
-		output, err := p.redshiftClient.DescribeClusters(ctx, &redshift.DescribeClustersInput{Marker: marker})
+		output, err := p.redshiftClient().DescribeClusters(ctx, &redshift.DescribeClustersInput{Marker: marker})
 		if err != nil {
 			return nil, fmt.Errorf("describe clusters: %w", err)
 		}
@@ -1032,7 +1057,7 @@ func (p *Plugin) scanStepFunctions(ctx context.Context) ([]resource.Resource, er
 	var nextToken *string
 
 	for {
-		output, err := p.sfnClient.ListStateMachines(ctx, &sfn.ListStateMachinesInput{NextToken: nextToken})
+		output, err := p.sfnClient().ListStateMachines(ctx, &sfn.ListStateMachinesInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("list state machines: %w", err)
 		}
@@ -1062,7 +1087,7 @@ func (p *Plugin) scanGlue(ctx context.Context) ([]resource.Resource, error) {
 	var nextToken *string
 
 	for {
-		output, err := p.glueClient.GetDatabases(ctx, &glue.GetDatabasesInput{NextToken: nextToken})
+		output, err := p.glueClient().GetDatabases(ctx, &glue.GetDatabasesInput{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("get databases: %w", err)
 		}
@@ -1090,14 +1115,14 @@ func (p *Plugin) convertGlueDatabase(db gluetypes.Database) resource.Resource {
 
 // scanOpenSearch scans OpenSearch domains.
 func (p *Plugin) scanOpenSearch(ctx context.Context) ([]resource.Resource, error) {
-	output, err := p.opensearchClient.ListDomainNames(ctx, &opensearch.ListDomainNamesInput{})
+	output, err := p.opensearchClient().ListDomainNames(ctx, &opensearch.ListDomainNamesInput{})
 	if err != nil {
 		return nil, fmt.Errorf("list domain names: %w", err)
 	}
 
 	var resources []resource.Resource
 	for _, domainInfo := range output.DomainNames {
-		descOutput, err := p.opensearchClient.DescribeDomain(ctx, &opensearch.DescribeDomainInput{
+		descOutput, err := p.opensearchClient().DescribeDomain(ctx, &opensearch.DescribeDomainInput{
 			DomainName: domainInfo.DomainName,
 		})
 		if err != nil {
@@ -1139,7 +1164,7 @@ func (p *Plugin) scanMSK(ctx context.Context) ([]resource.Resource, error) {
 	var nextToken *string
 
 	for {
-		output, err := p.mskClient.ListClustersV2(ctx, &kafka.ListClustersV2Input{NextToken: nextToken})
+		output, err := p.mskClient().ListClustersV2(ctx, &kafka.ListClustersV2Input{NextToken: nextToken})
 		if err != nil {
 			return nil, fmt.Errorf("list clusters: %w", err)
 		}

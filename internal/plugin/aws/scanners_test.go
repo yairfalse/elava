@@ -88,7 +88,7 @@ func TestScanRDS(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", rdsClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", rdsClient: func() RDSAPI { return mock }}
 	resources, err := p.scanRDS(context.Background())
 
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestScanRDS_Error(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", rdsClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", rdsClient: func() RDSAPI { return mock }}
 	_, err := p.scanRDS(context.Background())
 
 	require.Error(t, err)
@@ -121,11 +121,20 @@ func TestScanRDS_Error(t *testing.T) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 type mockS3Client struct {
-	ListBucketsFunc func(ctx context.Context, params *s3.ListBucketsInput, optFns ...func(*s3.Options)) (*s3.ListBucketsOutput, error)
+	ListBucketsFunc       func(ctx context.Context, params *s3.ListBucketsInput, optFns ...func(*s3.Options)) (*s3.ListBucketsOutput, error)
+	GetBucketLocationFunc func(ctx context.Context, params *s3.GetBucketLocationInput, optFns ...func(*s3.Options)) (*s3.GetBucketLocationOutput, error)
 }
 
 func (m *mockS3Client) ListBuckets(ctx context.Context, params *s3.ListBucketsInput, optFns ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
 	return m.ListBucketsFunc(ctx, params, optFns...)
+}
+
+func (m *mockS3Client) GetBucketLocation(ctx context.Context, params *s3.GetBucketLocationInput, optFns ...func(*s3.Options)) (*s3.GetBucketLocationOutput, error) {
+	if m.GetBucketLocationFunc != nil {
+		return m.GetBucketLocationFunc(ctx, params, optFns...)
+	}
+	// Default: return us-east-1 (empty string means us-east-1 in AWS)
+	return &s3.GetBucketLocationOutput{}, nil
 }
 
 func TestScanS3(t *testing.T) {
@@ -140,7 +149,7 @@ func TestScanS3(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", s3Client: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", s3Client: func() S3API { return mock }}
 	resources, err := p.scanS3(context.Background())
 
 	require.NoError(t, err)
@@ -187,7 +196,7 @@ func TestScanEKS(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", eksClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", eksClient: func() EKSAPI { return mock }}
 	resources, err := p.scanEKS(context.Background())
 
 	require.NoError(t, err)
@@ -225,7 +234,7 @@ func TestScanVPC(t *testing.T) {
 		}, nil
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: func() EC2API { return mock }}
 	resources, err := p.scanVPC(context.Background())
 
 	require.NoError(t, err)
@@ -274,7 +283,7 @@ func TestScanDynamoDB(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", dynamodbClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", dynamodbClient: func() DynamoDBAPI { return mock }}
 	resources, err := p.scanDynamoDB(context.Background())
 
 	require.NoError(t, err)
@@ -357,7 +366,7 @@ func TestScanLambda(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", lambdaClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", lambdaClient: func() LambdaAPI { return mock }}
 	resources, err := p.scanLambda(context.Background())
 
 	require.NoError(t, err)
@@ -401,7 +410,7 @@ func TestScanASG(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", asgClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", asgClient: func() AutoScalingAPI { return mock }}
 	resources, err := p.scanASG(context.Background())
 
 	require.NoError(t, err)
@@ -433,7 +442,7 @@ func TestScanASG_Stopped(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", asgClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", asgClient: func() AutoScalingAPI { return mock }}
 	resources, err := p.scanASG(context.Background())
 
 	require.NoError(t, err)
@@ -465,7 +474,7 @@ func TestScanSQS(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", sqsClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", sqsClient: func() SQSAPI { return mock }}
 	resources, err := p.scanSQS(context.Background())
 
 	require.NoError(t, err)
@@ -508,7 +517,7 @@ func TestScanELB(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", elbClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", elbClient: func() ELBAPI { return mock }}
 	resources, err := p.scanELB(context.Background())
 
 	require.NoError(t, err)
@@ -551,7 +560,7 @@ func TestScanIAMRoles(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", iamClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", iamClient: func() IAMAPI { return mock }}
 	resources, err := p.scanIAMRoles(context.Background())
 
 	require.NoError(t, err)
@@ -605,7 +614,7 @@ func TestScanECS(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", ecsClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", ecsClient: func() ECSAPI { return mock }}
 	resources, err := p.scanECS(context.Background())
 
 	require.NoError(t, err)
@@ -626,7 +635,7 @@ func TestScanECS_Empty(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", ecsClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", ecsClient: func() ECSAPI { return mock }}
 	resources, err := p.scanECS(context.Background())
 
 	require.NoError(t, err)
@@ -662,7 +671,7 @@ func TestScanECS_Batching(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", ecsClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", ecsClient: func() ECSAPI { return mock }}
 	resources, err := p.scanECS(context.Background())
 
 	require.NoError(t, err)
@@ -705,7 +714,7 @@ func TestScanRoute53(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", route53Client: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", route53Client: func() Route53API { return mock }}
 	resources, err := p.scanRoute53(context.Background())
 
 	require.NoError(t, err)
@@ -747,7 +756,7 @@ func TestScanCloudWatchLogs(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", cwLogsClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", cwLogsClient: func() CloudWatchLogsAPI { return mock }}
 	resources, err := p.scanCloudWatchLogs(context.Background())
 
 	require.NoError(t, err)
@@ -783,7 +792,7 @@ func TestScanSubnets(t *testing.T) {
 		}, nil
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: func() EC2API { return mock }}
 	resources, err := p.scanSubnets(context.Background())
 
 	require.NoError(t, err)
@@ -819,7 +828,7 @@ func TestScanSecurityGroups(t *testing.T) {
 		}, nil
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: func() EC2API { return mock }}
 	resources, err := p.scanSecurityGroups(context.Background())
 
 	require.NoError(t, err)
@@ -857,7 +866,7 @@ func TestScanEBSVolumes(t *testing.T) {
 		}, nil
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: func() EC2API { return mock }}
 	resources, err := p.scanEBSVolumes(context.Background())
 
 	require.NoError(t, err)
@@ -898,7 +907,7 @@ func TestScanElasticIPs(t *testing.T) {
 		}, nil
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: func() EC2API { return mock }}
 	resources, err := p.scanElasticIPs(context.Background())
 
 	require.NoError(t, err)
@@ -935,7 +944,7 @@ func TestScanNATGateways(t *testing.T) {
 		}, nil
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: func() EC2API { return mock }}
 	resources, err := p.scanNATGateways(context.Background())
 
 	require.NoError(t, err)
@@ -973,7 +982,7 @@ func TestScanSNS(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", snsClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", snsClient: func() SNSAPI { return mock }}
 	resources, err := p.scanSNS(context.Background())
 
 	require.NoError(t, err)
@@ -1020,7 +1029,7 @@ func TestScanCloudFront(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", cloudfrontClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", cloudfrontClient: func() CloudFrontAPI { return mock }}
 	resources, err := p.scanCloudFront(context.Background())
 
 	require.NoError(t, err)
@@ -1064,7 +1073,7 @@ func TestScanElastiCache(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", elasticacheClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", elasticacheClient: func() ElastiCacheAPI { return mock }}
 	resources, err := p.scanElastiCache(context.Background())
 
 	require.NoError(t, err)
@@ -1105,7 +1114,7 @@ func TestScanSecretsManager(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", secretsmanagerClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", secretsmanagerClient: func() SecretsManagerAPI { return mock }}
 	resources, err := p.scanSecretsManager(context.Background())
 
 	require.NoError(t, err)
@@ -1168,7 +1177,7 @@ func TestScanACM(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", acmClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", acmClient: func() ACMAPI { return mock }}
 	resources, err := p.scanACM(context.Background())
 
 	require.NoError(t, err)
@@ -1209,7 +1218,7 @@ func TestScanAPIGateway(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", apigatewayClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", apigatewayClient: func() APIGatewayAPI { return mock }}
 	resources, err := p.scanAPIGateway(context.Background())
 
 	require.NoError(t, err)
@@ -1249,7 +1258,7 @@ func TestScanKinesis(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", kinesisClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", kinesisClient: func() KinesisAPI { return mock }}
 	resources, err := p.scanKinesis(context.Background())
 
 	require.NoError(t, err)
@@ -1290,7 +1299,7 @@ func TestScanRedshift(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", redshiftClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", redshiftClient: func() RedshiftAPI { return mock }}
 	resources, err := p.scanRedshift(context.Background())
 
 	require.NoError(t, err)
@@ -1331,7 +1340,7 @@ func TestScanStepFunctions(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", sfnClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", sfnClient: func() StepFunctionsAPI { return mock }}
 	resources, err := p.scanStepFunctions(context.Background())
 
 	require.NoError(t, err)
@@ -1371,7 +1380,7 @@ func TestScanGlue(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", glueClient: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", glueClient: func() GlueAPI { return mock }}
 	resources, err := p.scanGlue(context.Background())
 
 	require.NoError(t, err)

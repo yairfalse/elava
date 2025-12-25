@@ -34,6 +34,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sfn"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/semaphore"
 
@@ -43,44 +44,47 @@ import (
 
 // Plugin implements the AWS scanner.
 type Plugin struct {
-	region         string
-	accountID      string
-	maxConcurrency int64
-	filter         *filter.Filter
+	region          string
+	accountID       string
+	maxConcurrency  int64
+	filter          *filter.Filter
+	scanGlobalTypes bool // true = scan global types (IAM, Route53, CloudFront, S3)
 
-	// AWS clients (interfaces for testability)
-	ec2Client            EC2API
-	rdsClient            RDSAPI
-	elbClient            ELBAPI
-	s3Client             S3API
-	eksClient            EKSAPI
-	asgClient            AutoScalingAPI
-	lambdaClient         LambdaAPI
-	dynamodbClient       DynamoDBAPI
-	sqsClient            SQSAPI
-	iamClient            IAMAPI
-	ecsClient            ECSAPI
-	route53Client        Route53API
-	cwLogsClient         CloudWatchLogsAPI
-	snsClient            SNSAPI
-	cloudfrontClient     CloudFrontAPI
-	elasticacheClient    ElastiCacheAPI
-	secretsmanagerClient SecretsManagerAPI
-	acmClient            ACMAPI
-	apigatewayClient     APIGatewayAPI
-	kinesisClient        KinesisAPI
-	redshiftClient       RedshiftAPI
-	sfnClient            StepFunctionsAPI
-	glueClient           GlueAPI
-	opensearchClient     OpenSearchAPI
-	mskClient            MSKAPI
+	// AWS clients - lazy initialized via sync.OnceValue for efficiency
+	// Only clients that are actually used get created
+	ec2Client            func() EC2API
+	rdsClient            func() RDSAPI
+	elbClient            func() ELBAPI
+	s3Client             func() S3API
+	eksClient            func() EKSAPI
+	asgClient            func() AutoScalingAPI
+	lambdaClient         func() LambdaAPI
+	dynamodbClient       func() DynamoDBAPI
+	sqsClient            func() SQSAPI
+	iamClient            func() IAMAPI
+	ecsClient            func() ECSAPI
+	route53Client        func() Route53API
+	cwLogsClient         func() CloudWatchLogsAPI
+	snsClient            func() SNSAPI
+	cloudfrontClient     func() CloudFrontAPI
+	elasticacheClient    func() ElastiCacheAPI
+	secretsmanagerClient func() SecretsManagerAPI
+	acmClient            func() ACMAPI
+	apigatewayClient     func() APIGatewayAPI
+	kinesisClient        func() KinesisAPI
+	redshiftClient       func() RedshiftAPI
+	sfnClient            func() StepFunctionsAPI
+	glueClient           func() GlueAPI
+	opensearchClient     func() OpenSearchAPI
+	mskClient            func() MSKAPI
 }
 
 // Config holds AWS plugin configuration.
 type Config struct {
-	Region         string
-	MaxConcurrency int
-	Filter         *filter.Filter
+	Region          string
+	MaxConcurrency  int
+	Filter          *filter.Filter
+	ScanGlobalTypes bool // true = scan global types (set for first region only)
 }
 
 // New creates a new AWS plugin.
@@ -90,10 +94,8 @@ func New(ctx context.Context, cfg Config) (*Plugin, error) {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
 
-	ec2Client := ec2.NewFromConfig(awsCfg)
-
-	// Get account ID
-	accountID, err := getAccountID(ctx, ec2Client)
+	// Get account ID using STS
+	accountID, err := getAccountID(ctx, awsCfg)
 	if err != nil {
 		return nil, fmt.Errorf("get account id: %w", err)
 	}
@@ -108,47 +110,42 @@ func New(ctx context.Context, cfg Config) (*Plugin, error) {
 		accountID:            accountID,
 		maxConcurrency:       maxConcurrency,
 		filter:               cfg.Filter,
-		ec2Client:            ec2Client,
-		rdsClient:            rds.NewFromConfig(awsCfg),
-		elbClient:            elasticloadbalancingv2.NewFromConfig(awsCfg),
-		s3Client:             s3.NewFromConfig(awsCfg),
-		eksClient:            eks.NewFromConfig(awsCfg),
-		asgClient:            autoscaling.NewFromConfig(awsCfg),
-		lambdaClient:         lambda.NewFromConfig(awsCfg),
-		dynamodbClient:       dynamodb.NewFromConfig(awsCfg),
-		sqsClient:            sqs.NewFromConfig(awsCfg),
-		iamClient:            iam.NewFromConfig(awsCfg),
-		ecsClient:            ecs.NewFromConfig(awsCfg),
-		route53Client:        route53.NewFromConfig(awsCfg),
-		cwLogsClient:         cloudwatchlogs.NewFromConfig(awsCfg),
-		snsClient:            sns.NewFromConfig(awsCfg),
-		cloudfrontClient:     cloudfront.NewFromConfig(awsCfg),
-		elasticacheClient:    elasticache.NewFromConfig(awsCfg),
-		secretsmanagerClient: secretsmanager.NewFromConfig(awsCfg),
-		acmClient:            acm.NewFromConfig(awsCfg),
-		apigatewayClient:     apigatewayv2.NewFromConfig(awsCfg),
-		kinesisClient:        kinesis.NewFromConfig(awsCfg),
-		redshiftClient:       redshift.NewFromConfig(awsCfg),
-		sfnClient:            sfn.NewFromConfig(awsCfg),
-		glueClient:           glue.NewFromConfig(awsCfg),
-		opensearchClient:     opensearch.NewFromConfig(awsCfg),
-		mskClient:            kafka.NewFromConfig(awsCfg),
+		scanGlobalTypes:      cfg.ScanGlobalTypes,
+		ec2Client:            sync.OnceValue(func() EC2API { return ec2.NewFromConfig(awsCfg) }),
+		rdsClient:            sync.OnceValue(func() RDSAPI { return rds.NewFromConfig(awsCfg) }),
+		elbClient:            sync.OnceValue(func() ELBAPI { return elasticloadbalancingv2.NewFromConfig(awsCfg) }),
+		s3Client:             sync.OnceValue(func() S3API { return s3.NewFromConfig(awsCfg) }),
+		eksClient:            sync.OnceValue(func() EKSAPI { return eks.NewFromConfig(awsCfg) }),
+		asgClient:            sync.OnceValue(func() AutoScalingAPI { return autoscaling.NewFromConfig(awsCfg) }),
+		lambdaClient:         sync.OnceValue(func() LambdaAPI { return lambda.NewFromConfig(awsCfg) }),
+		dynamodbClient:       sync.OnceValue(func() DynamoDBAPI { return dynamodb.NewFromConfig(awsCfg) }),
+		sqsClient:            sync.OnceValue(func() SQSAPI { return sqs.NewFromConfig(awsCfg) }),
+		iamClient:            sync.OnceValue(func() IAMAPI { return iam.NewFromConfig(awsCfg) }),
+		ecsClient:            sync.OnceValue(func() ECSAPI { return ecs.NewFromConfig(awsCfg) }),
+		route53Client:        sync.OnceValue(func() Route53API { return route53.NewFromConfig(awsCfg) }),
+		cwLogsClient:         sync.OnceValue(func() CloudWatchLogsAPI { return cloudwatchlogs.NewFromConfig(awsCfg) }),
+		snsClient:            sync.OnceValue(func() SNSAPI { return sns.NewFromConfig(awsCfg) }),
+		cloudfrontClient:     sync.OnceValue(func() CloudFrontAPI { return cloudfront.NewFromConfig(awsCfg) }),
+		elasticacheClient:    sync.OnceValue(func() ElastiCacheAPI { return elasticache.NewFromConfig(awsCfg) }),
+		secretsmanagerClient: sync.OnceValue(func() SecretsManagerAPI { return secretsmanager.NewFromConfig(awsCfg) }),
+		acmClient:            sync.OnceValue(func() ACMAPI { return acm.NewFromConfig(awsCfg) }),
+		apigatewayClient:     sync.OnceValue(func() APIGatewayAPI { return apigatewayv2.NewFromConfig(awsCfg) }),
+		kinesisClient:        sync.OnceValue(func() KinesisAPI { return kinesis.NewFromConfig(awsCfg) }),
+		redshiftClient:       sync.OnceValue(func() RedshiftAPI { return redshift.NewFromConfig(awsCfg) }),
+		sfnClient:            sync.OnceValue(func() StepFunctionsAPI { return sfn.NewFromConfig(awsCfg) }),
+		glueClient:           sync.OnceValue(func() GlueAPI { return glue.NewFromConfig(awsCfg) }),
+		opensearchClient:     sync.OnceValue(func() OpenSearchAPI { return opensearch.NewFromConfig(awsCfg) }),
+		mskClient:            sync.OnceValue(func() MSKAPI { return kafka.NewFromConfig(awsCfg) }),
 	}, nil
 }
 
-func getAccountID(ctx context.Context, client *ec2.Client) (string, error) {
-	output, err := client.DescribeAccountAttributes(ctx, &ec2.DescribeAccountAttributesInput{})
+func getAccountID(ctx context.Context, awsCfg aws.Config) (string, error) {
+	stsClient := sts.NewFromConfig(awsCfg)
+	output, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get caller identity: %w", err)
 	}
-
-	for _, attr := range output.AccountAttributes {
-		if aws.ToString(attr.AttributeName) == "account-id" && len(attr.AttributeValues) > 0 {
-			return aws.ToString(attr.AttributeValues[0].AttributeValue), nil
-		}
-	}
-
-	return "unknown", nil
+	return aws.ToString(output.Account), nil
 }
 
 // Name returns the plugin identifier.
@@ -157,43 +154,47 @@ func (p *Plugin) Name() string {
 }
 
 type scanner struct {
-	name string
-	fn   func(context.Context) ([]resource.Resource, error)
+	name   string
+	fn     func(context.Context) ([]resource.Resource, error)
+	global bool // true = run only once per account (IAM, Route53, CloudFront, S3)
 }
 
 func (p *Plugin) scanners() []scanner {
 	return []scanner{
-		{"ec2", p.scanEC2},
-		{"rds", p.scanRDS},
-		{"elb", p.scanELB},
-		{"s3", p.scanS3},
-		{"eks", p.scanEKS},
-		{"asg", p.scanASG},
-		{"lambda", p.scanLambda},
-		{"vpc", p.scanVPC},
-		{"subnet", p.scanSubnets},
-		{"security_group", p.scanSecurityGroups},
-		{"dynamodb", p.scanDynamoDB},
-		{"sqs", p.scanSQS},
-		{"ebs", p.scanEBSVolumes},
-		{"eip", p.scanElasticIPs},
-		{"nat_gateway", p.scanNATGateways},
-		{"iam_role", p.scanIAMRoles},
-		{"ecs", p.scanECS},
-		{"route53", p.scanRoute53},
-		{"cloudwatch_logs", p.scanCloudWatchLogs},
-		{"sns", p.scanSNS},
-		{"cloudfront", p.scanCloudFront},
-		{"elasticache", p.scanElastiCache},
-		{"secretsmanager", p.scanSecretsManager},
-		{"acm", p.scanACM},
-		{"apigateway", p.scanAPIGateway},
-		{"kinesis", p.scanKinesis},
-		{"redshift", p.scanRedshift},
-		{"stepfunctions", p.scanStepFunctions},
-		{"glue", p.scanGlue},
-		{"opensearch", p.scanOpenSearch},
-		{"msk", p.scanMSK},
+		// Regional scanners
+		{"ec2", p.scanEC2, false},
+		{"rds", p.scanRDS, false},
+		{"elb", p.scanELB, false},
+		{"eks", p.scanEKS, false},
+		{"asg", p.scanASG, false},
+		{"lambda", p.scanLambda, false},
+		{"vpc", p.scanVPC, false},
+		{"subnet", p.scanSubnets, false},
+		{"security_group", p.scanSecurityGroups, false},
+		{"dynamodb", p.scanDynamoDB, false},
+		{"sqs", p.scanSQS, false},
+		{"ebs", p.scanEBSVolumes, false},
+		{"eip", p.scanElasticIPs, false},
+		{"nat_gateway", p.scanNATGateways, false},
+		{"ecs", p.scanECS, false},
+		{"cloudwatch_logs", p.scanCloudWatchLogs, false},
+		{"sns", p.scanSNS, false},
+		{"elasticache", p.scanElastiCache, false},
+		{"secretsmanager", p.scanSecretsManager, false},
+		{"acm", p.scanACM, false},
+		{"apigateway", p.scanAPIGateway, false},
+		{"kinesis", p.scanKinesis, false},
+		{"redshift", p.scanRedshift, false},
+		{"stepfunctions", p.scanStepFunctions, false},
+		{"glue", p.scanGlue, false},
+		{"opensearch", p.scanOpenSearch, false},
+		{"msk", p.scanMSK, false},
+
+		// Global scanners - run only once per account
+		{"s3", p.scanS3, true},
+		{"iam_role", p.scanIAMRoles, true},
+		{"route53", p.scanRoute53, true},
+		{"cloudfront", p.scanCloudFront, true},
 	}
 }
 
@@ -209,6 +210,12 @@ func (p *Plugin) Scan(ctx context.Context) ([]resource.Resource, error) {
 	sem := semaphore.NewWeighted(p.maxConcurrency)
 
 	for _, s := range p.scanners() {
+		// Skip global scanners if not designated as the global scanner region
+		if s.global && !p.scanGlobalTypes {
+			log.Debug().Str("scanner", s.name).Msg("skipped global scanner (not first region)")
+			continue
+		}
+
 		// Skip scanner if type is excluded
 		if p.filter != nil && !p.filter.ShouldScanType(s.name) {
 			log.Debug().Str("scanner", s.name).Msg("skipped by filter")
@@ -256,6 +263,22 @@ func (p *Plugin) newResource(id, typ, status, name string) resource.Resource {
 		Type:      typ,
 		Provider:  "aws",
 		Region:    p.region,
+		Account:   p.accountID,
+		Name:      name,
+		Status:    status,
+		Labels:    make(map[string]string),
+		Attrs:     make(map[string]string),
+		ScannedAt: time.Now(),
+	}
+}
+
+// helper to create global resource (IAM, Route53, CloudFront)
+func (p *Plugin) newGlobalResource(id, typ, status, name string) resource.Resource {
+	return resource.Resource{
+		ID:        id,
+		Type:      typ,
+		Provider:  "aws",
+		Region:    "global",
 		Account:   p.accountID,
 		Name:      name,
 		Status:    status,

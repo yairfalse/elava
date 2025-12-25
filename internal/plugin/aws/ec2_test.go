@@ -104,7 +104,7 @@ func TestScanEC2(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: func() EC2API { return mock }}
 	resources, err := p.scanEC2(context.Background())
 
 	require.NoError(t, err)
@@ -126,7 +126,7 @@ func TestScanEC2_Empty(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: func() EC2API { return mock }}
 	resources, err := p.scanEC2(context.Background())
 
 	require.NoError(t, err)
@@ -150,7 +150,7 @@ func TestScanEC2_Pagination(t *testing.T) {
 		},
 	}
 
-	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: mock}
+	p := &Plugin{region: "us-east-1", accountID: "123456789012", ec2Client: func() EC2API { return mock }}
 	resources, err := p.scanEC2(context.Background())
 
 	require.NoError(t, err)

@@ -55,6 +55,7 @@ type ELBAPI interface {
 // S3API defines the S3 operations used by the scanner.
 type S3API interface {
 	ListBuckets(ctx context.Context, params *s3.ListBucketsInput, optFns ...func(*s3.Options)) (*s3.ListBucketsOutput, error)
+	GetBucketLocation(ctx context.Context, params *s3.GetBucketLocationInput, optFns ...func(*s3.Options)) (*s3.GetBucketLocationOutput, error)
 }
 
 // EKSAPI defines the EKS operations used by the scanner.
