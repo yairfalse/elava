@@ -178,6 +178,44 @@ regions = ["us-east-1"]
 	assert.Nil(t, cfg.Scanner.ExcludeTags)
 }
 
+func TestLoad_PolkuConfig(t *testing.T) {
+	content := `
+[aws]
+regions = ["us-east-1"]
+
+[polku]
+enabled = true
+addr = "polku.example.com:50051"
+tls_ca = "/etc/elava/tls/ca.crt"
+batch_size = 200
+flush_interval = "2s"
+`
+	path := writeTempConfig(t, content)
+	cfg, err := Load(path)
+
+	require.NoError(t, err)
+	assert.True(t, cfg.Polku.Enabled)
+	assert.Equal(t, "polku.example.com:50051", cfg.Polku.Addr)
+	assert.Equal(t, "/etc/elava/tls/ca.crt", cfg.Polku.TLSCA)
+	assert.Equal(t, 200, cfg.Polku.BatchSize)
+	assert.Equal(t, "2s", cfg.Polku.FlushInterval)
+}
+
+func TestLoad_PolkuConfig_Defaults(t *testing.T) {
+	content := `
+[aws]
+regions = ["us-east-1"]
+`
+	path := writeTempConfig(t, content)
+	cfg, err := Load(path)
+
+	require.NoError(t, err)
+	assert.False(t, cfg.Polku.Enabled)
+	assert.Equal(t, "localhost:50051", cfg.Polku.Addr)
+	assert.Equal(t, 100, cfg.Polku.BatchSize)
+	assert.Equal(t, "1s", cfg.Polku.FlushInterval)
+}
+
 func TestConfig_Validate_InvalidMaxConcurrency(t *testing.T) {
 	// Test Validate() directly (bypassing Load which applies defaults)
 	// to ensure validation catches invalid values

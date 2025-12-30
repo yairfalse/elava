@@ -13,8 +13,21 @@ import (
 type Config struct {
 	AWS     AWSConfig     `toml:"aws"`
 	OTEL    OTELConfig    `toml:"otel"`
+	Polku   PolkuConfig   `toml:"polku"`
 	Scanner ScannerConfig `toml:"scanner"`
 	Log     LogConfig     `toml:"log"`
+}
+
+// PolkuConfig holds POLKU gateway settings for AHTI integration.
+type PolkuConfig struct {
+	Enabled       bool   `toml:"enabled"`
+	Addr          string `toml:"addr"`
+	TLSCert       string `toml:"tls_cert"`
+	TLSKey        string `toml:"tls_key"`
+	TLSCA         string `toml:"tls_ca"`
+	Insecure      bool   `toml:"insecure"`
+	BatchSize     int    `toml:"batch_size"`
+	FlushInterval string `toml:"flush_interval"`
 }
 
 // AWSConfig holds AWS provider settings.
@@ -83,6 +96,15 @@ func Load(path string) (*Config, error) {
 func applyDefaults(cfg *Config) {
 	if cfg.OTEL.ServiceName == "" {
 		cfg.OTEL.ServiceName = "elava"
+	}
+	if cfg.Polku.Addr == "" {
+		cfg.Polku.Addr = "localhost:50051"
+	}
+	if cfg.Polku.BatchSize == 0 {
+		cfg.Polku.BatchSize = 100
+	}
+	if cfg.Polku.FlushInterval == "" {
+		cfg.Polku.FlushInterval = "1s"
 	}
 	if cfg.Scanner.IntervalStr == "" {
 		cfg.Scanner.IntervalStr = "5m"
